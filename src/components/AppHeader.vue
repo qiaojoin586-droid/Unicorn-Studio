@@ -19,12 +19,13 @@
         >
           {{ item.label }}
         </router-link>
-        <a
-          href="#contact"
+        <router-link
+          to="/join"
           class="bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-5 py-2 rounded-full transition"
+          active-class="!bg-indigo-400 ring-2 ring-indigo-400/50"
         >
           加入我们
-        </a>
+        </router-link>
       </nav>
 
       <!-- Mobile menu button -->
@@ -67,13 +68,14 @@
         >
           {{ item.label }}
         </router-link>
-        <a
-          href="#contact"
+        <router-link
+          to="/join"
           class="block text-center bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold px-5 py-2 rounded-full transition"
+          active-class="!bg-indigo-400 ring-2 ring-indigo-400/50"
           @click="mobileMenuOpen = false"
         >
           加入我们
-        </a>
+        </router-link>
       </div>
     </transition>
   </header>

@@ -21,6 +21,11 @@ const routes = [
     name: 'Learning',
     component: () => import('@/pages/LearningPage.vue'),
   },
+  {
+    path: '/join',
+    name: 'Join',
+    component: () => import('@/pages/JoinPage.vue'),
+  },
 ]
 
 const router = createRouter({

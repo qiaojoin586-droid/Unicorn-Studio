@@ -10,7 +10,7 @@
           </div>
           <p class="text-gray-400 leading-relaxed text-sm">
             用技术与创意，打造卓越的数字产品。<br />
-            我们专注于AI智能开发、移动应用与大模型学术研究。
+            我们专注于AI智能开发、Agent开发与大模型学术研究。
           </p>
         </div>
 
@@ -58,7 +58,7 @@
       <!-- Divider & Copyright -->
       <div class="border-t border-gray-800 mt-10 pt-6 flex flex-col md:flex-row items-center justify-between text-sm text-gray-500">
         <p>&copy; {{ currentYear }} 独角兽工作室 · 用创意点亮未来</p>
-        <p class="mt-2 md:mt-0">Crafted with ❤️ and Vue.js</p>
+        <p class="mt-2 md:mt-0">每一个人都有一颗炽热的 ❤️ and You</p>
       </div>
     </div>
   </footer>
