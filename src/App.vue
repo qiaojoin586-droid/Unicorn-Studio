@@ -1,5 +1,5 @@
 <template>
-  <div id="app" class="flex flex-col min-h-screen bg-gray-50 text-gray-900">
+  <div id="app" class="flex flex-col min-h-screen text-gray-900">
     <AppHeader />
 
     <!-- Main content: flex-1 fills remaining space, pt-20 offsets fixed header -->

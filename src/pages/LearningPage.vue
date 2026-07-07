@@ -1,7 +1,21 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-gray-950 via-indigo-950 to-gray-950">
+  <div class="min-h-screen relative">
+    <!-- Fixed full-page video background -->
+    <div class="fixed inset-0 z-0 overflow-hidden">
+      <video
+        class="w-full h-full object-cover"
+        autoplay
+        muted
+        loop
+        playsinline
+      >
+        <source :src="homeVideoUrl" type="video/mp4" />
+      </video>
+      <div class="absolute inset-0 bg-gray-950/50"></div>
+    </div>
+
     <!-- Hero banner -->
-    <section class="relative -mt-20 pt-32 pb-16 overflow-hidden">
+    <section class="relative z-10 -mt-20 pt-32 pb-16 overflow-hidden">
       <div class="absolute inset-0 pointer-events-none">
         <div class="absolute -top-1/3 -right-1/4 w-[500px] h-[500px] bg-indigo-600/15 rounded-full blur-3xl"></div>
         <div class="absolute -bottom-1/3 -left-1/4 w-[400px] h-[400px] bg-purple-600/15 rounded-full blur-3xl"></div>
@@ -14,7 +28,7 @@
     </section>
 
     <!-- Learning cards -->
-    <section class="max-w-4xl mx-auto px-4 pb-20">
+    <section class="relative z-10 max-w-4xl mx-auto px-4 pb-20">
       <div class="space-y-6">
         <div
           v-for="item in resources"
@@ -38,6 +52,8 @@
 </template>
 
 <script setup>
+import homeVideoUrl from '@/image/home.mp4'
+
 const resources = [
   {
     title: '前端入门开发手册',
