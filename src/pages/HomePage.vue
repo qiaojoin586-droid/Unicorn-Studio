@@ -51,15 +51,7 @@
     <!-- Shared video background wrapper for Services + Works -->
     <div class="relative overflow-hidden">
       <!-- Single video background spanning both sections -->
-      <video
-        class="absolute inset-0 w-full h-full object-cover"
-        autoplay
-        muted
-        loop
-        playsinline
-      >
-        <source :src="videoUrl" type="video/mp4" />
-      </video>
+      <BackgroundVideo :src="videoUrl" :poster="videoPosterUrl" />
       <!-- Single overlay spanning both sections -->
       <div class="absolute inset-0 bg-black/30"></div>
 
@@ -124,9 +116,11 @@
 </template>
 
 <script setup>
+import BackgroundVideo from '@/components/BackgroundVideo.vue'
 import ServiceCard from '@/components/ServiceCard.vue'
 import WorkCard from '@/components/WorkCard.vue'
 import videoUrl from '@/image/index.mp4'
+import videoPosterUrl from '@/image/index-poster.jpg'
 
 function scrollToNext() {
   const target = document.getElementById('services')

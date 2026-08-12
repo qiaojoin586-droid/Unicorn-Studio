@@ -26,6 +26,11 @@ const routes = [
     name: 'Join',
     component: () => import('@/pages/JoinPage.vue'),
   },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'NotFound',
+    component: () => import('@/pages/NotFoundPage.vue'),
+  },
 ]
 
 const router = createRouter({

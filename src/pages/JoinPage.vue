@@ -2,15 +2,7 @@
   <div class="min-h-screen relative">
     <!-- Fixed full-page video background -->
     <div class="fixed inset-0 z-0 overflow-hidden">
-      <video
-        class="w-full h-full object-cover"
-        autoplay
-        muted
-        loop
-        playsinline
-      >
-        <source :src="homeVideoUrl" type="video/mp4" />
-      </video>
+      <BackgroundVideo :src="homeVideoUrl" :poster="homeVideoPosterUrl" />
       <div class="absolute inset-0 bg-gray-950/50"></div>
     </div>
 
@@ -46,6 +38,8 @@
 </template>
 
 <script setup>
+import BackgroundVideo from '@/components/BackgroundVideo.vue'
 import homeVideoUrl from '@/image/home.mp4'
+import homeVideoPosterUrl from '@/image/home-poster.jpg'
 import qrUrl from '@/image/comeTest.jpg'
 </script>
