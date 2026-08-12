@@ -25,6 +25,8 @@ app:
     cookie-secure: true
     login-rate-limit-max: 10
     login-rate-limit-window-ms: 600000
+    # 反向代理直连地址（逗号分隔）。只有直连对端在列表中时才信任 X-Forwarded-For，默认不信任
+    trusted-proxies: ""
   cors:
     allowed-origins: http://localhost:5173
   ai:
