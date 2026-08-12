@@ -26,9 +26,6 @@ const env = {
   NODE_ENV: 'development',
   HOST: '127.0.0.1',
   PORT: String(apiPort),
-  LEARNING_PASSWORD: process.env.LEARNING_PASSWORD || 'unicorn',
-  SESSION_SECRET: process.env.SESSION_SECRET || 'local-development-session-secret-change-me',
-  COOKIE_SECURE: process.env.DEV_COOKIE_SECURE || 'false',
   VITE_API_PROXY_TARGET: process.env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:' + apiPort,
 }
 

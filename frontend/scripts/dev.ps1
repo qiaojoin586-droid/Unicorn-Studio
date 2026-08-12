@@ -31,10 +31,6 @@ if (Test-Path $envFile) {
     }
 }
 
-# Defaults for development
-if (-not $env:LEARNING_PASSWORD) { $env:LEARNING_PASSWORD = "unicorn" }
-if (-not $env:JWT_SECRET) { $env:JWT_SECRET = "local-development-jwt-secret-at-least-32-chars!!" }
-
 Write-Host "=== Unicorn Studio Dev Server ===" -ForegroundColor Cyan
 Write-Host ""
 

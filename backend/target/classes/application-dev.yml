@@ -9,8 +9,6 @@ spring:
       enabled: true
 
 app:
-  security:
-    cookie-secure: false
   cors:
     allowed-origins: http://localhost:5173,http://localhost:4173
 

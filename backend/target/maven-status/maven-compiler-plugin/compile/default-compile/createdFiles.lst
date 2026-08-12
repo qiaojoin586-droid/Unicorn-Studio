@@ -1,0 +1,15 @@
+com\unicorn\studio\model\LearningResource$LearningResourceBuilder.class
+com\unicorn\studio\config\CorsConfig.class
+com\unicorn\studio\service\LearningService.class
+com\unicorn\studio\model\ApiResponse.class
+com\unicorn\studio\model\ChatMessage.class
+com\unicorn\studio\service\AiChatService.class
+com\unicorn\studio\config\SecurityConfig.class
+com\unicorn\studio\config\WebMvcConfig.class
+com\unicorn\studio\controller\AiChatController.class
+com\unicorn\studio\controller\HealthController.class
+com\unicorn\studio\model\ApiResponse$ApiResponseBuilder.class
+com\unicorn\studio\model\LearningResource.class
+com\unicorn\studio\UnicornStudioApplication.class
+com\unicorn\studio\controller\LearningController.class
+com\unicorn\studio\repository\LearningResourceRepository.class

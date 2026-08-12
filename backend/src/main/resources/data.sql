@@ -1,3 +1,6 @@
+-- 静态种子数据：先清空再插入，保证每次启动幂等（data.sql 在每次启动时都会执行）
+DELETE FROM learning_resources;
+
 INSERT INTO learning_resources (title, description, url) VALUES
 ('后端入门开发手册', '涵盖 java/SpringBoot/SpringCloud 核心基础，适合零基础快速入门', NULL),
 ('Agent 开发实战指南', '从 0 到 1 搭建智能体应用，包含完整案例与可运行代码', NULL),

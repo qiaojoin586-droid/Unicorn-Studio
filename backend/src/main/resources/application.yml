@@ -13,20 +13,19 @@ spring:
       ddl-auto: update
     show-sql: false
     database-platform: org.hibernate.dialect.H2Dialect
+    # 让 data.sql 在 Hibernate 建表之后执行
+    defer-datasource-initialization: true
+  sql:
+    init:
+      # 文件型 H2 不被视为 embedded 库，必须显式 always 才会执行 data.sql
+      mode: always
+      # data.sql 为 UTF-8，Windows 平台需显式指定，否则中文乱码
+      encoding: UTF-8
   h2:
     console:
       enabled: false
 
 app:
-  security:
-    jwt-secret: ${JWT_SECRET:replace-with-a-long-random-secret-at-least-32-chars!!}
-    jwt-ttl-ms: 28800000
-    learning-password: ${LEARNING_PASSWORD:change-this-password}
-    cookie-secure: true
-    login-rate-limit-max: 10
-    login-rate-limit-window-ms: 600000
-    # 反向代理直连地址（逗号分隔）。只有直连对端在列表中时才信任 X-Forwarded-For，默认不信任
-    trusted-proxies: ""
   cors:
     allowed-origins: http://localhost:5173
   ai:

@@ -13,47 +13,33 @@
     >
       <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
       <div class="relative bg-gray-900/90 border border-white/10 rounded-2xl p-8 max-w-sm w-full text-center backdrop-blur-sm shadow-2xl">
-        <div class="text-white font-semibold mb-2">正在验证访问权限</div>
+        <div class="text-white font-semibold mb-2">正在加载学习资料</div>
         <p class="text-gray-400 text-sm">请稍候...</p>
       </div>
     </div>
 
-    <!-- Password Modal -->
+    <!-- Error state -->
     <div
-      v-else-if="!authenticated"
+      v-else-if="error"
       class="fixed inset-0 z-50 flex items-center justify-center px-4"
     >
       <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
-      <div class="relative bg-gray-900/90 border border-white/10 rounded-2xl p-8 max-w-sm w-full backdrop-blur-sm shadow-2xl">
-        <div class="text-center mb-6">
-          <div class="text-4xl mb-3">🔒</div>
-          <h2 class="text-2xl font-bold text-white mb-2">需要验证</h2>
-          <p class="text-gray-400 text-sm">请输入访问密码以查看学习资料</p>
-        </div>
-        <form @submit.prevent="handleLogin">
-          <input
-            v-model="password"
-            type="password"
-            autocomplete="current-password"
-            maxlength="128"
-            placeholder="请输入密码"
-            class="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 mb-3 transition"
-            autofocus
-          />
-          <p v-if="error" role="alert" class="text-red-400 text-sm mb-3">{{ error }}</p>
-          <button
-            type="submit"
-            :disabled="submitting"
-            class="w-full bg-indigo-600 hover:bg-indigo-500 disabled:bg-indigo-900 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition"
-          >
-            {{ submitting ? '验证中...' : '确认' }}
-          </button>
-        </form>
+      <div class="relative bg-gray-900/90 border border-white/10 rounded-2xl p-8 max-w-sm w-full text-center backdrop-blur-sm shadow-2xl">
+        <div class="text-4xl mb-3">⚠️</div>
+        <h2 class="text-2xl font-bold text-white mb-2">加载失败</h2>
+        <p class="text-gray-400 text-sm mb-4">{{ error }}</p>
+        <button
+          type="button"
+          @click="loadResources"
+          class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-lg transition"
+        >
+          重试
+        </button>
       </div>
     </div>
 
-    <!-- Page content (only shown when authenticated) -->
-    <template v-if="authenticated">
+    <!-- Page content -->
+    <template v-else>
       <!-- Hero banner -->
       <section class="relative z-10 -mt-20 pt-32 pb-16 overflow-hidden">
         <div class="absolute inset-0 pointer-events-none">
@@ -64,13 +50,6 @@
           <p class="text-indigo-400 text-sm font-semibold tracking-widest uppercase mb-4">Learning Resources</p>
           <h1 class="text-4xl sm:text-5xl font-extrabold text-white mb-4">学习资料</h1>
           <p class="text-gray-400 max-w-xl mx-auto">精选教程与手册，助力快速成长</p>
-          <button
-            type="button"
-            class="mt-6 text-sm text-gray-400 hover:text-white transition"
-            @click="handleLogout"
-          >
-            退出访问
-          </button>
         </div>
       </section>
 
@@ -116,24 +95,17 @@ import { useApi } from '@/composables/useApi'
 import homeVideoUrl from '@/image/home.mp4'
 import homeVideoPosterUrl from '@/image/home-poster.jpg'
 
-const { get, post } = useApi()
+const { get } = useApi()
 
-const authenticated = ref(false)
 const loading = ref(true)
-const submitting = ref(false)
-const password = ref('')
 const error = ref('')
 const resources = ref([])
 
 async function loadResources() {
+  loading.value = true
+  error.value = ''
   try {
     const result = await get('/api/learning/resources')
-
-    if (result.error && result.status === 401) {
-      authenticated.value = false
-      resources.value = []
-      return
-    }
 
     if (result.error) {
       throw new Error(result.message)
@@ -141,59 +113,11 @@ async function loadResources() {
 
     // Support both wrapped ({ code, data: { resources } }) and flat ({ resources }) formats
     const payload = result.data || result
-    authenticated.value = true
     resources.value = payload.resources || []
-    error.value = ''
   } catch (err) {
-    authenticated.value = false
     error.value = err.message || '无法连接学习资料服务'
   } finally {
     loading.value = false
-  }
-}
-
-async function handleLogin() {
-  if (!password.value) {
-    error.value = '请输入密码'
-    return
-  }
-
-  submitting.value = true
-  error.value = ''
-
-  try {
-    const result = await post('/api/learning/login', { password: password.value })
-
-    if (result.error) {
-      throw new Error(result.message)
-    }
-
-    const payload = result.data || result
-    authenticated.value = true
-    resources.value = payload.resources || []
-    password.value = ''
-  } catch (err) {
-    authenticated.value = false
-    resources.value = []
-    error.value = err.message || '验证失败，请稍后重试'
-  } finally {
-    submitting.value = false
-  }
-}
-
-async function handleLogout() {
-  try {
-    const result = await post('/api/learning/logout')
-
-    if (result.error) {
-      throw new Error(result.message)
-    }
-
-    authenticated.value = false
-    resources.value = []
-    error.value = ''
-  } catch (err) {
-    error.value = err.message || '退出失败，请稍后重试'
   }
 }
 

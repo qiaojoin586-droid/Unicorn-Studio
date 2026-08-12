@@ -1,7 +1,5 @@
-import crypto from 'node:crypto'
 import fs from 'node:fs'
 import http from 'node:http'
-import net from 'node:net'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadEnvFile } from './env.js'
@@ -16,16 +14,6 @@ loadEnvFile(path.join(rootDir, '.env'))
 const isProduction = process.env.NODE_ENV === 'production'
 const host = process.env.HOST || '127.0.0.1'
 const port = readIntegerEnv('PORT', 3000, 1, 65535)
-const learningPassword = process.env.LEARNING_PASSWORD || ''
-const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex')
-const sessionTtlMs = readIntegerEnv('SESSION_TTL_MS', 1000 * 60 * 60 * 8, 60_000)
-const maxLoginAttempts = readIntegerEnv('LOGIN_RATE_LIMIT_MAX', 10, 1, 1000)
-const loginWindowMs = readIntegerEnv('LOGIN_RATE_LIMIT_WINDOW_MS', 1000 * 60 * 10, 1000)
-const maxTrackedLoginIps = readIntegerEnv('LOGIN_RATE_LIMIT_MAX_IPS', 10_000, 100, 1_000_000)
-const cookieName = 'learning_session'
-const secureCookie = isProduction || process.env.COOKIE_SECURE === 'true'
-const trustProxy = process.env.TRUST_PROXY === 'true'
-const loginAttempts = new Map()
 
 validateConfiguration()
 
@@ -45,8 +33,6 @@ const contentTypes = {
   '.webp': 'image/webp',
 }
 
-class RequestBodyTooLargeError extends Error {}
-
 function readIntegerEnv(name, fallback, min, max = Number.MAX_SAFE_INTEGER) {
   const value = Number(process.env[name] ?? fallback)
 
@@ -59,27 +45,6 @@ function readIntegerEnv(name, fallback, min, max = Number.MAX_SAFE_INTEGER) {
 
 function validateConfiguration() {
   const errors = []
-  const placeholderPasswords = new Set([
-    'change-this-password',
-    'change-this-to-at-least-12-characters',
-  ])
-  const placeholderSecrets = new Set([
-    'replace-with-a-long-random-secret',
-    'replace-with-at-least-32-random-characters',
-    'local-development-session-secret-change-me',
-  ])
-
-  if (!learningPassword) {
-    errors.push('LEARNING_PASSWORD is required')
-  }
-
-  if (isProduction && (learningPassword.length < 12 || placeholderPasswords.has(learningPassword))) {
-    errors.push('LEARNING_PASSWORD must be non-placeholder and contain at least 12 characters')
-  }
-
-  if (isProduction && (sessionSecret.length < 32 || placeholderSecrets.has(sessionSecret))) {
-    errors.push('SESSION_SECRET must be a non-placeholder value with at least 32 characters')
-  }
 
   if (isProduction && !fs.existsSync(path.join(distDir, 'index.html'))) {
     errors.push('frontend/index.html is missing; run npm run build before starting production')
@@ -87,10 +52,6 @@ function validateConfiguration() {
 
   if (errors.length > 0) {
     throw new Error('Invalid server configuration:\n- ' + errors.join('\n- '))
-  }
-
-  if (!process.env.SESSION_SECRET) {
-    console.warn('SESSION_SECRET is not set. Sessions will be invalidated when the server restarts.')
   }
 }
 
@@ -133,238 +94,13 @@ function sendText(res, statusCode, body, extraHeaders = {}) {
   res.end(body)
 }
 
-function readBody(req, maxBytes = 1024) {
-  return new Promise((resolve, reject) => {
-    const chunks = []
-    let size = 0
-    let tooLarge = false
-
-    req.on('data', (chunk) => {
-      size += chunk.length
-      if (size > maxBytes) {
-        tooLarge = true
-        return
-      }
-
-      chunks.push(chunk)
-    })
-
-    req.on('end', () => {
-      if (tooLarge) {
-        reject(new RequestBodyTooLargeError('Request body is too large'))
-        return
-      }
-
-      resolve(Buffer.concat(chunks).toString('utf8'))
-    })
-    req.on('error', reject)
-  })
-}
-
-function parseCookies(cookieHeader = '') {
-  const cookies = {}
-
-  for (const cookie of cookieHeader.split(';')) {
-    const trimmed = cookie.trim()
-    const separatorIndex = trimmed.indexOf('=')
-    if (separatorIndex <= 0) {
-      continue
-    }
-
-    try {
-      const name = decodeURIComponent(trimmed.slice(0, separatorIndex))
-      cookies[name] = decodeURIComponent(trimmed.slice(separatorIndex + 1))
-    } catch {
-      // Ignore malformed cookies instead of failing the whole request.
-    }
-  }
-
-  return cookies
-}
-
-function sign(value) {
-  return crypto.createHmac('sha256', sessionSecret).update(value).digest('base64url')
-}
-
-function createSessionCookie() {
-  const payload = Buffer.from(JSON.stringify({ exp: Date.now() + sessionTtlMs })).toString('base64url')
-  const token = payload + '.' + sign(payload)
-  const secureFlag = secureCookie ? '; Secure' : ''
-
-  return cookieName + '=' + encodeURIComponent(token) + '; Max-Age=' +
-    Math.floor(sessionTtlMs / 1000) + '; Path=/; HttpOnly; SameSite=Lax' + secureFlag
-}
-
-function clearSessionCookie() {
-  const secureFlag = secureCookie ? '; Secure' : ''
-  return cookieName + '=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax' + secureFlag
-}
-
-function hasValidSession(req) {
-  const token = parseCookies(req.headers.cookie)[cookieName]
-  if (!token) {
-    return false
-  }
-
-  const [payload, signature] = token.split('.')
-  if (!payload || !signature || !timingSafeEqualText(sign(payload), signature)) {
-    return false
-  }
-
-  try {
-    const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))
-    return Number(session.exp) > Date.now()
-  } catch {
-    return false
-  }
-}
-
-function timingSafeEqualText(left, right) {
-  const leftBuffer = Buffer.from(left)
-  const rightBuffer = Buffer.from(right)
-
-  if (leftBuffer.length !== rightBuffer.length) {
-    return false
-  }
-
-  return crypto.timingSafeEqual(leftBuffer, rightBuffer)
-}
-
-function getClientIp(req) {
-  if (trustProxy && req.headers['x-forwarded-for']) {
-    const forwardedIp = String(req.headers['x-forwarded-for']).split(',')[0].trim()
-    if (net.isIP(forwardedIp)) {
-      return forwardedIp
-    }
-  }
-
-  return req.socket.remoteAddress || 'unknown'
-}
-
-function pruneLoginAttempts(now = Date.now()) {
-  for (const [ip, entry] of loginAttempts) {
-    if (now - entry.firstAttemptAt > loginWindowMs) {
-      loginAttempts.delete(ip)
-    }
-  }
-}
-
-function getRateLimitState(ip) {
-  const now = Date.now()
-  let current = loginAttempts.get(ip)
-
-  if (current && now - current.firstAttemptAt > loginWindowMs) {
-    loginAttempts.delete(ip)
-    current = undefined
-  }
-
-  if (!current && loginAttempts.size >= maxTrackedLoginIps) {
-    pruneLoginAttempts(now)
-    if (loginAttempts.size >= maxTrackedLoginIps) {
-      return { limited: true, retryAfterSeconds: Math.ceil(loginWindowMs / 1000) }
-    }
-  }
-
-  if (!current || current.count < maxLoginAttempts) {
-    return { limited: false, retryAfterSeconds: 0 }
-  }
-
-  const retryAfterMs = loginWindowMs - (now - current.firstAttemptAt)
-  return {
-    limited: true,
-    retryAfterSeconds: Math.max(1, Math.ceil(retryAfterMs / 1000)),
-  }
-}
-
-function recordFailedLogin(ip) {
-  const now = Date.now()
-  const current = loginAttempts.get(ip)
-
-  if (!current || now - current.firstAttemptAt > loginWindowMs) {
-    loginAttempts.set(ip, { count: 1, firstAttemptAt: now })
-    return
-  }
-
-  current.count += 1
-}
-
-function isCrossSiteRequest(req) {
-  if (req.headers['sec-fetch-site'] === 'cross-site') {
-    return true
-  }
-
-  const origin = req.headers.origin
-  if (!origin) {
-    return false
-  }
-
-  try {
-    return new URL(origin).host !== req.headers.host
-  } catch {
-    return true
-  }
-}
-
-async function handleApi(req, res, pathname) {
+function handleApi(req, res, pathname) {
   if (pathname === '/api/health' && req.method === 'GET') {
     return sendJson(res, 200, { ok: true })
   }
 
   if (pathname === '/api/learning/resources' && req.method === 'GET') {
-    if (!hasValidSession(req)) {
-      return sendJson(res, 401, { message: '请先验证访问密码' })
-    }
-
     return sendJson(res, 200, { resources: learningResources })
-  }
-
-  if (pathname === '/api/learning/login' && req.method === 'POST') {
-    if (isCrossSiteRequest(req)) {
-      return sendJson(res, 403, { message: '拒绝跨站请求' })
-    }
-
-    if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) {
-      return sendJson(res, 415, { message: '仅支持 JSON 请求' })
-    }
-
-    const clientIp = getClientIp(req)
-    const rateLimitState = getRateLimitState(clientIp)
-
-    if (rateLimitState.limited) {
-      return sendJson(
-        res,
-        429,
-        { message: '尝试次数过多，请稍后再试' },
-        { 'Retry-After': rateLimitState.retryAfterSeconds },
-      )
-    }
-
-    try {
-      const body = await readBody(req)
-      const data = JSON.parse(body || '{}')
-
-      if (!timingSafeEqualText(String(data.password || ''), learningPassword)) {
-        recordFailedLogin(clientIp)
-        return sendJson(res, 401, { message: '密码错误，请重试' })
-      }
-
-      loginAttempts.delete(clientIp)
-      res.setHeader('Set-Cookie', createSessionCookie())
-      return sendJson(res, 200, { resources: learningResources })
-    } catch (error) {
-      recordFailedLogin(clientIp)
-      const statusCode = error instanceof RequestBodyTooLargeError ? 413 : 400
-      return sendJson(res, statusCode, { message: '请求格式不正确' })
-    }
-  }
-
-  if (pathname === '/api/learning/logout' && req.method === 'POST') {
-    if (isCrossSiteRequest(req)) {
-      return sendJson(res, 403, { message: '拒绝跨站请求' })
-    }
-
-    res.setHeader('Set-Cookie', clearSessionCookie())
-    return sendJson(res, 200, { ok: true })
   }
 
   return sendJson(res, 404, { message: '接口不存在' })

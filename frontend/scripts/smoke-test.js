@@ -7,8 +7,6 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
-const password = 'test-password-with-16-characters'
-const secret = 'test-session-secret-with-more-than-32-characters'
 
 function getAvailablePort() {
   return new Promise((resolve, reject) => {
@@ -77,10 +75,6 @@ async function run() {
       NODE_ENV: 'production',
       HOST: '127.0.0.1',
       PORT: String(port),
-      LEARNING_PASSWORD: password,
-      SESSION_SECRET: secret,
-      COOKIE_SECURE: 'true',
-      TRUST_PROXY: 'false',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })
@@ -97,50 +91,9 @@ async function run() {
     assert.equal(health.status, 200)
     assert.deepEqual(await health.json(), { ok: true })
 
-    const anonymousResources = await request(baseUrl, '/api/learning/resources')
-    assert.equal(anonymousResources.status, 401)
-
-    const invalidContentType = await request(baseUrl, '/api/learning/login', {
-      method: 'POST',
-      body: JSON.stringify({ password }),
-    })
-    assert.equal(invalidContentType.status, 415)
-
-    const crossSiteLogin = await request(baseUrl, '/api/learning/login', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Origin: 'https://attacker.example',
-      },
-      body: JSON.stringify({ password }),
-    })
-    assert.equal(crossSiteLogin.status, 403)
-
-    const wrongLogin = await request(baseUrl, '/api/learning/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: 'wrong-password' }),
-    })
-    assert.equal(wrongLogin.status, 401)
-
-    const login = await request(baseUrl, '/api/learning/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
-    })
-    assert.equal(login.status, 200)
-
-    const setCookie = login.headers.get('set-cookie')
-    assert.match(setCookie, /HttpOnly/i)
-    assert.match(setCookie, /SameSite=Lax/i)
-    assert.match(setCookie, /Secure/i)
-    const sessionCookie = setCookie.split(';')[0]
-
-    const authorizedResources = await request(baseUrl, '/api/learning/resources', {
-      headers: { Cookie: sessionCookie },
-    })
-    assert.equal(authorizedResources.status, 200)
-    const resourcesPayload = await authorizedResources.json()
+    const resources = await request(baseUrl, '/api/learning/resources')
+    assert.equal(resources.status, 200)
+    const resourcesPayload = await resources.json()
     assert.ok(Array.isArray(resourcesPayload.resources))
     assert.ok(resourcesPayload.resources.length > 0)
 
