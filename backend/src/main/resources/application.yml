@@ -1,0 +1,38 @@
+server:
+  port: 8080
+  address: 127.0.0.1
+
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/unicorn_studio
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    database-platform: org.hibernate.dialect.H2Dialect
+  h2:
+    console:
+      enabled: false
+
+app:
+  security:
+    jwt-secret: ${JWT_SECRET:replace-with-a-long-random-secret-at-least-32-chars!!}
+    jwt-ttl-ms: 28800000
+    learning-password: ${LEARNING_PASSWORD:change-this-password}
+    cookie-secure: true
+    login-rate-limit-max: 10
+    login-rate-limit-window-ms: 600000
+  cors:
+    allowed-origins: http://localhost:5173
+  ai:
+    api-key: ${AI_API_KEY:}
+    api-url: https://api.openai.com/v1/chat/completions
+    model: gpt-3.5-turbo
+
+logging:
+  level:
+    com.unicorn.studio: INFO
+    org.springframework.security: WARN

@@ -1,0 +1,19 @@
+server:
+  port: 8080
+
+spring:
+  jpa:
+    show-sql: true
+  h2:
+    console:
+      enabled: true
+
+app:
+  security:
+    cookie-secure: false
+  cors:
+    allowed-origins: http://localhost:5173,http://localhost:4173
+
+logging:
+  level:
+    com.unicorn.studio: DEBUG

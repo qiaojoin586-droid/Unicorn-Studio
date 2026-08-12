@@ -1,0 +1,11 @@
+server:
+  port: 8080
+
+app:
+  security:
+    cookie-secure: true
+
+logging:
+  level:
+    com.unicorn.studio: WARN
+    org.springframework.security: WARN
