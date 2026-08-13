@@ -132,7 +132,7 @@ onMounted(load)
 }
 .msg-contact {
   font-size: 12px;
-  color: #c0c4cc;
+  color: #94a3b8;
 }
 .msg-desc {
   margin-bottom: 12px;

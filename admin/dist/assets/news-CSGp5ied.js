@@ -1,0 +1,1 @@
+import{A as t}from"./index-BSbOC7IH.js";const n={list:a=>t.get("/api/admin/news",a),detail:a=>t.get(`/api/admin/news/${a}`),create:a=>t.post("/api/admin/news",a),update:(a,e)=>t.put(`/api/admin/news/${a}`,e),remove:a=>t.delete(`/api/admin/news/${a}`),changeStatus:(a,e)=>t.patch(`/api/admin/news/${a}/status`,{status:e}),sort:a=>t.patch("/api/admin/news/sort",{ids:a})};export{n};

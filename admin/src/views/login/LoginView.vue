@@ -1,8 +1,20 @@
 <template>
   <div class="login-page">
-    <el-card class="login-card">
-      <div class="login-title">🦄 独角兽工作室</div>
-      <div class="login-subtitle">后台管理系统</div>
+    <!-- 背景装饰 -->
+    <div class="bg-deco" aria-hidden="true">
+      <div class="blob blob-1"></div>
+      <div class="blob blob-2"></div>
+      <div class="blob blob-3"></div>
+      <div class="grid-overlay"></div>
+    </div>
+
+    <el-card shadow="never" class="login-card">
+      <div class="brand">
+        <div class="brand-logo">🦄</div>
+        <h1 class="login-title">独角兽工作室</h1>
+        <p class="login-subtitle">后台管理系统 · 内容控制台</p>
+      </div>
+
       <el-form :model="form" :rules="rules" ref="formRef" size="large" @keyup.enter="submit">
         <el-form-item prop="username">
           <el-input v-model="form.username" placeholder="用户名" :prefix-icon="User" />
@@ -20,6 +32,8 @@
           登 录
         </el-button>
       </el-form>
+
+      <div class="login-footer">© 2026 Unicorn Studio</div>
     </el-card>
   </div>
 </template>
@@ -64,29 +78,154 @@ async function submit() {
 
 <style scoped>
 .login-page {
+  position: relative;
   height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #1f2d3d 0%, #001529 100%);
+  overflow: hidden;
+  background: linear-gradient(150deg, #0b0f1e 0%, #141830 50%, #1b1533 100%);
 }
+
+/* ---- 背景光斑 ---- */
+.bg-deco {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.55;
+}
+.blob-1 {
+  width: 480px;
+  height: 480px;
+  left: -120px;
+  top: -140px;
+  background: #6366f1;
+}
+.blob-2 {
+  width: 420px;
+  height: 420px;
+  right: -100px;
+  bottom: -140px;
+  background: #a855f7;
+  opacity: 0.45;
+}
+.blob-3 {
+  width: 300px;
+  height: 300px;
+  right: 22%;
+  top: -120px;
+  background: #22d3ee;
+  opacity: 0.22;
+}
+.grid-overlay {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, black 30%, transparent 100%);
+}
+
+/* ---- 玻璃卡片 ---- */
 .login-card {
-  width: 380px;
-  border-radius: 8px;
+  position: relative;
+  z-index: 1;
+  width: 400px;
+  border-radius: 20px;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(24px);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.45);
+}
+.login-card:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.45);
+}
+.login-card :deep(.el-card__body) {
+  padding: 40px 40px 28px;
+}
+
+.brand {
+  text-align: center;
+  margin-bottom: 32px;
+}
+.brand-logo {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  box-shadow: 0 12px 32px rgba(99, 102, 241, 0.45);
 }
 .login-title {
   font-size: 22px;
   font-weight: 700;
-  text-align: center;
-  color: #303133;
+  color: #fff;
+  letter-spacing: 2px;
 }
 .login-subtitle {
-  text-align: center;
-  color: #909399;
-  margin: 6px 0 24px;
-  font-size: 14px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 8px;
+  font-size: 13px;
+  letter-spacing: 1px;
 }
+
+/* ---- 深色表单 ---- */
+.login-card :deep(.el-input__wrapper) {
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16) inset;
+  border-radius: 10px;
+  height: 44px;
+  transition: box-shadow 0.2s ease, background-color 0.2s ease;
+}
+.login-card :deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.28) inset;
+}
+.login-card :deep(.el-input__wrapper.is-focus) {
+  background: rgba(255, 255, 255, 0.09);
+  box-shadow:
+    0 0 0 1px rgba(129, 140, 248, 0.85) inset,
+    0 0 24px rgba(99, 102, 241, 0.35);
+}
+.login-card :deep(.el-input__inner) {
+  color: #fff;
+}
+.login-card :deep(.el-input__inner::placeholder) {
+  color: rgba(255, 255, 255, 0.38);
+}
+.login-card :deep(.el-input__prefix) {
+  color: rgba(255, 255, 255, 0.42);
+}
+.login-card :deep(.el-input__suffix) {
+  color: rgba(255, 255, 255, 0.42);
+}
+
 .login-btn {
   width: 100%;
+  height: 44px;
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 6px;
+  border-radius: 10px;
+}
+
+.login-footer {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.28);
+  font-size: 12px;
+  margin-top: 26px;
+  letter-spacing: 0.5px;
 }
 </style>

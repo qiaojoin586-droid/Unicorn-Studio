@@ -143,10 +143,11 @@ onMounted(load)
   width: 120px;
   height: 60px;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: 8px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
 }
 .no-thumb {
-  color: #c0c4cc;
+  color: #94a3b8;
   font-size: 12px;
 }
 </style>

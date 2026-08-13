@@ -91,6 +91,6 @@ onMounted(load)
 }
 .news-slug {
   font-size: 12px;
-  color: #c0c4cc;
+  color: #94a3b8;
 }
 </style>

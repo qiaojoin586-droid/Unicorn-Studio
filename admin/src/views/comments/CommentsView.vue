@@ -153,7 +153,7 @@ onMounted(load)
 }
 .comment-meta {
   font-size: 12px;
-  color: #c0c4cc;
+  color: #94a3b8;
   margin-top: 4px;
 }
 </style>

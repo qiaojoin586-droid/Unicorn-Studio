@@ -14,7 +14,9 @@
         </div>
       </div>
       <div v-else class="placeholder">
-        <el-icon><Plus /></el-icon>
+        <div class="plus-icon">
+          <el-icon><Plus /></el-icon>
+        </div>
         <span>点击上传</span>
       </div>
     </el-upload>
@@ -57,15 +59,17 @@ function clear() {
   position: relative;
   width: 160px;
   height: 90px;
-  border-radius: 4px;
+  border-radius: 10px;
   overflow: hidden;
-  border: 1px solid #dcdfe6;
+  border: 1px solid var(--el-border-color-lighter);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
   cursor: pointer;
 }
 .preview img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
 }
 .preview .actions {
   position: absolute;
@@ -75,9 +79,10 @@ function clear() {
   align-items: center;
   justify-content: center;
   gap: 4px;
-  background: rgba(0, 0, 0, 0.45);
+  background: rgba(13, 18, 32, 0.55);
+  backdrop-filter: blur(2px);
   opacity: 0;
-  transition: opacity 0.2s;
+  transition: opacity 0.2s ease;
 }
 .preview:hover .actions {
   opacity: 1;
@@ -89,18 +94,32 @@ function clear() {
 .placeholder {
   width: 160px;
   height: 90px;
-  border: 1px dashed #dcdfe6;
-  border-radius: 4px;
+  border: 1.5px dashed var(--el-border-color);
+  border-radius: 10px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #909399;
+  gap: 6px;
+  color: #94a3b8;
   cursor: pointer;
   font-size: 12px;
+  background: #fafbfd;
+  transition: all 0.2s ease;
+}
+.plus-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--el-color-primary) 10%, white);
+  color: var(--el-color-primary);
 }
 .placeholder:hover {
-  border-color: #409eff;
-  color: #409eff;
+  border-color: var(--el-color-primary);
+  color: var(--el-color-primary);
+  background: color-mix(in srgb, var(--el-color-primary) 3%, white);
 }
 </style>

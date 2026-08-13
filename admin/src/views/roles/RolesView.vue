@@ -155,8 +155,8 @@ onMounted(async () => {
   width: 100%;
   max-height: 320px;
   overflow-y: auto;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 10px;
   padding: 8px;
 }
 </style>

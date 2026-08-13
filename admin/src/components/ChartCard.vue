@@ -1,5 +1,5 @@
 <template>
-  <el-card shadow="hover" class="chart-card">
+  <el-card shadow="never" class="chart-card">
     <template #header>
       <span class="chart-title">{{ title }}</span>
     </template>
@@ -25,8 +25,20 @@ useChart(chartEl, optionRef)
 
 <style scoped>
 .chart-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-weight: 600;
   font-size: 15px;
+  color: #0f172a;
+}
+.chart-title::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
 }
 .chart-body {
   width: 100%;
