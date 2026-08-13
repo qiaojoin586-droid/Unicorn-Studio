@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-UnicornStudioApplication<unicorn-studio>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.unicorn.studio.UnicornStudioApplication",
+            "projectName": "unicorn-studio",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}
