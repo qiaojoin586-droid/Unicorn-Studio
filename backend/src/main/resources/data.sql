@@ -10,10 +10,10 @@ INSERT INTO learning_resources (title, description, url) VALUES
 -- ============================================================
 -- 能力培养条目（首页"我们培养的能力"），幂等种子
 -- ============================================================
-MERGE INTO service_item (id, title, description, icon, sort_order, status) KEY(id) VALUES
-(1, 'AI智能应用开发', '使用前沿技术栈，构建高性能、响应式的智能化应用。', '🌐', 1, 'published'),
-(2, '大模型学术论文研究', '聚焦大语言模型前沿方向，开展学术论文撰写与发表。', '🔬', 2, 'published'),
-(3, 'Agent开发', '基于大模型开发智能体，支持自主规划、工具调用与任务落地。', '🤖', 3, 'published');
+MERGE INTO service_item (id, title, description, icon, sort_order, status, created_at, updated_at) KEY(id) VALUES
+(1, 'AI智能应用开发', '使用前沿技术栈，构建高性能、响应式的智能化应用。', '🌐', 1, 'published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(2, '大模型学术论文研究', '聚焦大语言模型前沿方向，开展学术论文撰写与发表。', '🔬', 2, 'published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+(3, 'Agent开发', '基于大模型开发智能体，支持自主规划、工具调用与任务落地。', '🤖', 3, 'published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 -- ============================================================
 -- 作品，幂等种子
