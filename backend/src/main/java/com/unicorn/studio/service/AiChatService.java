@@ -4,12 +4,16 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.*;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.function.Consumer;
 
 @Service
 public class AiChatService {
+
+    private static final Logger log = LoggerFactory.getLogger(AiChatService.class);
 
     private final String aiApiKey;
     private final String aiApiUrl;
@@ -32,6 +36,7 @@ public class AiChatService {
      */
     public void streamResponse(String userMessage, Consumer<String> onChunk) {
         if (aiApiKey == null || aiApiKey.isBlank()) {
+            log.warn("未配置 AI_API_KEY，使用 mock 流式响应");
             streamMockResponse(userMessage, onChunk);
             return;
         }
@@ -75,7 +80,9 @@ public class AiChatService {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } catch (Exception e) {
-            onChunk.accept("抱歉，AI 服务暂时不可用。错误: " + e.getMessage());
+            // 错误详情（含堆栈）进日志；聊天内容不暴露内部细节
+            log.error("AI 调用失败", e);
+            onChunk.accept("抱歉，AI 服务暂时不可用，请稍后重试。");
         }
     }
 

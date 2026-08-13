@@ -1,0 +1,20 @@
+# 日志
+logs/
+*.log
+
+# 构建产物
+backend/target/
+frontend/frontend/
+frontend/assets/
+frontend/dist/
+frontend/release/
+node_modules/
+
+# 数据文件与本地配置
+backend/data/
+data/
+**/.env
+
+# 系统
+.DS_Store
+Thumbs.db

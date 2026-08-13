@@ -34,6 +34,10 @@ app:
     model: gpt-3.5-turbo
 
 logging:
+  # 日志文件目录（相对运行目录）：logback-spring.xml 会写入
+  # unicorn-studio.log（全量）与 unicorn-studio-error.log（仅错误）
+  file:
+    path: ./logs
   level:
     com.unicorn.studio: INFO
     org.springframework.security: WARN
