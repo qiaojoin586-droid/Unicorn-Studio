@@ -4,34 +4,68 @@ server:
 
 spring:
   datasource:
-    url: jdbc:h2:file:./data/unicorn_studio
+    # 开发环境：H2 文件库 + MySQL 兼容模式（迁移脚本与 MySQL 8 共用）
+    # 生产环境：切换为 MySQL（升级方案 4.2），URL/驱动/账号走 MYSQL_* 环境变量
+    url: jdbc:h2:file:./data/unicorn_studio;MODE=MySQL
     driver-class-name: org.h2.Driver
     username: sa
     password:
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
   jpa:
     hibernate:
-      ddl-auto: update
+      # 表结构完全由 Flyway 管理，JPA 只做校验
+      ddl-auto: validate
     show-sql: false
+    open-in-view: false
     database-platform: org.hibernate.dialect.H2Dialect
-    # 让 data.sql 在 Hibernate 建表之后执行
-    defer-datasource-initialization: true
   sql:
     init:
-      # 文件型 H2 不被视为 embedded 库，必须显式 always 才会执行 data.sql
-      mode: always
-      # data.sql 为 UTF-8，Windows 平台需显式指定，否则中文乱码
-      encoding: UTF-8
-  h2:
-    console:
-      enabled: false
+      # data.sql 已停用（升级方案 P1-1），种子数据由 Flyway V5/V6 提供
+      mode: never
+  mail:
+    # 邮件通知可选：不配置 SMTP_* 则留言回复不发送邮件（仅记日志）
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:465}
+    username: ${SMTP_USERNAME:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.ssl.enable: true
 
 app:
   cors:
-    allowed-origins: http://localhost:5173
+    # 前台 5173 + 后台 5174
+    allowed-origins: ${APP_CORS_ORIGINS:http://localhost:5173,http://localhost:5174}
   ai:
     api-key: ${AI_API_KEY:}
     api-url: https://api.openai.com/v1/chat/completions
     model: gpt-3.5-turbo
+  admin:
+    # 后台管理 JWT/账号配置；jwt-secret 为空时 JwtService 拒绝启动
+    jwt-secret: ${ADMIN_JWT_SECRET:}
+    jwt-expire-hours: 2
+    refresh-expire-days: ${ADMIN_JWT_REFRESH_EXPIRE_DAYS:7}
+    # 初始密码为空时由 AdminBootstrap 生成随机密码并打印日志（仅本地开发）
+    init-password: ${ADMIN_INIT_PASSWORD:}
+  upload:
+    dir: ${FILE_UPLOAD_DIR:data/uploads}
+    max-size: ${FILE_UPLOAD_MAX_SIZE:10485760}
+    # 富文本外链图白名单域（空=仅允许本站 /uploads/）
+    image-allow-origins: ${IMAGE_ALLOW_ORIGINS:}
+  backup:
+    dir: ${BACKUP_DIR:data/backups}
+    retention-count: ${BACKUP_RETENTION_COUNT:7}
+    mysqldump-path: ${MYSQLDUMP_PATH:mysqldump}
+    cron: ${BACKUP_CRON:0 0 2 * * *}
+  ratelimit:
+    login-per-minute: 5
+    register-per-hour: 10
+    comment-per-minute: 10
+    guest-comment-per-hour: 10
+    message-per-hour: 5
+    stats-per-minute: 60
 
 logging:
   # 日志文件目录（相对运行目录）：logback-spring.xml 会写入

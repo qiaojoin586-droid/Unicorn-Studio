@@ -5,7 +5,79 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0cd3fd1e-8d03-4508-a3c2-7a77e6deb325" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/security/JwtAuthFilter.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/security/JwtAuthFilter.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/compiler.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/compiler.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/data/unicorn_studio.mv.db" beforeDir="false" afterPath="$PROJECT_DIR$/backend/data/unicorn_studio.mv.db" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/pom.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/common/GlobalExceptionHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/common/GlobalExceptionHandler.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/config/CorsConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/config/CorsConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/config/SecurityConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/config/SecurityConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/config/WebMvcConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/config/WebMvcConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/WorkController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/WorkController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/LearningResource.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/LearningResource.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/Work.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/Work.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/LearningResourceRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/LearningResourceRepository.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/WorkRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/WorkRepository.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/WorkService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/WorkService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/resources/application-dev.yml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/resources/application-dev.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/resources/application.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/application-dev.yml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/application-dev.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/application.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/UnicornStudioApplication.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/UnicornStudioApplication.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/config/CorsConfig.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/config/CorsConfig.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/config/SecurityConfig.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/config/SecurityConfig.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/config/WebMvcConfig.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/config/WebMvcConfig.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/controller/AiChatController.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/controller/AiChatController.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/controller/HealthController.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/controller/HealthController.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/controller/LearningController.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/controller/LearningController.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ApiResponse$ApiResponseBuilder.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ApiResponse$ApiResponseBuilder.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ApiResponse.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ApiResponse.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ChatMessage.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ChatMessage.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/LearningResource$LearningResourceBuilder.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/LearningResource$LearningResourceBuilder.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/LearningResource.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/LearningResource.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/repository/LearningResourceRepository.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/repository/LearningResourceRepository.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/service/AiChatService.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/service/AiChatService.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/service/LearningService.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/service/LearningService.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/data.sql" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/data.sql" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/data/unicorn_studio.mv.db" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/升级方案.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/升级方案.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/docs/后台管理实施方案.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/后台管理实施方案.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/.env.example" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/.env.example" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/AboutPage-DAPnmQX8.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/BackgroundVideo-Cyrw5wNN.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/HomePage-Bwybse_s.css" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/HomePage-D293bioU.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/JoinPage-BJrtBkmD.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/LearningPage-BlUFG9f1.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/NotFoundPage-CPGvzOIC.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/WorkCard-CMpRzhQg.css" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/WorkCard-DJhViz-b.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/WorksPage-CH3AtuAH.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/home-poster-DlKTvgXo.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/assets/home-poster-DlKTvgXo.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/index-DGq3atWp.css" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/index-vlV7-wOv.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/scripts/dev.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/scripts/dev.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/scripts/dev.ps1" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/scripts/dev.ps1" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/scripts/smoke-test.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/scripts/smoke-test.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/server/env.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/server/env.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/server/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/server/index.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/server/learningResources.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/server/learningResources.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/src/components/WorkCard.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/src/components/WorkCard.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/src/pages/HomePage.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/src/pages/HomePage.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/src/pages/LearningPage.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/src/pages/LearningPage.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/src/pages/NotFoundPage.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/src/pages/NotFoundPage.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/src/pages/WorksPage.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/src/pages/WorksPage.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/frontend/src/router/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/src/router/index.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/_metadata.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/_metadata.json" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/chunk-H4DXBCSJ.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/chunk-H4DXBCSJ.js.map" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/pinia.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/pinia.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/pinia.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/pinia.js.map" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/vue-router.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/vue-router.js" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/vue-router.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/vue-router.js.map" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/vue.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/vue.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -41,8 +113,13 @@
   <component name="PropertiesComponent"><![CDATA[{
   "keyToString": {
     "ModuleVcsDetector.initialDetectionPerformed": "true",
+    "RequestMappingsPanelOrder0": "0",
+    "RequestMappingsPanelOrder1": "1",
+    "RequestMappingsPanelWidth0": "75",
+    "RequestMappingsPanelWidth1": "75",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
+    "Spring Boot.UnicornStudioApplication.executor": "Debug",
     "git-widget-placeholder": "main",
     "node.js.detected.package.eslint": "true",
     "node.js.detected.package.tslint": "true",

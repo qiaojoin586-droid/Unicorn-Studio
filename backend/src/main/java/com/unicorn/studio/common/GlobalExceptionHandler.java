@@ -49,6 +49,16 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(e.getStatusCode()).body(ApiResponse.error(status, message));
     }
 
+    /**
+     * 方法级 @PreAuthorize 拒绝（AccessDeniedException 在 Controller 内抛出，
+     * 由 DispatcherServlet 处理而非过滤器链的 accessDeniedHandler）→ 403 统一信封。
+     */
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDenied(org.springframework.security.access.AccessDeniedException e) {
+        log.warn("无操作权限: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.error(403, "无操作权限"));
+    }
+
     /** 兜底：未知异常 → 500，完整堆栈只进日志 */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneric(Exception e) {

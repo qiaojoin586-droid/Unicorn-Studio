@@ -60,21 +60,24 @@
         <div class="relative z-10 max-w-6xl mx-auto px-4 py-20">
           <h2 class="text-3xl font-bold text-center text-white mb-4">我们培养的能力</h2>
           <p class="text-gray-200 text-center mb-12 max-w-xl mx-auto">全方位数字产品技能，助力业务腾飞</p>
+          <p v-if="servicesLoading" class="text-gray-200 text-center mb-8">正在加载能力介绍...</p>
+          <p v-else-if="servicesError" class="text-gray-200 text-center mb-4">
+            {{ servicesError }}
+            <button
+              type="button"
+              @click="loadServices"
+              class="text-indigo-300 hover:text-indigo-200 font-semibold transition"
+            >
+              点击重试
+            </button>
+          </p>
           <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
             <ServiceCard
-              title="AI智能应用开发"
-              description="使用前沿技术栈，构建高性能、响应式的智能化应用。"
-              icon="🌐"
-            />
-            <ServiceCard
-              title="大模型学术论文研究"
-              description="聚焦大语言模型前沿方向，开展学术论文撰写与发表。"
-              icon="🔬"
-            />
-            <ServiceCard
-              title="Agent开发"
-              description="基于大模型开发智能体，支持自主规划、工具调用与任务落地。"
-              icon="🤖"
+              v-for="service in services"
+              :key="service.id"
+              :title="service.title"
+              :description="service.description"
+              :icon="service.icon"
             />
           </div>
         </div>
@@ -96,16 +99,28 @@
             </router-link>
           </div>
           <p class="text-gray-200 mb-12 max-w-xl">竞赛获奖与学术论文，记录每一次突破与成长</p>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <p v-if="worksLoading" class="text-gray-200 mb-8">正在加载作品...</p>
+          <p v-else-if="worksError" class="text-gray-200 mb-4">
+            {{ worksError }}
+            <button
+              type="button"
+              @click="loadFeaturedWorks"
+              class="text-indigo-300 hover:text-indigo-200 font-semibold transition"
+            >
+              点击重试
+            </button>
+          </p>
+          <div v-if="works.length" class="grid grid-cols-1 md:grid-cols-3 gap-8">
             <WorkCard
               v-for="work in works"
-              :key="work.title"
+              :key="work.slug"
+              :slug="work.slug"
               :title="work.title"
-              :description="work.description"
+              :description="work.summary"
               :icon="work.icon"
               :tag-type="work.tagType"
               :authors="work.authors"
-              :date="work.date"
+              :date="work.dateLabel"
               :cover-class="work.coverClass"
             />
           </div>
@@ -116,11 +131,15 @@
 </template>
 
 <script setup>
+import { onMounted, ref } from 'vue'
 import BackgroundVideo from '@/components/BackgroundVideo.vue'
 import ServiceCard from '@/components/ServiceCard.vue'
 import WorkCard from '@/components/WorkCard.vue'
 import videoUrl from '@/image/index.mp4'
 import videoPosterUrl from '@/image/index-poster.jpg'
+import { useApi } from '@/composables/useApi'
+
+const { get } = useApi()
 
 function scrollToNext() {
   const target = document.getElementById('services')
@@ -129,35 +148,52 @@ function scrollToNext() {
   }
 }
 
-const works = [
-  {
-    title: 'ACM-ICPC 亚洲区域赛金牌',
-    description: '在第 48 届 ACM-ICPC 亚洲区域赛中，团队凭借出色的算法设计与协作能力，从 300+ 支队伍中脱颖而出，斩获金牌。',
-    icon: '🏆',
-    tagType: 'award',
-    authors: '张三、李四、王五',
-    date: '2025-12',
-    coverClass: 'bg-gradient-to-br from-amber-100 to-orange-100',
-  },
-  {
-    title: 'SCI 论文：基于深度学习的图像超分辨率重建',
-    description: '提出一种新型注意力机制网络架构，在 Set5、Set14 等基准数据集上 PSNR 指标达到 SOTA，被 IEEE TIP 期刊录用。',
-    icon: '📄',
-    tagType: 'paper',
-    authors: '赵六、孙七 等',
-    date: '2026-03',
-    coverClass: 'bg-gradient-to-br from-emerald-100 to-teal-100',
-  },
-  {
-    title: '中国大学生计算机设计大赛一等奖',
-    description: '作品「智行」—— 基于 Vue 3 与 WebSocket 的实时协作白板应用，荣获交互设计组全国一等奖。',
-    icon: '🥇',
-    tagType: 'award',
-    authors: '周八、吴九、郑十',
-    date: '2025-08',
-    coverClass: 'bg-gradient-to-br from-indigo-100 to-violet-100',
-  },
-]
+// 能力培养：来自数据库 /api/services
+const services = ref([])
+const servicesLoading = ref(true)
+const servicesError = ref('')
+
+async function loadServices() {
+  servicesLoading.value = true
+  servicesError.value = ''
+  try {
+    const result = await get('/api/services')
+    if (result.error) {
+      throw new Error(result.message)
+    }
+    services.value = result.data?.list || []
+  } catch (err) {
+    servicesError.value = err.message || '无法加载能力介绍'
+  } finally {
+    servicesLoading.value = false
+  }
+}
+
+// 推荐作品：来自数据库 /api/works?featured=true
+const works = ref([])
+const worksLoading = ref(true)
+const worksError = ref('')
+
+async function loadFeaturedWorks() {
+  worksLoading.value = true
+  worksError.value = ''
+  try {
+    const result = await get('/api/works?featured=true')
+    if (result.error) {
+      throw new Error(result.message)
+    }
+    works.value = result.data?.list || []
+  } catch (err) {
+    worksError.value = err.message || '无法加载作品'
+  } finally {
+    worksLoading.value = false
+  }
+}
+
+onMounted(() => {
+  loadServices()
+  loadFeaturedWorks()
+})
 </script>
 
 <style scoped>

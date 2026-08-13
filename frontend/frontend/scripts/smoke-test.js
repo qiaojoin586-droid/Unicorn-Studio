@@ -94,8 +94,24 @@ async function run() {
     const resources = await request(baseUrl, '/api/learning/resources')
     assert.equal(resources.status, 200)
     const resourcesPayload = await resources.json()
-    assert.ok(Array.isArray(resourcesPayload.resources))
-    assert.ok(resourcesPayload.resources.length > 0)
+    // 兼容后端统一信封 {data:{resources}} 与旧平铺 {resources}
+    const resourcesList = resourcesPayload.data?.resources || resourcesPayload.resources
+    assert.ok(Array.isArray(resourcesList), '学习资料应来自后端数据库（信封 data.resources）')
+    assert.ok(resourcesList.length > 0)
+
+    // 能力培养：来自数据库 /api/services
+    const services = await request(baseUrl, '/api/services')
+    assert.equal(services.status, 200)
+    const servicesPayload = await services.json()
+    assert.ok(Array.isArray(servicesPayload.data?.list), '能力条目接口应返回 data.list 数组')
+    assert.ok(servicesPayload.data.list.length > 0, '能力条目种子数据应存在')
+
+    // 作品：来自数据库 /api/works
+    const works = await request(baseUrl, '/api/works')
+    assert.equal(works.status, 200)
+    const worksPayload = await works.json()
+    assert.ok(Array.isArray(worksPayload.data?.list), '作品接口应返回 data.list 数组')
+    assert.ok(worksPayload.data.list.length > 0, '作品种子数据应存在')
 
     const directRoute = await request(baseUrl, '/learning')
     assert.equal(directRoute.status, 200)

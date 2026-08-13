@@ -1,5 +1,9 @@
 <template>
-  <div class="group bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+  <router-link
+    :to="`/works/${slug}`"
+    :aria-label="`查看作品详情：${title}`"
+    class="block group bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+  >
     <!-- Cover image area -->
     <div class="relative h-48 overflow-hidden" :class="coverClass">
       <div class="absolute inset-0 flex items-center justify-center text-6xl">
@@ -41,11 +45,12 @@
         </span>
       </div>
     </div>
-  </div>
+  </router-link>
 </template>
 
 <script setup>
 const props = defineProps({
+  slug: { type: String, required: true },
   title: { type: String, required: true },
   description: { type: String, required: true },
   icon: { type: String, default: '🏆' },

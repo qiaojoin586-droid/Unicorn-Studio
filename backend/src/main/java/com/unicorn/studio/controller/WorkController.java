@@ -24,7 +24,8 @@ public class WorkController {
     public ApiResponse<Map<String, List<Work>>> list(
             @RequestParam(required = false) String category,
             @RequestParam(required = false) Boolean featured) {
-        return ApiResponse.ok(Map.of("list", workService.findPublished(category, featured)));
+        Integer featuredFlag = Boolean.TRUE.equals(featured) ? 1 : null;
+        return ApiResponse.ok(Map.of("list", workService.findPublished(category, featuredFlag)));
     }
 
     @GetMapping("/{slug}")

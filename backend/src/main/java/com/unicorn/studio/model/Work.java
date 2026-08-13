@@ -33,22 +33,29 @@ public class Work {
 
     private String coverUrl;
 
-    @Column(length = 1000)
+    @Column(length = 500)
     private String summary;
 
-    @Column(columnDefinition = "TEXT")
+    @Column(columnDefinition = "MEDIUMTEXT")
     private String content;
+
+    /** 委托方/客户名（后台管理字段） */
+    private String clientName;
 
     private String externalLink;
 
-    private boolean featured;
-
-    private int sortOrder;
+    /** 0/1 */
+    @Column(nullable = false)
+    private Integer featured;
 
     @Column(nullable = false)
+    private Integer sortOrder;
+
+    @Column(nullable = false, length = 20)
     private String status;
 
-    private int viewCount;
+    @Column(nullable = false)
+    private Integer viewCount;
 
     private LocalDateTime publishedAt;
 
@@ -70,11 +77,29 @@ public class Work {
 
     @PrePersist
     void onCreate() {
+        LocalDateTime now = LocalDateTime.now();
         if (createdAt == null) {
-            createdAt = LocalDateTime.now();
+            createdAt = now;
         }
         if (updatedAt == null) {
-            updatedAt = createdAt;
+            updatedAt = now;
         }
+        if (status == null) {
+            status = "draft";
+        }
+        if (featured == null) {
+            featured = 0;
+        }
+        if (sortOrder == null) {
+            sortOrder = 0;
+        }
+        if (viewCount == null) {
+            viewCount = 0;
+        }
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 }

@@ -20,9 +20,9 @@ public class WorkService {
     }
 
     /** 公开列表：仅已发布作品，按排序倒序 id（新作品在前）。 */
-    public List<Work> findPublished(String category, Boolean featured) {
-        if (Boolean.TRUE.equals(featured)) {
-            return workRepository.findByStatusAndFeaturedTrueOrderBySortOrderAscIdDesc(PUBLISHED);
+    public List<Work> findPublished(String category, Integer featured) {
+        if (Integer.valueOf(1).equals(featured)) {
+            return workRepository.findByStatusAndFeaturedOrderBySortOrderAscIdDesc(PUBLISHED, 1);
         }
         if (category != null && !category.isBlank()) {
             return workRepository.findByStatusAndCategoryOrderBySortOrderAscIdDesc(PUBLISHED, category);

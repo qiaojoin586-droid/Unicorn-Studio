@@ -15,62 +15,75 @@
 
     <!-- Works grid -->
     <section class="max-w-6xl mx-auto px-4 pb-20">
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
+      <!-- Loading -->
+      <div v-if="loading" class="text-center py-16">
+        <p class="text-gray-400">正在加载作品...</p>
+      </div>
+
+      <!-- Error -->
+      <div v-else-if="error" class="text-center py-16">
+        <p class="text-gray-400 mb-4">{{ error }}</p>
+        <button
+          type="button"
+          @click="loadWorks"
+          class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-6 py-2.5 rounded-lg transition"
+        >
+          重试
+        </button>
+      </div>
+
+      <!-- Grid -->
+      <div v-else-if="works.length" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-8">
         <WorkCard
           v-for="work in works"
-          :key="work.title"
+          :key="work.slug"
+          :slug="work.slug"
           :title="work.title"
-          :description="work.description"
+          :description="work.summary"
           :icon="work.icon"
           :tag-type="work.tagType"
           :authors="work.authors"
-          :date="work.date"
+          :date="work.dateLabel"
           :cover-class="work.coverClass"
         />
+      </div>
+
+      <!-- Empty -->
+      <div v-else class="text-center py-16">
+        <p class="text-gray-400">暂无作品，敬请期待</p>
       </div>
     </section>
   </div>
 </template>
 
 <script setup>
+import { onMounted, ref } from 'vue'
 import WorkCard from '@/components/WorkCard.vue'
+import { useApi } from '@/composables/useApi'
 
-const works = [
-  {
-    title: 'ACM-ICPC 亚洲区域赛金牌',
-    description: '在第 48 届 ACM-ICPC 亚洲区域赛中，团队凭借出色的算法设计与协作能力，从 300+ 支队伍中脱颖而出，斩获金牌。',
-    icon: '🏆',
-    tagType: 'award',
-    authors: '张三、李四、王五',
-    date: '2025-12',
-    coverClass: 'bg-gradient-to-br from-amber-100 to-orange-100',
-  },
-  {
-    title: 'SCI 论文：基于深度学习的图像超分辨率重建',
-    description: '提出一种新型注意力机制网络架构，在 Set5、Set14 等基准数据集上 PSNR 指标达到 SOTA，被 IEEE TIP 期刊录用。',
-    icon: '📄',
-    tagType: 'paper',
-    authors: '赵六、孙七 等',
-    date: '2026-03',
-    coverClass: 'bg-gradient-to-br from-emerald-100 to-teal-100',
-  },
-  {
-    title: '中国大学生计算机设计大赛一等奖',
-    description: '作品「智行」—— 基于 Vue 3 与 WebSocket 的实时协作白板应用，荣获交互设计组全国一等奖。',
-    icon: '🥇',
-    tagType: 'award',
-    authors: '周八、吴九、郑十',
-    date: '2025-08',
-    coverClass: 'bg-gradient-to-br from-indigo-100 to-violet-100',
-  },
-  {
-    title: 'SCI 论文：大语言模型在代码生成中的应用研究',
-    description: '探索 GPT 系列模型在自动化代码生成任务中的表现，提出基于检索增强的微调策略，被 ACM TOSEM 期刊收录。',
-    icon: '',
-    tagType: 'paper',
-    authors: '陈一、林二 等',
-    date: '2026-01',
-    coverClass: 'bg-gradient-to-br from-rose-100 to-pink-100',
-  },
-]
+const { get } = useApi()
+
+const loading = ref(true)
+const error = ref('')
+const works = ref([])
+
+async function loadWorks() {
+  loading.value = true
+  error.value = ''
+  try {
+    const result = await get('/api/works')
+
+    if (result.error) {
+      throw new Error(result.message)
+    }
+
+    works.value = result.data?.list || []
+  } catch (err) {
+    error.value = err.message || '无法加载作品列表'
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(loadWorks)
 </script>

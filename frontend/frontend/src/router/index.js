@@ -17,6 +17,11 @@ const routes = [
     component: () => import('@/pages/WorksPage.vue'),
   },
   {
+    path: '/works/:slug',
+    name: 'WorkDetail',
+    component: () => import('@/pages/WorkDetailPage.vue'),
+  },
+  {
     path: '/learning',
     name: 'Learning',
     component: () => import('@/pages/LearningPage.vue'),

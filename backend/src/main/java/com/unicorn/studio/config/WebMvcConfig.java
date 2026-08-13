@@ -19,6 +19,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
         registry.addResourceHandler("/assets/**")
                 .addResourceLocations("classpath:/static/assets/")
                 .setCachePeriod(31536000);
+        // 上传文件静态映射（生产由 nginx alias 提供）
+        registry.addResourceHandler("/uploads/**")
+                .addResourceLocations("file:data/uploads/")
+                .setCachePeriod(31536000);
     }
 
     @Override

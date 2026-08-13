@@ -3,7 +3,6 @@ import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadEnvFile } from './env.js'
-import { learningResources } from './learningResources.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -12,6 +11,8 @@ const distDir = path.join(rootDir, 'frontend')
 loadEnvFile(path.join(rootDir, '.env'))
 
 const isProduction = process.env.NODE_ENV === 'production'
+// Java 后端地址：Node 将 /api/* 反向代理到此处（学习资料/作品/能力等业务数据统一来自数据库）
+const apiProxyTarget = process.env.API_PROXY_TARGET || 'http://127.0.0.1:8080'
 const host = process.env.HOST || '127.0.0.1'
 const port = readIntegerEnv('PORT', 3000, 1, 65535)
 
@@ -94,16 +95,45 @@ function sendText(res, statusCode, body, extraHeaders = {}) {
   res.end(body)
 }
 
-function handleApi(req, res, pathname) {
+function handleApi(req, res, pathname, search) {
   if (pathname === '/api/health' && req.method === 'GET') {
+    // Node 进程自身存活检查；业务健康检查见后端 /actuator/health
     return sendJson(res, 200, { ok: true })
   }
 
-  if (pathname === '/api/learning/resources' && req.method === 'GET') {
-    return sendJson(res, 200, { resources: learningResources })
+  // 其余 /api/* 一律反向代理到 Java 后端——业务数据（学习资料/作品/能力等）统一来自数据库，
+  // 禁止在 Node 层 mock，避免"集成断裂不可见"
+  return proxyToBackend(req, res, pathname + search)
+}
+
+function proxyToBackend(req, res, pathnameWithSearch) {
+  const targetUrl = new URL(apiProxyTarget)
+  const headers = { ...req.headers, host: targetUrl.host }
+  // 注意：透传时不重算 Content-Length，直接复用原始 header；若缺失则删除该头，由 Node 自行处理
+  if (headers['content-length'] === undefined) {
+    delete headers['content-length']
   }
 
-  return sendJson(res, 404, { message: '接口不存在' })
+  const upstream = http.request(targetUrl.origin + pathnameWithSearch, {
+    method: req.method,
+    headers,
+  }, (upRes) => {
+    res.writeHead(upRes.statusCode, {
+      ...upRes.headers,
+      'Cache-Control': 'no-store', // SSE 响应不缓存
+    })
+    upRes.pipe(res) // 关键：流式 pipe，不做任何聚合缓冲
+  })
+
+  upstream.on('error', () => {
+    if (!res.headersSent) {
+      sendJson(res, 502, { message: '后端服务暂不可用，请稍后重试' })
+    } else {
+      res.destroy()
+    }
+  })
+
+  req.pipe(upstream) // 请求体透传（POST 聊天消息）
 }
 
 function resolveStaticPath(pathname) {
@@ -224,10 +254,11 @@ function sendStaticFile(req, res, pathname) {
 
 const server = http.createServer(async (req, res) => {
   try {
-    const { pathname } = new URL(req.url || '/', 'http://localhost')
+    const url = new URL(req.url || '/', 'http://localhost')
+    const { pathname, search } = url
 
     if (pathname.startsWith('/api/')) {
-      await handleApi(req, res, pathname)
+      await handleApi(req, res, pathname, search)
       return
     }
 
