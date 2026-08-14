@@ -1,26 +1,23 @@
-﻿package com.unicorn.studio.admin.service;
+package com.unicorn.studio.admin.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.mapper.SysRoleMapper;
+import com.unicorn.studio.mapper.SysUserMapper;
+import com.unicorn.studio.mapper.SysUserRoleMapper;
 import com.unicorn.studio.model.*;
-import com.unicorn.studio.repository.SysRoleRepository;
-import com.unicorn.studio.repository.SysUserRepository;
-import com.unicorn.studio.repository.SysUserRoleRepository;
-import jakarta.persistence.criteria.Predicate;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * 管理员 CRUD（实施方案 §3.6）：
@@ -30,20 +27,20 @@ import java.util.Objects;
 @Service
 public class AdminAccountService {
 
-    private final SysUserRepository userRepository;
-    private final SysRoleRepository roleRepository;
-    private final SysUserRoleRepository userRoleRepository;
+    private final SysUserMapper userMapper;
+    private final SysRoleMapper roleMapper;
+    private final SysUserRoleMapper userRoleMapper;
     private final PasswordEncoder passwordEncoder;
     private final AdminPermissionService permissionService;
 
-    public AdminAccountService(SysUserRepository userRepository,
-                               SysRoleRepository roleRepository,
-                               SysUserRoleRepository userRoleRepository,
+    public AdminAccountService(SysUserMapper userMapper,
+                               SysRoleMapper roleMapper,
+                               SysUserRoleMapper userRoleMapper,
                                PasswordEncoder passwordEncoder,
                                AdminPermissionService permissionService) {
-        this.userRepository = userRepository;
-        this.roleRepository = roleRepository;
-        this.userRoleRepository = userRoleRepository;
+        this.userMapper = userMapper;
+        this.roleMapper = roleMapper;
+        this.userRoleMapper = userRoleMapper;
         this.passwordEncoder = passwordEncoder;
         this.permissionService = permissionService;
     }
@@ -53,19 +50,15 @@ public class AdminAccountService {
     }
 
     public PageResult<AdminItem> list(String keyword, int page, int size) {
-        Specification<SysUser> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            if (keyword != null && !keyword.isBlank()) {
-                String like = "%" + keyword.trim() + "%";
-                predicates.add(cb.or(
-                        cb.like(root.get("username"), like),
-                        cb.like(root.get("nickname"), like)));
-            }
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
-        Page<SysUser> users = userRepository.findAll(spec,
-                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id")));
-        return PageResult.of(users, u -> new AdminItem(sanitize(u), rolesOf(u.getId()), roleNamesOf(u.getId())));
+        LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<>();
+        if (keyword != null && !keyword.isBlank()) {
+            String like = "%" + keyword.trim() + "%";
+            wrapper.and(w -> w.like(SysUser::getUsername, like).or().like(SysUser::getNickname, like));
+        }
+        wrapper.orderByDesc(SysUser::getId);
+        // controller 已做 page-1（0-based），MP Page 为 1-based
+        return PageResult.of(userMapper.selectPage(new Page<>(page + 1, size), wrapper),
+                u -> new AdminItem(sanitize(u), rolesOf(u.getId()), roleNamesOf(u.getId())));
     }
 
     /** 脱敏：只暴露展示字段，杜绝密码哈希/refreshToken 泄漏。 */
@@ -85,7 +78,7 @@ public class AdminAccountService {
 
     @Transactional
     public SysUser create(String username, String password, String nickname, List<Long> roleIds) {
-        if (userRepository.existsByUsername(username)) {
+        if (userMapper.existsByUsername(username)) {
             throw BusinessException.conflict("用户名已存在");
         }
         if (roleIds == null || roleIds.isEmpty()) {
@@ -99,7 +92,7 @@ public class AdminAccountService {
                 .mustChangePassword(1)
                 .failedLoginAttempts(0)
                 .build();
-        user = userRepository.save(user);
+        userMapper.insert(user);
         replaceRoles(user.getId(), roleIds);
         return user;
     }
@@ -125,7 +118,7 @@ public class AdminAccountService {
         if (roleIds != null) {
             replaceRoles(id, roleIds);
         }
-        userRepository.save(user);
+        userMapper.updateById(user);
     }
 
     @Transactional
@@ -137,8 +130,8 @@ public class AdminAccountService {
         if (isSuperAdmin(user)) {
             throw BusinessException.badRequest("SUPER_ADMIN 账号不可删除");
         }
-        userRoleRepository.deleteByIdUserId(id);
-        userRepository.delete(user);
+        userRoleMapper.deleteByIdUserId(id);
+        userMapper.deleteById(user.getId());
     }
 
     /** 个人中心：昵称/头像 */
@@ -150,7 +143,7 @@ public class AdminAccountService {
         if (avatar != null) {
             user.setAvatar(avatar);
         }
-        userRepository.save(user);
+        userMapper.updateById(user);
     }
 
     /** 改密：校验旧密码 → 全量失效 refreshToken（其他会话立即退出）→ 清强制改密标记。 */
@@ -166,7 +159,7 @@ public class AdminAccountService {
         user.setRefreshToken(null);
         user.setRefreshTokenExpiresAt(null);
         user.setMustChangePassword(0);
-        userRepository.save(user);
+        userMapper.updateById(user);
     }
 
     public Map<String, Object> profile(SysUser user) {
@@ -182,7 +175,7 @@ public class AdminAccountService {
     }
 
     private SysUser getOrThrow(Long id) {
-        return userRepository.findById(id)
+        return Optional.ofNullable(userMapper.selectById(id))
                 .orElseThrow(() -> BusinessException.notFound("管理员不存在"));
     }
 
@@ -192,35 +185,35 @@ public class AdminAccountService {
     }
 
     private List<Long> roleIdsOf(SysUser user) {
-        return userRoleRepository.findByIdUserId(user.getId()).stream()
-                .map(ur -> ur.getId().getRoleId()).toList();
+        return userRoleMapper.findByIdUserId(user.getId()).stream()
+                .map(ur -> ur.getRoleId()).toList();
     }
 
     private List<String> rolesOf(Long userId) {
-        List<Long> roleIds = userRoleRepository.findByIdUserId(userId).stream()
-                .map(ur -> ur.getId().getRoleId()).toList();
+        List<Long> roleIds = userRoleMapper.findByIdUserId(userId).stream()
+                .map(ur -> ur.getRoleId()).toList();
         if (roleIds.isEmpty()) {
             return List.of();
         }
-        return roleRepository.findAllById(roleIds).stream().map(SysRole::getCode).toList();
+        return roleMapper.selectBatchIds(roleIds).stream().map(SysRole::getCode).toList();
     }
 
     private List<String> roleNamesOf(Long userId) {
-        List<Long> roleIds = userRoleRepository.findByIdUserId(userId).stream()
-                .map(ur -> ur.getId().getRoleId()).toList();
+        List<Long> roleIds = userRoleMapper.findByIdUserId(userId).stream()
+                .map(ur -> ur.getRoleId()).toList();
         if (roleIds.isEmpty()) {
             return List.of();
         }
-        return roleRepository.findAllById(roleIds).stream().map(SysRole::getName).toList();
+        return roleMapper.selectBatchIds(roleIds).stream().map(SysRole::getName).toList();
     }
 
     private void replaceRoles(Long userId, List<Long> roleIds) {
-        userRoleRepository.deleteByIdUserId(userId);
+        userRoleMapper.deleteByIdUserId(userId);
         for (Long roleId : roleIds) {
-            if (!roleRepository.existsById(roleId)) {
+            if (roleMapper.selectById(roleId) == null) {
                 throw BusinessException.badRequest("角色不存在: " + roleId);
             }
-            userRoleRepository.save(new SysUserRole(new UserRoleId(userId, roleId)));
+            userRoleMapper.insert(new SysUserRole(userId, roleId));
         }
     }
 }

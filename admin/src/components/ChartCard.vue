@@ -8,7 +8,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { useChart } from '@/composables/useChart'
 
 const props = defineProps<{
@@ -18,7 +18,8 @@ const props = defineProps<{
 }>()
 
 const chartEl = ref<HTMLElement | null>(null)
-const optionRef = ref(props.option)
+// computed 而非 ref：父组件更新 option prop 时自动重绘（useChart 内部 deep watch 捕获）
+const optionRef = computed(() => props.option)
 
 useChart(chartEl, optionRef)
 </script>

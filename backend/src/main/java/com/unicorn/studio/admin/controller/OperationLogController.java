@@ -1,31 +1,25 @@
 package com.unicorn.studio.admin.controller;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.mapper.SysOperationLogMapper;
 import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.model.SysOperationLog;
-import com.unicorn.studio.repository.SysOperationLogRepository;
-import jakarta.persistence.criteria.Predicate;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 /** 审计日志查询（实施方案 §3.6）。 */
 @RestController
 @RequestMapping("/api/admin/logs")
 public class OperationLogController {
 
-    private final SysOperationLogRepository logRepository;
+    private final SysOperationLogMapper logMapper;
 
-    public OperationLogController(SysOperationLogRepository logRepository) {
-        this.logRepository = logRepository;
+    public OperationLogController(SysOperationLogMapper logMapper) {
+        this.logMapper = logMapper;
     }
 
     @GetMapping
@@ -38,29 +32,25 @@ public class OperationLogController {
             @RequestParam(required = false) String status,
             @RequestParam(required = false) String from,
             @RequestParam(required = false) String to) {
-        Specification<SysOperationLog> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            if (username != null && !username.isBlank()) {
-                predicates.add(cb.equal(root.get("username"), username));
-            }
-            if (module != null && !module.isBlank()) {
-                predicates.add(cb.equal(root.get("module"), module));
-            }
-            if (status != null && !status.isBlank()) {
-                predicates.add(cb.equal(root.get("status"), status));
-            }
-            if (from != null && !from.isBlank()) {
-                predicates.add(cb.greaterThanOrEqualTo(root.get("createdAt"),
-                        LocalDate.parse(from).atStartOfDay()));
-            }
-            if (to != null && !to.isBlank()) {
-                predicates.add(cb.lessThan(root.get("createdAt"),
-                        LocalDate.parse(to).plusDays(1).atStartOfDay()));
-            }
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
-        Page<SysOperationLog> logs = logRepository.findAll(spec,
-                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id")));
+        LambdaQueryWrapper<SysOperationLog> wrapper = new LambdaQueryWrapper<>();
+        if (username != null && !username.isBlank()) {
+            wrapper.eq(SysOperationLog::getUsername, username);
+        }
+        if (module != null && !module.isBlank()) {
+            wrapper.eq(SysOperationLog::getModule, module);
+        }
+        if (status != null && !status.isBlank()) {
+            wrapper.eq(SysOperationLog::getStatus, status);
+        }
+        if (from != null && !from.isBlank()) {
+            wrapper.ge(SysOperationLog::getCreatedAt, LocalDate.parse(from).atStartOfDay());
+        }
+        if (to != null && !to.isBlank()) {
+            wrapper.lt(SysOperationLog::getCreatedAt, LocalDate.parse(to).plusDays(1).atStartOfDay());
+        }
+        wrapper.orderByDesc(SysOperationLog::getId);
+        // @RequestParam page 为 1-based（defaultValue = "1"），MP Page 亦为 1-based
+        Page<SysOperationLog> logs = logMapper.selectPage(new Page<>(page, size), wrapper);
         return ApiResponse.ok(PageResult.of(logs));
     }
 }

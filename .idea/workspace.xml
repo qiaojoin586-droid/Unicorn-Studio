@@ -4,20 +4,123 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="0cd3fd1e-8d03-4508-a3c2-7a77e6deb325" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/compiler.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/compiler.xml" afterDir="false" />
+    <list default="true" id="43516df8-ed90-4b49-85b4-c1955e10973f" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/dataSources.xml" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/.idea/sqldialects.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/403-ySQbNBJo.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/404-DwlmL2I2.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/AdminLayout-DqJUMk9T.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/AdminsView-CPyjynnx.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/BackupsView-DKUhRG-u.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/CarouselListView-cuchwdFJ.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/CommentsView-DXY2LWtG.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/DashboardView-ClsaDqmM.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/DashboardView-Dx2LFwPa.css" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/Editor-ChDWCtND.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/ImageUpload-B-sMMfAU.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/LoginView-C4FihEcL.css" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/LoginView-oDrN5m9r.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/LogsView-V7a3XsM-.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/MessagesView-Bzxs3w61.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/NewsEditView-BgUUcPyn.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/NewsListView-CQSDy8RZ.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/ProfileView-DzNY_Fq_.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/RolesView-sG4I03xJ.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/SettingsView-C_dGrwso.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/StatusTag.vue_vue_type_script_setup_true_lang-QDmcdGFw.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/UserDetailView-BWP_QUwy.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/UsersView-ut6bTxXG.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/WorkEditView-hNM3-00M.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/WorksListView-t_799fZ_.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/format-DiLwaFbU.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/index-BSbOC7IH.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/news-CSGp5ied.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/role-DFKPByzm.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/useTable-DAxIIq4H.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/user-BwTP-5-r.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/assets/work-BNyxpGCo.js" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/dist/index.html" beforeDir="false" afterPath="$PROJECT_DIR$/admin/dist/index.html" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/src/components/ChartCard.vue" beforeDir="false" afterPath="$PROJECT_DIR$/admin/src/components/ChartCard.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/src/router/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/admin/src/router/index.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/src/stores/auth.ts" beforeDir="false" afterPath="$PROJECT_DIR$/admin/src/stores/auth.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/src/utils/request.ts" beforeDir="false" afterPath="$PROJECT_DIR$/admin/src/utils/request.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/src/views/dashboard/DashboardView.vue" beforeDir="false" afterPath="$PROJECT_DIR$/admin/src/views/dashboard/DashboardView.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/src/views/login/LoginView.vue" beforeDir="false" afterPath="$PROJECT_DIR$/admin/src/views/login/LoginView.vue" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/admin/tsconfig.tsbuildinfo" beforeDir="false" afterPath="$PROJECT_DIR$/admin/tsconfig.tsbuildinfo" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/data/unicorn_studio.mv.db" beforeDir="false" afterPath="$PROJECT_DIR$/backend/data/unicorn_studio.mv.db" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/pom.xml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/pom.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/common/GlobalExceptionHandler.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/common/GlobalExceptionHandler.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/config/CorsConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/config/CorsConfig.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/config/SecurityConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/config/SecurityConfig.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/config/WebMvcConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/config/WebMvcConfig.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/WorkController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/WorkController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/OperationLogController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/OperationLogController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/security/AdminBootstrap.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/security/AdminBootstrap.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/security/AdminSecurityConfig.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/security/AdminSecurityConfig.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/security/JwtAuthFilter.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/security/JwtAuthFilter.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/security/LoginLockService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/security/LoginLockService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/AdminAccountService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/AdminAccountService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/AdminPermissionService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/AdminPermissionService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/AuthService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/AuthService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/BackupService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/BackupService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/CarouselAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/CarouselAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/CommentAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/CommentAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/DashboardService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/DashboardService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/FileService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/FileService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/MessageAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/MessageAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/NewsAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/NewsAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/PublicUserAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/PublicUserAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/RoleService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/RoleService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/SiteSettingsService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/SiteSettingsService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/WorkAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/WorkAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/common/PageResult.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/common/PageResult.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/common/audit/AuditLogAspect.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/common/audit/AuditLogAspect.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/CarouselController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/CarouselController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/MessageController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/MessageController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/BackupRecord.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/BackupRecord.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/Carousel.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/Carousel.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/Comment.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/Comment.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/LearningResource.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/LearningResource.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/Message.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/Message.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/News.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/News.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/PublicUser.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/PublicUser.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/RolePermissionId.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/ServiceItem.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/ServiceItem.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SiteSettings.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SiteSettings.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/StatsDaily.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/StatsDaily.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysOperationLog.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysOperationLog.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysPermission.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysPermission.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysRole.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysRole.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysRolePermission.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysRolePermission.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysUser.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysUser.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysUserRole.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysUserRole.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/UploadFile.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/UploadFile.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/UserRoleId.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/VisitLog.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/VisitLog.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/Work.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/Work.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/LearningResourceRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/LearningResourceRepository.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/WorkRepository.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/WorkRepository.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/BackupRecordRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/CarouselRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/CommentRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/LearningResourceRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/MessageRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/NewsRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/PublicUserRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/ServiceItemRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/SiteSettingsRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/StatsDailyRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/SysOperationLogRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/SysPermissionRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/SysRolePermissionRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/SysRoleRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/SysUserRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/SysUserRoleRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/UploadFileRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/VisitLogRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/repository/WorkRepository.java" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/CommentService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/CommentService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/LearningService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/LearningService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/NewsService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/NewsService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/PublicAuthService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/PublicAuthService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/SensitiveWordService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/SensitiveWordService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/ServiceItemService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/ServiceItemService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/StatsService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/StatsService.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/WorkService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/service/WorkService.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/src/main/resources/application-dev.yml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/resources/application-dev.yml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/resources/application.yml" afterDir="false" />
@@ -35,49 +138,11 @@
       <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ChatMessage.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ChatMessage.class" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/LearningResource$LearningResourceBuilder.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/LearningResource$LearningResourceBuilder.class" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/LearningResource.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/LearningResource.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/repository/LearningResourceRepository.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/repository/LearningResourceRepository.class" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/repository/LearningResourceRepository.class" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/service/AiChatService.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/service/AiChatService.class" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/service/LearningService.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/service/LearningService.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/target/classes/data.sql" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/data.sql" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/maven-status/maven-compiler-plugin/compile/default-compile/createdFiles.lst" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data/unicorn_studio.mv.db" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/升级方案.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/升级方案.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/docs/后台管理实施方案.md" beforeDir="false" afterPath="$PROJECT_DIR$/docs/后台管理实施方案.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/.env.example" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/.env.example" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/AboutPage-DAPnmQX8.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/BackgroundVideo-Cyrw5wNN.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/HomePage-Bwybse_s.css" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/HomePage-D293bioU.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/JoinPage-BJrtBkmD.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/LearningPage-BlUFG9f1.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/NotFoundPage-CPGvzOIC.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/WorkCard-CMpRzhQg.css" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/WorkCard-DJhViz-b.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/WorksPage-CH3AtuAH.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/home-poster-DlKTvgXo.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/assets/home-poster-DlKTvgXo.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/index-DGq3atWp.css" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/assets/index-vlV7-wOv.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/scripts/dev.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/scripts/dev.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/scripts/dev.ps1" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/scripts/dev.ps1" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/scripts/smoke-test.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/scripts/smoke-test.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/server/env.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/server/env.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/server/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/server/index.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/server/learningResources.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/server/learningResources.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/src/components/WorkCard.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/src/components/WorkCard.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/src/pages/HomePage.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/src/pages/HomePage.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/src/pages/LearningPage.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/src/pages/LearningPage.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/src/pages/NotFoundPage.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/src/pages/NotFoundPage.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/src/pages/WorksPage.vue" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/src/pages/WorksPage.vue" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/frontend/src/router/index.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/frontend/src/router/index.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/_metadata.json" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/_metadata.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/chunk-H4DXBCSJ.js" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/chunk-H4DXBCSJ.js.map" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/pinia.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/pinia.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/pinia.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/pinia.js.map" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/vue-router.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/vue-router.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/vue-router.js.map" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/vue-router.js.map" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/vue.js" beforeDir="false" afterPath="$PROJECT_DIR$/frontend/node_modules/.vite/deps/vue.js" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -87,25 +152,26 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory">{
-  &quot;lastFilter&quot;: {
-    &quot;state&quot;: &quot;OPEN&quot;,
-    &quot;assignee&quot;: &quot;qiaojoin586-droid&quot;
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "qiaojoin586-droid"
   }
-}</component>
-  <component name="GithubPullRequestsUISettings">{
-  &quot;selectedUrlAndAccountId&quot;: {
-    &quot;url&quot;: &quot;https://github.com/qiaojoin586-droid/Unicorn-Studio.git&quot;,
-    &quot;accountId&quot;: &quot;cd45af01-fc59-4a09-8796-8608cb318bd0&quot;
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/qiaojoin586-droid/Unicorn-Studio.git",
+    "accountId": "cd45af01-fc59-4a09-8796-8608cb318bd0"
   }
-}</component>
+}]]></component>
   <component name="ProjectCodeStyleSettingsMigration">
     <option name="version" value="2" />
   </component>
-  <component name="ProjectColorInfo">{
-  &quot;associatedIndex&quot;: 5
-}</component>
-  <component name="ProjectId" id="3HowGlYbZDKon0PUTPT8uw3Ov6t" />
+  <component name="ProjectColorInfo"><![CDATA[{
+  "customColor": "",
+  "associatedIndex": 5
+}]]></component>
+  <component name="ProjectId" id="3HugrbxoD75r1ZXyJncHjFTHGis" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
@@ -119,6 +185,7 @@
     "RequestMappingsPanelWidth1": "75",
     "RunOnceActivity.ShowReadmeOnStart": "true",
     "RunOnceActivity.git.unshallow": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "Spring Boot.UnicornStudioApplication.executor": "Debug",
     "git-widget-placeholder": "main",
     "node.js.detected.package.eslint": "true",
@@ -126,19 +193,14 @@
     "node.js.selected.package.eslint": "(autodetect)",
     "node.js.selected.package.tslint": "(autodetect)",
     "nodejs_package_manager_path": "npm",
-    "project.structure.last.edited": "Project",
-    "project.structure.proportion": "0.0",
-    "project.structure.side.proportion": "0.0",
-    "ts.external.directory.path": "C:\\Program Files\\JetBrains\\IntelliJ IDEA 2025.1.1.1\\plugins\\javascript-plugin\\jsLanguageServicesImpl\\external",
     "vue.rearranger.settings.migration": "true"
+  },
+  "keyToStringList": {
+    "DatabaseDriversLRU": [
+      "mysql"
+    ]
   }
 }]]></component>
-  <component name="RecentsManager">
-    <key name="MoveFile.RECENT_KEYS">
-      <recent name="C:\Users\HANXI\Desktop\Unicorn-Studio\frontend" />
-      <recent name="C:\Users\HANXI\Desktop\Unicorn-Studio\frontend\src" />
-    </key>
-  </component>
   <component name="RunManager">
     <configuration name="UnicornStudioApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot" nameIsGenerated="true">
       <module name="unicorn-studio" />
@@ -161,19 +223,16 @@
   </component>
   <component name="TaskManager">
     <task active="true" id="Default" summary="Default task">
-      <changelist id="0cd3fd1e-8d03-4508-a3c2-7a77e6deb325" name="Changes" comment="" />
-      <created>1786547637325</created>
+      <changelist id="43516df8-ed90-4b49-85b4-c1955e10973f" name="Changes" comment="" />
+      <created>1786723568573</created>
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
-      <updated>1786547637325</updated>
-      <workItem from="1786547639585" duration="2031000" />
+      <updated>1786723568573</updated>
+      <workItem from="1786723569940" duration="3182000" />
     </task>
     <servers />
   </component>
   <component name="TypeScriptGeneratedFilesManager">
     <option name="version" value="3" />
-  </component>
-  <component name="UnknownFeatures">
-    <option featureType="com.intellij.fileTypeFactory" implementationName=".env" />
   </component>
 </project>

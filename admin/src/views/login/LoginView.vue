@@ -15,6 +15,13 @@
         <p class="login-subtitle">后台管理系统 · 内容控制台</p>
       </div>
 
+      <transition name="el-fade-in">
+        <div v-if="loginError" class="login-error" role="alert">
+          <el-icon :size="16"><WarningFilled /></el-icon>
+          <span>{{ loginError }}</span>
+        </div>
+      </transition>
+
       <el-form :model="form" :rules="rules" ref="formRef" size="large" @keyup.enter="submit">
         <el-form-item prop="username">
           <el-input v-model="form.username" placeholder="用户名" :prefix-icon="User" />
@@ -39,7 +46,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
@@ -51,14 +58,22 @@ const auth = useAuthStore()
 
 const formRef = ref()
 const loading = ref(false)
+const loginError = ref('')
 const form = reactive({ username: '', password: '' })
 const rules = {
   username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
 
+/** 从 axios/拦截器错误中提取可展示的消息 */
+function getLoginError(e: unknown): string {
+  const err = e as { response?: { data?: { message?: string } }; message?: string }
+  return err.response?.data?.message || err.message || '登录失败，请稍后重试'
+}
+
 async function submit() {
   await formRef.value?.validate()
+  loginError.value = ''
   loading.value = true
   try {
     const data = await auth.login(form.username, form.password)
@@ -68,12 +83,18 @@ async function submit() {
       return
     }
     router.push((route.query.redirect as string) || '/')
-  } catch {
-    // 错误信息已由拦截器提示
+  } catch (e) {
+    // 登录接口走 silent 模式（不弹全局提示），错误改为表单内联展示
+    loginError.value = getLoginError(e)
   } finally {
     loading.value = false
   }
 }
+
+// 用户重新输入时清除错误提示
+watch([() => form.username, () => form.password], () => {
+  loginError.value = ''
+})
 </script>
 
 <style scoped>
@@ -209,6 +230,20 @@ async function submit() {
 }
 .login-card :deep(.el-input__suffix) {
   color: rgba(255, 255, 255, 0.42);
+}
+
+/* ---- 登录失败内联提示 ---- */
+.login-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
 }
 
 .login-btn {

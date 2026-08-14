@@ -1,10 +1,13 @@
 package com.unicorn.studio.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.unicorn.studio.common.IpUtils;
+import com.unicorn.studio.mapper.*;
+import com.unicorn.studio.model.Comment;
+import com.unicorn.studio.model.Message;
 import com.unicorn.studio.model.PublicUser;
 import com.unicorn.studio.model.StatsDaily;
 import com.unicorn.studio.model.VisitLog;
-import com.unicorn.studio.repository.*;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Optional;
 
 /**
  * 访问统计（实施方案 §5.7）：
@@ -26,22 +30,22 @@ public class StatsService {
 
     private static final Logger log = LoggerFactory.getLogger(StatsService.class);
 
-    private final VisitLogRepository visitLogRepository;
-    private final StatsDailyRepository statsDailyRepository;
-    private final PublicUserRepository publicUserRepository;
-    private final MessageRepository messageRepository;
-    private final CommentRepository commentRepository;
+    private final VisitLogMapper visitLogMapper;
+    private final StatsDailyMapper statsDailyMapper;
+    private final PublicUserMapper publicUserMapper;
+    private final MessageMapper messageMapper;
+    private final CommentMapper commentMapper;
 
-    public StatsService(VisitLogRepository visitLogRepository,
-                        StatsDailyRepository statsDailyRepository,
-                        PublicUserRepository publicUserRepository,
-                        MessageRepository messageRepository,
-                        CommentRepository commentRepository) {
-        this.visitLogRepository = visitLogRepository;
-        this.statsDailyRepository = statsDailyRepository;
-        this.publicUserRepository = publicUserRepository;
-        this.messageRepository = messageRepository;
-        this.commentRepository = commentRepository;
+    public StatsService(VisitLogMapper visitLogMapper,
+                        StatsDailyMapper statsDailyMapper,
+                        PublicUserMapper publicUserMapper,
+                        MessageMapper messageMapper,
+                        CommentMapper commentMapper) {
+        this.visitLogMapper = visitLogMapper;
+        this.statsDailyMapper = statsDailyMapper;
+        this.publicUserMapper = publicUserMapper;
+        this.messageMapper = messageMapper;
+        this.commentMapper = commentMapper;
     }
 
     @Async("asyncExecutor")
@@ -55,7 +59,7 @@ public class StatsService {
                     .referer(referer)
                     .visitedAt(LocalDateTime.now())
                     .build();
-            visitLogRepository.save(logEntry);
+            visitLogMapper.insert(logEntry);
         } catch (Exception e) {
             log.warn("PV 埋点写入失败: {}", e.getMessage());
         }
@@ -75,25 +79,33 @@ public class StatsService {
         LocalDateTime from = date.atStartOfDay();
         LocalDateTime to = date.plusDays(1).atStartOfDay();
 
-        long pv = visitLogRepository.countByVisitedAtGreaterThanEqualAndVisitedAtLessThan(from, to);
-        long uv = visitLogRepository.findDistinctIpHashes(from, to, null).size();
-        long newUsers = publicUserRepository.findAll().stream()
-                .filter(u -> u.getCreatedAt() != null
-                        && !u.getCreatedAt().isBefore(from) && u.getCreatedAt().isBefore(to))
-                .count();
-        long newMessages = messageRepository.count(
-                (root, query, cb) -> cb.between(root.get("createdAt"), from, to));
-        long newComments = commentRepository.count(
-                (root, query, cb) -> cb.between(root.get("createdAt"), from, to));
+        long pv = visitLogMapper.countByVisitedAtGreaterThanEqualAndVisitedAtLessThan(from, to);
+        long uv = visitLogMapper.findDistinctIpHashes(from, to, null).size();
+        long newUsers = publicUserMapper.selectCount(
+                new LambdaQueryWrapper<PublicUser>()
+                        .ge(PublicUser::getCreatedAt, from)
+                        .lt(PublicUser::getCreatedAt, to));
+        long newMessages = messageMapper.selectCount(
+                new LambdaQueryWrapper<Message>()
+                        .ge(Message::getCreatedAt, from)
+                        .lt(Message::getCreatedAt, to));
+        long newComments = commentMapper.selectCount(
+                new LambdaQueryWrapper<Comment>()
+                        .ge(Comment::getCreatedAt, from)
+                        .lt(Comment::getCreatedAt, to));
 
-        StatsDaily daily = statsDailyRepository.findByStatDate(date)
-                .orElseGet(() -> StatsDaily.builder().statDate(date).build());
+        Optional<StatsDaily> existing = statsDailyMapper.findByStatDate(date);
+        StatsDaily daily = existing.orElseGet(() -> StatsDaily.builder().statDate(date).build());
         daily.setPv((int) pv);
         daily.setUv((int) uv);
         daily.setNewUsers((int) newUsers);
         daily.setNewMessages((int) newMessages);
         daily.setNewComments((int) newComments);
-        statsDailyRepository.save(daily);
+        if (existing.isPresent()) {
+            statsDailyMapper.updateById(daily);
+        } else {
+            statsDailyMapper.insert(daily);
+        }
         log.info("统计聚合完成 {}: pv={}, uv={}", date, pv, uv);
     }
 }

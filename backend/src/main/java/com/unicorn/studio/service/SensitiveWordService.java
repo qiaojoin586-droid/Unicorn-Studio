@@ -1,7 +1,7 @@
 package com.unicorn.studio.service;
 
+import com.unicorn.studio.mapper.SiteSettingsMapper;
 import com.unicorn.studio.model.SiteSettings;
-import com.unicorn.studio.repository.SiteSettingsRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.Arrays;
@@ -16,10 +16,10 @@ public class SensitiveWordService {
 
     private static final String KEY = "notify.sensitive_words";
 
-    private final SiteSettingsRepository settingsRepository;
+    private final SiteSettingsMapper settingsMapper;
 
-    public SensitiveWordService(SiteSettingsRepository settingsRepository) {
-        this.settingsRepository = settingsRepository;
+    public SensitiveWordService(SiteSettingsMapper settingsMapper) {
+        this.settingsMapper = settingsMapper;
     }
 
     /** 返回命中的第一个敏感词；无命中返回 null。 */
@@ -41,7 +41,7 @@ public class SensitiveWordService {
     }
 
     private List<String> loadWords() {
-        return settingsRepository.findBySettingKey(KEY)
+        return settingsMapper.findBySettingKey(KEY)
                 .map(SiteSettings::getSettingValue)
                 .map(v -> Arrays.stream(v.split("[,，]"))
                         .map(String::trim)

@@ -35,7 +35,7 @@ export const useAuthStore = defineStore('auth', {
         refreshToken: string
         expiresIn: number
         mustChangePassword: number
-      }>('/api/admin/auth/login', { username, password })
+      }>('/api/admin/auth/login', { username, password }, { silent: true })
       this.token = data.accessToken
       this.refreshToken = data.refreshToken
       localStorage.setItem('admin_token', data.accessToken)

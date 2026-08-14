@@ -1,15 +1,12 @@
 package com.unicorn.studio.admin.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.mapper.UploadFileMapper;
 import com.unicorn.studio.model.UploadFile;
-import com.unicorn.studio.repository.UploadFileRepository;
-import jakarta.persistence.criteria.Predicate;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,8 +20,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -41,14 +36,14 @@ public class FileService {
     private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp", "gif");
     private static final DateTimeFormatter MONTH_DIR = DateTimeFormatter.ofPattern("yyyy/MM");
 
-    private final UploadFileRepository uploadFileRepository;
+    private final UploadFileMapper uploadFileMapper;
     private final Path uploadDir;
     private final long maxSize;
 
-    public FileService(UploadFileRepository uploadFileRepository,
+    public FileService(UploadFileMapper uploadFileMapper,
                        @Value("${app.upload.dir:data/uploads}") String uploadDir,
                        @Value("${app.upload.max-size:10485760}") long maxSize) {
-        this.uploadFileRepository = uploadFileRepository;
+        this.uploadFileMapper = uploadFileMapper;
         this.uploadDir = Path.of(uploadDir).toAbsolutePath().normalize();
         this.maxSize = maxSize;
     }
@@ -99,25 +94,23 @@ public class FileService {
                 .mimeType(file.getContentType())
                 .uploadedBy(operatorId)
                 .build();
-        return uploadFileRepository.save(record);
+        uploadFileMapper.insert(record);
+        return record;
     }
 
     /** 媒体库列表（实施方案 §3.6 预留接口）。 */
     public PageResult<UploadFile> list(String keyword, int page, int size) {
-        Specification<UploadFile> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            if (keyword != null && !keyword.isBlank()) {
-                predicates.add(cb.like(root.get("fileName"), "%" + keyword.trim() + "%"));
-            }
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
-        Page<UploadFile> files = uploadFileRepository.findAll(spec,
-                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id")));
-        return PageResult.of(files);
+        LambdaQueryWrapper<UploadFile> wrapper = new LambdaQueryWrapper<>();
+        if (keyword != null && !keyword.isBlank()) {
+            wrapper.like(UploadFile::getFileName, "%" + keyword.trim() + "%");
+        }
+        wrapper.orderByDesc(UploadFile::getId);
+        // controller 已做 page-1（0-based），MP Page 为 1-based
+        return PageResult.of(uploadFileMapper.selectPage(new Page<>(page + 1, size), wrapper));
     }
 
     public Map<String, Object> summary() {
-        return Map.of("total", uploadFileRepository.count());
+        return Map.of("total", uploadFileMapper.selectCount(null));
     }
 
     private String extensionOf(String name) {

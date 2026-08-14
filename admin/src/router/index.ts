@@ -133,6 +133,12 @@ export const permissionRoutes: RouteRecordRaw[] = [
         meta: { title: '审计日志', icon: 'Tickets', permission: 'log:list' },
       },
       {
+        path: 'sql-monitor',
+        name: 'SqlMonitor',
+        component: () => import('@/views/sql-monitor/SqlMonitorView.vue'),
+        meta: { title: 'SQL 监控', icon: 'DataLine', permission: 'system:sql' },
+      },
+      {
         path: 'profile',
         name: 'Profile',
         component: () => import('@/views/profile/ProfileView.vue'),

@@ -1,14 +1,15 @@
 package com.unicorn.studio.admin.service;
 
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.mapper.SiteSettingsMapper;
 import com.unicorn.studio.model.SiteSettings;
-import com.unicorn.studio.repository.SiteSettingsRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -25,20 +26,20 @@ public class SiteSettingsService {
 
     private static final long CACHE_TTL_MILLIS = 10 * 60 * 1000;
 
-    private final SiteSettingsRepository settingsRepository;
+    private final SiteSettingsMapper settingsMapper;
 
     // 前台缓存：{value, cachedAt}
     private volatile Map<String, Object> publicCache;
     private volatile long publicCacheAt;
 
-    public SiteSettingsService(SiteSettingsRepository settingsRepository) {
-        this.settingsRepository = settingsRepository;
+    public SiteSettingsService(SiteSettingsMapper settingsMapper) {
+        this.settingsMapper = settingsMapper;
     }
 
     /** 后台：按 group 分组 KV。 */
     public Map<String, Map<String, String>> listGrouped() {
         Map<String, Map<String, String>> groups = new LinkedHashMap<>();
-        for (SiteSettings s : settingsRepository.findAllByOrderByGroupNameAscSettingKeyAsc()) {
+        for (SiteSettings s : settingsMapper.findAllByOrderByGroupNameAscSettingKeyAsc()) {
             groups.computeIfAbsent(s.getGroupName(), k -> new LinkedHashMap<>())
                     .put(s.getSettingKey(), s.getSettingValue());
         }
@@ -49,20 +50,24 @@ public class SiteSettingsService {
     @Transactional
     public void updateAll(List<KeyValueRequest> items) {
         for (KeyValueRequest item : items) {
-            SiteSettings setting = settingsRepository.findBySettingKey(item.key())
-                    .orElseGet(() -> SiteSettings.builder()
-                            .groupName(item.group())
-                            .settingKey(item.key())
-                            .build());
+            Optional<SiteSettings> existing = settingsMapper.findBySettingKey(item.key());
+            SiteSettings setting = existing.orElseGet(() -> SiteSettings.builder()
+                    .groupName(item.group())
+                    .settingKey(item.key())
+                    .build());
             setting.setSettingValue(item.value());
-            settingsRepository.save(setting);
+            if (existing.isPresent()) {
+                settingsMapper.updateById(setting);
+            } else {
+                settingsMapper.insert(setting);
+            }
         }
         invalidatePublicCache();
     }
 
     /** 按 key 读单个值。 */
     public String getValue(String key) {
-        return settingsRepository.findBySettingKey(key)
+        return settingsMapper.findBySettingKey(key)
                 .map(SiteSettings::getSettingValue)
                 .orElse(null);
     }
@@ -79,7 +84,7 @@ public class SiteSettingsService {
                 return cast(publicCache);
             }
             Map<String, Map<String, String>> groups = new LinkedHashMap<>();
-            for (SiteSettings s : settingsRepository.findAllByOrderByGroupNameAscSettingKeyAsc()) {
+            for (SiteSettings s : settingsMapper.findAllByOrderByGroupNameAscSettingKeyAsc()) {
                 if (!PUBLIC_GROUPS.contains(s.getGroupName())) {
                     continue;
                 }

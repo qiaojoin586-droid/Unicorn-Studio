@@ -1,9 +1,9 @@
 package com.unicorn.studio.common;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.springframework.data.domain.Page;
 
 import java.util.List;
 import java.util.function.Function;
@@ -17,12 +17,12 @@ public class PageResult<T> {
     private List<T> list;
     private long total;
 
-    public static <T> PageResult<T> of(Page<T> page) {
-        return new PageResult<>(page.getContent(), page.getTotalElements());
+    public static <T> PageResult<T> of(IPage<T> page) {
+        return new PageResult<>(page.getRecords(), page.getTotal());
     }
 
-    public static <S, T> PageResult<T> of(Page<S> page, Function<S, T> mapper) {
-        List<T> mapped = page.getContent().stream().map(mapper).toList();
-        return new PageResult<>(mapped, page.getTotalElements());
+    public static <S, T> PageResult<T> of(IPage<S> page, Function<S, T> mapper) {
+        List<T> mapped = page.getRecords().stream().map(mapper).toList();
+        return new PageResult<>(mapped, page.getTotal());
     }
 }

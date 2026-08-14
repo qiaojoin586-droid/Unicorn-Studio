@@ -1,27 +1,24 @@
 package com.unicorn.studio.admin.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.HtmlSanitizer;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.mapper.CommentMapper;
+import com.unicorn.studio.mapper.NewsMapper;
+import com.unicorn.studio.mapper.SiteSettingsMapper;
 import com.unicorn.studio.model.News;
 import com.unicorn.studio.model.SiteSettings;
-import com.unicorn.studio.repository.CommentRepository;
-import com.unicorn.studio.repository.NewsRepository;
-import com.unicorn.studio.repository.SiteSettingsRepository;
-import jakarta.persistence.criteria.Predicate;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /** 新闻管理（模式同作品，authorId 默认当前管理员）。 */
 @Service
@@ -30,39 +27,34 @@ public class NewsAdminService {
     private static final String SEO_GROUP = "seo";
     private static final String SEO_KEY_PREFIX = "seo.news.";
 
-    private final NewsRepository newsRepository;
-    private final CommentRepository commentRepository;
-    private final SiteSettingsRepository settingsRepository;
+    private final NewsMapper newsMapper;
+    private final CommentMapper commentMapper;
+    private final SiteSettingsMapper settingsMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public NewsAdminService(NewsRepository newsRepository,
-                            CommentRepository commentRepository,
-                            SiteSettingsRepository settingsRepository) {
-        this.newsRepository = newsRepository;
-        this.commentRepository = commentRepository;
-        this.settingsRepository = settingsRepository;
+    public NewsAdminService(NewsMapper newsMapper,
+                            CommentMapper commentMapper,
+                            SiteSettingsMapper settingsMapper) {
+        this.newsMapper = newsMapper;
+        this.commentMapper = commentMapper;
+        this.settingsMapper = settingsMapper;
     }
 
     public PageResult<News> list(String keyword, String category, String status, int page, int size) {
-        Specification<News> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            if (keyword != null && !keyword.isBlank()) {
-                String like = "%" + keyword.trim() + "%";
-                predicates.add(cb.or(
-                        cb.like(root.get("title"), like),
-                        cb.like(root.get("slug"), like)));
-            }
-            if (category != null && !category.isBlank()) {
-                predicates.add(cb.equal(root.get("category"), category));
-            }
-            if (status != null && !status.isBlank()) {
-                predicates.add(cb.equal(root.get("status"), status));
-            }
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
-        Page<News> news = newsRepository.findAll(spec,
-                PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "sortOrder", "id")));
-        return PageResult.of(news);
+        LambdaQueryWrapper<News> wrapper = new LambdaQueryWrapper<>();
+        if (keyword != null && !keyword.isBlank()) {
+            String like = "%" + keyword.trim() + "%";
+            wrapper.and(w -> w.like(News::getTitle, like).or().like(News::getSlug, like));
+        }
+        if (category != null && !category.isBlank()) {
+            wrapper.eq(News::getCategory, category);
+        }
+        if (status != null && !status.isBlank()) {
+            wrapper.eq(News::getStatus, status);
+        }
+        wrapper.orderByAsc(News::getSortOrder, News::getId);
+        // controller 已做 page-1（0-based），MP Page 为 1-based
+        return PageResult.of(newsMapper.selectPage(new Page<>(page + 1, size), wrapper));
     }
 
     public Map<String, Object> detail(Long id) {
@@ -78,7 +70,7 @@ public class NewsAdminService {
         if (form.slug() == null || form.slug().isBlank()) {
             throw BusinessException.badRequest("slug 不能为空");
         }
-        if (newsRepository.findBySlug(form.slug().trim()).isPresent()) {
+        if (newsMapper.findBySlug(form.slug().trim()).isPresent()) {
             throw BusinessException.conflict("slug 已存在");
         }
         News news = News.builder()
@@ -97,7 +89,7 @@ public class NewsAdminService {
         if ("published".equals(news.getStatus())) {
             news.setPublishedAt(LocalDateTime.now());
         }
-        news = newsRepository.save(news);
+        newsMapper.insert(news);
         saveSeo(news.getId(), form.seo());
         return news;
     }
@@ -132,7 +124,7 @@ public class NewsAdminService {
         if (form.status() != null && !form.status().equals(news.getStatus())) {
             changeStatus(news, form.status());
         }
-        newsRepository.save(news);
+        newsMapper.updateById(news);
         saveSeo(id, form.seo());
     }
 
@@ -140,7 +132,7 @@ public class NewsAdminService {
     public void changeStatus(Long id, String status) {
         News news = getOrThrow(id);
         changeStatus(news, status);
-        newsRepository.save(news);
+        newsMapper.updateById(news);
     }
 
     @Transactional
@@ -148,7 +140,7 @@ public class NewsAdminService {
         if (ids == null || ids.isEmpty()) {
             return;
         }
-        List<News> all = newsRepository.findAll();
+        List<News> all = newsMapper.selectList(new LambdaQueryWrapper<>());
         Map<Long, News> byId = new LinkedHashMap<>();
         for (News n : all) {
             byId.put(n.getId(), n);
@@ -163,15 +155,17 @@ public class NewsAdminService {
         for (News n : byId.values()) {
             n.setSortOrder(order++);
         }
-        newsRepository.saveAll(all);
+        for (News n : all) {
+            newsMapper.updateById(n);
+        }
     }
 
     @Transactional
     public void delete(Long id) {
         getOrThrow(id);
-        commentRepository.deleteByTargetTypeAndTargetId("news", id);
-        settingsRepository.findBySettingKey(seoKey(id)).ifPresent(settingsRepository::delete);
-        newsRepository.deleteById(id);
+        commentMapper.deleteByTargetTypeAndTargetId("news", id);
+        settingsMapper.findBySettingKey(seoKey(id)).ifPresent(s -> settingsMapper.deleteById(s.getId()));
+        newsMapper.deleteById(id);
     }
 
     private void changeStatus(News news, String status) {
@@ -185,7 +179,7 @@ public class NewsAdminService {
     }
 
     private News getOrThrow(Long id) {
-        return newsRepository.findById(id)
+        return Optional.ofNullable(newsMapper.selectById(id))
                 .orElseThrow(() -> BusinessException.notFound("新闻不存在"));
     }
 
@@ -195,14 +189,18 @@ public class NewsAdminService {
         }
         try {
             String json = objectMapper.writeValueAsString(seo);
-            SiteSettings setting = settingsRepository.findBySettingKey(seoKey(newsId))
+            SiteSettings setting = settingsMapper.findBySettingKey(seoKey(newsId))
                     .orElseGet(() -> SiteSettings.builder()
                             .groupName(SEO_GROUP)
                             .settingKey(seoKey(newsId))
                             .description("新闻 SEO：" + newsId)
                             .build());
             setting.setSettingValue(json);
-            settingsRepository.save(setting);
+            if (setting.getId() == null) {
+                settingsMapper.insert(setting);
+            } else {
+                settingsMapper.updateById(setting);
+            }
         } catch (Exception e) {
             throw BusinessException.badRequest("SEO 数据格式不正确");
         }
@@ -210,7 +208,7 @@ public class NewsAdminService {
 
     @SuppressWarnings("unchecked")
     private Map<String, String> loadSeo(Long newsId) {
-        return settingsRepository.findBySettingKey(seoKey(newsId))
+        return settingsMapper.findBySettingKey(seoKey(newsId))
                 .map(s -> {
                     try {
                         return objectMapper.readValue(s.getSettingValue(), Map.class);

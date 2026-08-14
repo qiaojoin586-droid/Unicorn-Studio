@@ -2,9 +2,9 @@ package com.unicorn.studio.service;
 
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.IpUtils;
+import com.unicorn.studio.mapper.CommentMapper;
 import com.unicorn.studio.model.Comment;
 import com.unicorn.studio.model.PublicUser;
-import com.unicorn.studio.repository.CommentRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,12 +25,12 @@ public class CommentService {
 
     private static final Set<String> TARGET_TYPES = Set.of("work", "news");
 
-    private final CommentRepository commentRepository;
+    private final CommentMapper commentMapper;
     private final SensitiveWordService sensitiveWordService;
 
-    public CommentService(CommentRepository commentRepository,
+    public CommentService(CommentMapper commentMapper,
                           SensitiveWordService sensitiveWordService) {
-        this.commentRepository = commentRepository;
+        this.commentMapper = commentMapper;
         this.sensitiveWordService = sensitiveWordService;
     }
 
@@ -48,7 +48,7 @@ public class CommentService {
         if (user == null && (guestNickname == null || guestNickname.isBlank())) {
             throw BusinessException.badRequest("游客评论请填写昵称");
         }
-        if (parentId != null && !commentRepository.existsById(parentId)) {
+        if (parentId != null && commentMapper.selectById(parentId) == null) {
             throw BusinessException.badRequest("回复的评论不存在");
         }
 
@@ -73,12 +73,13 @@ public class CommentService {
                 .status("pending")
                 .ipHash(IpUtils.sha256(IpUtils.getClientIp(request)))
                 .build();
-        return commentRepository.save(comment);
+        commentMapper.insert(comment);
+        return comment;
     }
 
     /** 公开列表：仅 approved；楼中楼树形（一级评论 + 其下子评论）。 */
     public Map<String, Object> listApproved(String targetType, Long targetId, int page, int size) {
-        List<Comment> approved = commentRepository
+        List<Comment> approved = commentMapper
                 .findByTargetTypeAndTargetIdAndStatusOrderByCreatedAtAsc(targetType, targetId, "approved");
         // 一级评论分页
         List<Comment> roots = approved.stream().filter(c -> c.getParentId() == null).toList();
@@ -88,7 +89,7 @@ public class CommentService {
 
         // 子评论按 parentId 分组（子评论不再嵌套，树深 2）
         Set<Long> rootIds = pageRoots.stream().map(Comment::getId).collect(Collectors.toSet());
-        List<Comment> children = commentRepository.findByParentIdIn(List.copyOf(rootIds));
+        List<Comment> children = commentMapper.findByParentIdIn(List.copyOf(rootIds));
         Map<Long, List<Comment>> childrenByParent = children.stream()
                 .collect(Collectors.groupingBy(Comment::getParentId, LinkedHashMap::new, Collectors.toList()));
 

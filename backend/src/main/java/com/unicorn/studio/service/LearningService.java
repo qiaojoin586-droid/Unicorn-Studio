@@ -1,7 +1,8 @@
 package com.unicorn.studio.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.unicorn.studio.mapper.LearningResourceMapper;
 import com.unicorn.studio.model.LearningResource;
-import com.unicorn.studio.repository.LearningResourceRepository;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -9,13 +10,13 @@ import java.util.List;
 @Service
 public class LearningService {
 
-    private final LearningResourceRepository repository;
+    private final LearningResourceMapper repository;
 
-    public LearningService(LearningResourceRepository repository) {
+    public LearningService(LearningResourceMapper repository) {
         this.repository = repository;
     }
 
     public List<LearningResource> findAll() {
-        return repository.findAll();
+        return repository.selectList(new LambdaQueryWrapper<>());
     }
 }

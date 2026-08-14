@@ -1,55 +1,48 @@
 package com.unicorn.studio.admin.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.mapper.MessageMapper;
 import com.unicorn.studio.model.Message;
-import com.unicorn.studio.repository.MessageRepository;
 import com.unicorn.studio.service.EmailService;
-import jakarta.persistence.criteria.Predicate;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 /** 后台留言管理（实施方案 §3.4）：列表 / 回复（邮件通知）/ 状态 / 删除。 */
 @Service
 public class MessageAdminService {
 
-    private final MessageRepository messageRepository;
+    private final MessageMapper messageMapper;
     private final EmailService emailService;
 
-    public MessageAdminService(MessageRepository messageRepository, EmailService emailService) {
-        this.messageRepository = messageRepository;
+    public MessageAdminService(MessageMapper messageMapper, EmailService emailService) {
+        this.messageMapper = messageMapper;
         this.emailService = emailService;
     }
 
     public PageResult<Message> list(String status, String source, String keyword, int page, int size) {
-        Specification<Message> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            if (status != null && !status.isBlank()) {
-                predicates.add(cb.equal(root.get("status"), status));
-            }
-            if (source != null && !source.isBlank()) {
-                predicates.add(cb.equal(root.get("source"), source));
-            }
-            if (keyword != null && !keyword.isBlank()) {
-                String like = "%" + keyword.trim() + "%";
-                predicates.add(cb.or(
-                        cb.like(root.get("name"), like),
-                        cb.like(root.get("contact"), like),
-                        cb.like(root.get("content"), like)));
-            }
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
-        Page<Message> messages = messageRepository.findAll(spec,
-                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id")));
-        return PageResult.of(messages);
+        LambdaQueryWrapper<Message> wrapper = new LambdaQueryWrapper<>();
+        if (status != null && !status.isBlank()) {
+            wrapper.eq(Message::getStatus, status);
+        }
+        if (source != null && !source.isBlank()) {
+            wrapper.eq(Message::getSource, source);
+        }
+        if (keyword != null && !keyword.isBlank()) {
+            String like = "%" + keyword.trim() + "%";
+            wrapper.and(w -> w.like(Message::getName, like)
+                    .or().like(Message::getContact, like)
+                    .or().like(Message::getContent, like));
+        }
+        wrapper.orderByDesc(Message::getId);
+        // controller 已做 page-1（0-based），MP Page 为 1-based
+        return PageResult.of(messageMapper.selectPage(new Page<>(page + 1, size), wrapper));
     }
 
     public Message detail(Long id) {
@@ -64,7 +57,7 @@ public class MessageAdminService {
         message.setStatus("replied");
         message.setRepliedBy(operatorId);
         message.setRepliedAt(LocalDateTime.now());
-        messageRepository.save(message);
+        messageMapper.updateById(message);
 
         if (message.getContact() != null && message.getContact().contains("@")) {
             emailService.send(message.getContact().trim(),
@@ -81,17 +74,17 @@ public class MessageAdminService {
         }
         Message message = getOrThrow(id);
         message.setStatus(status);
-        messageRepository.save(message);
+        messageMapper.updateById(message);
     }
 
     @Transactional
     public void delete(Long id) {
         getOrThrow(id);
-        messageRepository.deleteById(id);
+        messageMapper.deleteById(id);
     }
 
     private Message getOrThrow(Long id) {
-        return messageRepository.findById(id)
+        return Optional.ofNullable(messageMapper.selectById(id))
                 .orElseThrow(() -> BusinessException.notFound("留言不存在"));
     }
 

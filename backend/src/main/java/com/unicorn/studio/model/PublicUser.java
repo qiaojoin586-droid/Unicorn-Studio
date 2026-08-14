@@ -1,6 +1,10 @@
 package com.unicorn.studio.model;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -8,54 +12,37 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/** 前台注册用户。与后台 sys_user 体系隔离。 */
-@Entity
-@Table(name = "public_user")
+/** 前台注册用户。与后台 sys_user 体系隔离。（已迁移至 MyBatis Plus） */
+@TableName("public_user")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class PublicUser {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @Column(nullable = false, length = 50)
     private String nickname;
 
-    @Column(length = 100, unique = true)
     private String email;
 
-    @Column(nullable = false, length = 100)
     private String password;
 
     private String avatar;
 
     /** 1正常 0禁言 2注销 */
-    @Column(nullable = false)
     private Integer status;
 
-    @Column(length = 255)
     private String banReason;
 
     /** NULL=永久禁言 */
     private LocalDateTime banUntil;
 
-    @Column(length = 45)
     private String registerIp;
 
     private LocalDateTime lastLoginAt;
 
+    @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
-
-    @PrePersist
-    void onCreate() {
-        if (createdAt == null) {
-            createdAt = LocalDateTime.now();
-        }
-        if (status == null) {
-            status = 1;
-        }
-    }
 }

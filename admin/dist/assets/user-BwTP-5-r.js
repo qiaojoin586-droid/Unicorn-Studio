@@ -1,1 +1,0 @@
-import{A as e}from"./index-BSbOC7IH.js";const n={list:a=>e.get("/api/admin/users",a),detail:a=>e.get(`/api/admin/users/${a}`),ban:(a,s)=>e.patch(`/api/admin/users/${a}/ban`,s),unban:a=>e.patch(`/api/admin/users/${a}/unban`),remove:a=>e.delete(`/api/admin/users/${a}`)};export{n as u};

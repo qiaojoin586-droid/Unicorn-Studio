@@ -1,6 +1,13 @@
 import axios, { type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios'
 import { ElMessage } from 'element-plus'
 
+declare module 'axios' {
+  export interface AxiosRequestConfig {
+    /** 静默模式：错误不弹全局 ElMessage，由调用方自行展示（如登录页内联提示） */
+    silent?: boolean
+  }
+}
+
 /**
  * axios 实例 + 拦截器：
  * - 请求带 Bearer token；
@@ -61,15 +68,20 @@ service.interceptors.response.use(
       if (body.code === 200) {
         return body.data
       }
-      ElMessage.error(body.message || '请求失败')
+      if (!response.config.silent) {
+        ElMessage.error(body.message || '请求失败')
+      }
       return Promise.reject(new Error(body.message || '请求失败'))
     }
     return body
   },
   async (error) => {
     const { response, config } = error
+    // 登录/刷新接口的 401 是业务失败（如密码错误），不走 token 刷新重放，避免整页刷新冲掉错误提示
+    const isAuthEndpoint =
+      config.url?.includes('/api/admin/auth/login') || config.url?.includes('/api/admin/auth/refresh')
     // 401 → 尝试刷新重放一次
-    if (response?.status === 401 && !config._retried) {
+    if (response?.status === 401 && !config._retried && !isAuthEndpoint) {
       config._retried = true
       const newToken = await refreshToken()
       if (newToken) {
@@ -79,12 +91,14 @@ service.interceptors.response.use(
       redirectToLogin()
       return Promise.reject(error)
     }
-    if (response?.status === 429) {
-      ElMessage.error('操作过于频繁，请稍后再试')
-    } else if (response?.data?.message) {
-      ElMessage.error(response.data.message)
-    } else {
-      ElMessage.error('网络异常，请稍后重试')
+    if (!config.silent) {
+      if (response?.status === 429) {
+        ElMessage.error('操作过于频繁，请稍后再试')
+      } else if (response?.data?.message) {
+        ElMessage.error(response.data.message)
+      } else {
+        ElMessage.error('网络异常，请稍后重试')
+      }
     }
     return Promise.reject(error)
   },

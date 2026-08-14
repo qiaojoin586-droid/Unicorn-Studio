@@ -2,9 +2,9 @@ package com.unicorn.studio.common.audit;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.common.IpUtils;
+import com.unicorn.studio.mapper.SysOperationLogMapper;
 import com.unicorn.studio.model.SysOperationLog;
 import com.unicorn.studio.model.SysUser;
-import com.unicorn.studio.repository.SysOperationLogRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
@@ -33,11 +33,11 @@ public class AuditLogAspect {
     private static final Logger log = LoggerFactory.getLogger(AuditLogAspect.class);
     private static final Set<String> SENSITIVE_KEYS = Set.of("password", "token", "refreshToken", "oldPassword", "newPassword");
 
-    private final SysOperationLogRepository repository;
+    private final SysOperationLogMapper logMapper;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public AuditLogAspect(SysOperationLogRepository repository) {
-        this.repository = repository;
+    public AuditLogAspect(SysOperationLogMapper logMapper) {
+        this.logMapper = logMapper;
     }
 
     @Around("@annotation(auditLog)")
@@ -82,7 +82,7 @@ public class AuditLogAspect {
                 entry.setIp(IpUtils.getClientIp(req));
             }
 
-            repository.save(entry);
+            logMapper.insert(entry);
         } catch (Exception e) {
             // 审计写入失败不影响主流程
             log.warn("审计日志写入失败: {}", e.getMessage());

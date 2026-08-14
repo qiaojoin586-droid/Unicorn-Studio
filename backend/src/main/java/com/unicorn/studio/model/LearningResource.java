@@ -1,6 +1,10 @@
 package com.unicorn.studio.model;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -10,23 +14,20 @@ import java.time.LocalDateTime;
 
 /**
  * 学习资料（升级方案 3.4：补分类/封面/排序/状态字段）。
+ * （已迁移至 MyBatis Plus）
  */
-@Entity
-@Table(name = "learning_resources")
+@TableName("learning_resources")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class LearningResource {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @Column(nullable = false)
     private String title;
 
-    @Column(nullable = false, length = 500)
     private String description;
 
     private String url;
@@ -35,36 +36,14 @@ public class LearningResource {
 
     private String coverUrl;
 
-    @Column(nullable = false)
     private Integer sortOrder;
 
     /** 1启用 0停用 */
-    @Column(nullable = false)
     private Integer status;
 
+    @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
 
+    @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
-
-    @PrePersist
-    void onCreate() {
-        LocalDateTime now = LocalDateTime.now();
-        if (createdAt == null) {
-            createdAt = now;
-        }
-        if (updatedAt == null) {
-            updatedAt = now;
-        }
-        if (sortOrder == null) {
-            sortOrder = 0;
-        }
-        if (status == null) {
-            status = 1;
-        }
-    }
-
-    @PreUpdate
-    void onUpdate() {
-        updatedAt = LocalDateTime.now();
-    }
 }

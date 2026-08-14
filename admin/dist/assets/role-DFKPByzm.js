@@ -1,1 +1,0 @@
-import{A as i}from"./index-BSbOC7IH.js";const p={list:()=>i.get("/api/admin/roles"),create:e=>i.post("/api/admin/roles",e),update:(e,s)=>i.put(`/api/admin/roles/${e}`,s),remove:e=>i.delete(`/api/admin/roles/${e}`),permissions:()=>i.get("/api/admin/permissions")};export{p as r};

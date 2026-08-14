@@ -3,8 +3,8 @@ package com.unicorn.studio.admin.service;
 import com.unicorn.studio.admin.security.JwtService;
 import com.unicorn.studio.admin.security.LoginLockService;
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.mapper.SysUserMapper;
 import com.unicorn.studio.model.SysUser;
-import com.unicorn.studio.repository.SysUserRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,20 +23,20 @@ import java.util.UUID;
 @Service
 public class AuthService {
 
-    private final SysUserRepository userRepository;
+    private final SysUserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final LoginLockService loginLockService;
     private final AdminPermissionService permissionService;
     private final long refreshExpireDays;
 
-    public AuthService(SysUserRepository userRepository,
+    public AuthService(SysUserMapper userMapper,
                        PasswordEncoder passwordEncoder,
                        JwtService jwtService,
                        LoginLockService loginLockService,
                        AdminPermissionService permissionService,
                        @Value("${app.admin.refresh-expire-days:7}") long refreshExpireDays) {
-        this.userRepository = userRepository;
+        this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.loginLockService = loginLockService;
@@ -46,7 +46,7 @@ public class AuthService {
 
     @Transactional
     public Map<String, Object> login(String username, String password) {
-        SysUser user = userRepository.findByUsername(username)
+        SysUser user = userMapper.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(HttpStatus.UNAUTHORIZED, "用户名或密码错误"));
         if (user.getStatus() != null && user.getStatus() == 0) {
             throw new BusinessException(HttpStatus.UNAUTHORIZED, "账号已禁用，请联系管理员");
@@ -60,14 +60,14 @@ public class AuthService {
 
         loginLockService.onSuccess(user);
         user.setLastLoginAt(LocalDateTime.now());
-        userRepository.save(user);
+        userMapper.updateById(user);
         return tokenPair(user);
     }
 
     /** refresh 轮换：旧 token 匹配且未过期 → 生成新 UUID 覆盖，旧值立即失效。 */
     @Transactional
     public Map<String, Object> refresh(String refreshToken) {
-        SysUser user = userRepository.findByRefreshToken(refreshToken)
+        SysUser user = userMapper.findByRefreshToken(refreshToken)
                 .orElseThrow(() -> new BusinessException(HttpStatus.UNAUTHORIZED, "登录已过期，请重新登录"));
         if (user.getRefreshTokenExpiresAt() == null
                 || !user.getRefreshTokenExpiresAt().isAfter(LocalDateTime.now())) {
@@ -83,7 +83,7 @@ public class AuthService {
     public void logout(SysUser user) {
         user.setRefreshToken(null);
         user.setRefreshTokenExpiresAt(null);
-        userRepository.save(user);
+        userMapper.updateById(user);
     }
 
     /** /auth/me：用户信息 + 角色 + 权限码（前端动态路由与按钮级控制的数据源）。 */
@@ -107,7 +107,7 @@ public class AuthService {
         String refreshToken = UUID.randomUUID().toString();
         user.setRefreshToken(refreshToken);
         user.setRefreshTokenExpiresAt(LocalDateTime.now().plusDays(refreshExpireDays));
-        userRepository.save(user);
+        userMapper.updateById(user);
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("accessToken", accessToken);

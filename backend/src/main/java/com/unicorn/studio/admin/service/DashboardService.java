@@ -1,7 +1,12 @@
 package com.unicorn.studio.admin.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.unicorn.studio.mapper.*;
+import com.unicorn.studio.model.Message;
+import com.unicorn.studio.model.PublicUser;
 import com.unicorn.studio.model.StatsDaily;
-import com.unicorn.studio.repository.*;
+import com.unicorn.studio.model.Work;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -17,28 +22,28 @@ import java.util.Map;
 @Service
 public class DashboardService {
 
-    private final VisitLogRepository visitLogRepository;
-    private final StatsDailyRepository statsDailyRepository;
-    private final WorkRepository workRepository;
-    private final NewsRepository newsRepository;
-    private final CommentRepository commentRepository;
-    private final MessageRepository messageRepository;
-    private final PublicUserRepository publicUserRepository;
+    private final VisitLogMapper visitLogMapper;
+    private final StatsDailyMapper statsDailyMapper;
+    private final WorkMapper workMapper;
+    private final NewsMapper newsMapper;
+    private final CommentMapper commentMapper;
+    private final MessageMapper messageMapper;
+    private final PublicUserMapper publicUserMapper;
 
-    public DashboardService(VisitLogRepository visitLogRepository,
-                            StatsDailyRepository statsDailyRepository,
-                            WorkRepository workRepository,
-                            NewsRepository newsRepository,
-                            CommentRepository commentRepository,
-                            MessageRepository messageRepository,
-                            PublicUserRepository publicUserRepository) {
-        this.visitLogRepository = visitLogRepository;
-        this.statsDailyRepository = statsDailyRepository;
-        this.workRepository = workRepository;
-        this.newsRepository = newsRepository;
-        this.commentRepository = commentRepository;
-        this.messageRepository = messageRepository;
-        this.publicUserRepository = publicUserRepository;
+    public DashboardService(VisitLogMapper visitLogMapper,
+                            StatsDailyMapper statsDailyMapper,
+                            WorkMapper workMapper,
+                            NewsMapper newsMapper,
+                            CommentMapper commentMapper,
+                            MessageMapper messageMapper,
+                            PublicUserMapper publicUserMapper) {
+        this.visitLogMapper = visitLogMapper;
+        this.statsDailyMapper = statsDailyMapper;
+        this.workMapper = workMapper;
+        this.newsMapper = newsMapper;
+        this.commentMapper = commentMapper;
+        this.messageMapper = messageMapper;
+        this.publicUserMapper = publicUserMapper;
     }
 
     public Map<String, Object> summary(int days) {
@@ -48,25 +53,27 @@ public class DashboardService {
         LocalDateTime windowStart = today.minusDays(window - 1L).atStartOfDay();
 
         // 今日 + 窗口内统计
-        long todayPv = visitLogRepository.countByVisitedAtGreaterThanEqualAndVisitedAtLessThan(dayStart, dayStart.plusDays(1));
-        long todayUv = visitLogRepository.findDistinctIpHashes(dayStart, dayStart.plusDays(1), null).size();
-        long windowPv = visitLogRepository.countByVisitedAtGreaterThanEqualAndVisitedAtLessThan(windowStart, dayStart.plusDays(1));
-        long windowUv = visitLogRepository.findDistinctIpHashes(windowStart, dayStart.plusDays(1), null).size();
+        long todayPv = visitLogMapper.countByVisitedAtGreaterThanEqualAndVisitedAtLessThan(dayStart, dayStart.plusDays(1));
+        long todayUv = visitLogMapper.findDistinctIpHashes(dayStart, dayStart.plusDays(1), null).size();
+        long windowPv = visitLogMapper.countByVisitedAtGreaterThanEqualAndVisitedAtLessThan(windowStart, dayStart.plusDays(1));
+        long windowUv = visitLogMapper.findDistinctIpHashes(windowStart, dayStart.plusDays(1), null).size();
 
         // 内容/互动计数
-        long workCount = workRepository.count();
-        long publishedWorks = workRepository.count(
-                (root, query, cb) -> cb.equal(root.get("status"), "published"));
-        long newsCount = newsRepository.count();
-        long pendingComments = commentRepository.countByStatus("pending");
-        long newMessages = messageRepository.countByStatus("new");
-        long userCount = publicUserRepository.count();
-        long todayNewUsers = publicUserRepository.count(
-                (root, query, cb) -> cb.between(root.get("createdAt"), dayStart, dayStart.plusDays(1)));
+        long workCount = workMapper.selectCount(new LambdaQueryWrapper<>());
+        long publishedWorks = workMapper.selectCount(
+                new LambdaQueryWrapper<Work>().eq(Work::getStatus, "published"));
+        long newsCount = newsMapper.selectCount(new LambdaQueryWrapper<>());
+        long pendingComments = commentMapper.countByStatus("pending");
+        long newMessages = messageMapper.countByStatus("new");
+        long userCount = publicUserMapper.selectCount(new LambdaQueryWrapper<>());
+        long todayNewUsers = publicUserMapper.selectCount(
+                new LambdaQueryWrapper<PublicUser>()
+                        .ge(PublicUser::getCreatedAt, dayStart)
+                        .lt(PublicUser::getCreatedAt, dayStart.plusDays(1)));
 
         // 近 N 日趋势（stats_daily + 今日实时）
         Map<LocalDate, StatsDaily> dailyMap = new LinkedHashMap<>();
-        for (StatsDaily d : statsDailyRepository.findByStatDateBetweenOrderByStatDateAsc(
+        for (StatsDaily d : statsDailyMapper.findByStatDateBetweenOrderByStatDateAsc(
                 windowStart.toLocalDate(), today)) {
             dailyMap.put(d.getStatDate(), d);
         }
@@ -85,10 +92,9 @@ public class DashboardService {
         sourceDist.add(Map.of("name", "直接访问", "value", 0));
 
         // 最近留言 5 条
-        List<com.unicorn.studio.model.Message> recentMessages = messageRepository
-                .findAll(org.springframework.data.domain.PageRequest.of(0, 5,
-                        org.springframework.data.domain.Sort.by(org.springframework.data.domain.Sort.Direction.DESC, "id")))
-                .getContent();
+        List<Message> recentMessages = messageMapper
+                .selectPage(new Page<>(1, 5), new LambdaQueryWrapper<Message>().orderByDesc(Message::getId))
+                .getRecords();
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("todayPv", todayPv);

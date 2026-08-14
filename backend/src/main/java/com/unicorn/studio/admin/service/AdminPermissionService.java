@@ -1,14 +1,14 @@
-﻿package com.unicorn.studio.admin.service;
+package com.unicorn.studio.admin.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.unicorn.studio.mapper.SysPermissionMapper;
+import com.unicorn.studio.mapper.SysRoleMapper;
+import com.unicorn.studio.mapper.SysUserRoleMapper;
 import com.unicorn.studio.model.SysRole;
 import com.unicorn.studio.model.SysUser;
 import com.unicorn.studio.model.SysUserRole;
-import com.unicorn.studio.repository.SysPermissionRepository;
-import com.unicorn.studio.repository.SysRoleRepository;
-import com.unicorn.studio.repository.SysUserRoleRepository;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
@@ -26,34 +26,33 @@ public class AdminPermissionService {
     public record LoadResult(List<SysRole> roles, Set<String> permissions) {
     }
 
-    private final SysUserRoleRepository userRoleRepository;
-    private final SysRoleRepository roleRepository;
-    private final SysPermissionRepository permissionRepository;
+    private final SysUserRoleMapper userRoleMapper;
+    private final SysRoleMapper roleMapper;
+    private final SysPermissionMapper permissionMapper;
 
-    public AdminPermissionService(SysUserRoleRepository userRoleRepository,
-                                  SysRoleRepository roleRepository,
-                                  SysPermissionRepository permissionRepository) {
-        this.userRoleRepository = userRoleRepository;
-        this.roleRepository = roleRepository;
-        this.permissionRepository = permissionRepository;
+    public AdminPermissionService(SysUserRoleMapper userRoleMapper,
+                                  SysRoleMapper roleMapper,
+                                  SysPermissionMapper permissionMapper) {
+        this.userRoleMapper = userRoleMapper;
+        this.roleMapper = roleMapper;
+        this.permissionMapper = permissionMapper;
     }
 
     public LoadResult loadForUser(SysUser user) {
-        List<Long> roleIds = userRoleRepository.findByIdUserId(user.getId()).stream()
-                .map(SysUserRole::getId)
-                .map(id -> id.getRoleId())
+        List<Long> roleIds = userRoleMapper.findByIdUserId(user.getId()).stream()
+                .map(SysUserRole::getRoleId)
                 .toList();
         if (roleIds.isEmpty()) {
             return new LoadResult(List.of(), Set.of());
         }
-        List<SysRole> roles = roleRepository.findAllById(roleIds);
+        List<SysRole> roles = roleMapper.selectBatchIds(roleIds);
         Set<String> permissions = new LinkedHashSet<>();
 
         boolean isSuperAdmin = roles.stream().anyMatch(r -> SUPER_ADMIN.equals(r.getCode()));
         if (isSuperAdmin) {
-            permissionRepository.findAll().forEach(p -> permissions.add(p.getCode()));
+            permissionMapper.selectList(new LambdaQueryWrapper<>()).forEach(p -> permissions.add(p.getCode()));
         } else {
-            permissions.addAll(permissionRepository.findCodesByRoleIds(roleIds));
+            permissions.addAll(permissionMapper.findCodesByRoleIds(roleIds));
         }
         return new LoadResult(roles, permissions);
     }

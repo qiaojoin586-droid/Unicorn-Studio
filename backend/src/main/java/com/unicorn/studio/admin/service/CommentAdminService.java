@@ -1,23 +1,20 @@
 package com.unicorn.studio.admin.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.mapper.CommentMapper;
+import com.unicorn.studio.mapper.PublicUserMapper;
 import com.unicorn.studio.model.Comment;
 import com.unicorn.studio.model.PublicUser;
-import com.unicorn.studio.repository.CommentRepository;
-import com.unicorn.studio.repository.PublicUserRepository;
-import jakarta.persistence.criteria.Predicate;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /** 后台评论管理（实施方案 §3.4）：审核 / 回复 / 批量 / 删除。 */
@@ -26,36 +23,31 @@ public class CommentAdminService {
 
     private static final Set<String> TARGET_TYPES = Set.of("work", "news");
 
-    private final CommentRepository commentRepository;
-    private final PublicUserRepository publicUserRepository;
+    private final CommentMapper commentMapper;
+    private final PublicUserMapper publicUserMapper;
 
-    public CommentAdminService(CommentRepository commentRepository,
-                               PublicUserRepository publicUserRepository) {
-        this.commentRepository = commentRepository;
-        this.publicUserRepository = publicUserRepository;
+    public CommentAdminService(CommentMapper commentMapper,
+                               PublicUserMapper publicUserMapper) {
+        this.commentMapper = commentMapper;
+        this.publicUserMapper = publicUserMapper;
     }
 
     public PageResult<Map<String, Object>> list(String status, String targetType, String keyword,
                                                 int page, int size) {
-        Specification<Comment> spec = (root, query, cb) -> {
-            List<Predicate> predicates = new ArrayList<>();
-            if (status != null && !status.isBlank()) {
-                predicates.add(cb.equal(root.get("status"), status));
-            }
-            if (targetType != null && !targetType.isBlank()) {
-                predicates.add(cb.equal(root.get("targetType"), targetType));
-            }
-            if (keyword != null && !keyword.isBlank()) {
-                String like = "%" + keyword.trim() + "%";
-                predicates.add(cb.or(
-                        cb.like(root.get("content"), like),
-                        cb.like(root.get("guestNickname"), like)));
-            }
-            return cb.and(predicates.toArray(new Predicate[0]));
-        };
-        Page<Comment> comments = commentRepository.findAll(spec,
-                PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id")));
-        return PageResult.of(comments, this::decorate);
+        LambdaQueryWrapper<Comment> wrapper = new LambdaQueryWrapper<>();
+        if (status != null && !status.isBlank()) {
+            wrapper.eq(Comment::getStatus, status);
+        }
+        if (targetType != null && !targetType.isBlank()) {
+            wrapper.eq(Comment::getTargetType, targetType);
+        }
+        if (keyword != null && !keyword.isBlank()) {
+            String like = "%" + keyword.trim() + "%";
+            wrapper.and(w -> w.like(Comment::getContent, like).or().like(Comment::getGuestNickname, like));
+        }
+        wrapper.orderByDesc(Comment::getId);
+        // controller 已做 page-1（0-based），MP Page 为 1-based
+        return PageResult.of(commentMapper.selectPage(new Page<>(page + 1, size), wrapper), this::decorate);
     }
 
     /** 审核：approve/reject。 */
@@ -66,7 +58,7 @@ public class CommentAdminService {
         }
         Comment comment = getOrThrow(id);
         comment.setStatus(status);
-        commentRepository.save(comment);
+        commentMapper.updateById(comment);
     }
 
     /** 官方回复：生成 parent_id 子评论（approved，带官方标识昵称）。 */
@@ -80,7 +72,8 @@ public class CommentAdminService {
                 .content(content.trim())
                 .status("approved")
                 .build();
-        return commentRepository.save(reply);
+        commentMapper.insert(reply);
+        return reply;
     }
 
     /** 批量操作：approve/reject/delete。 */
@@ -107,15 +100,15 @@ public class CommentAdminService {
     public void delete(Long id) {
         getOrThrow(id);
         // 同时清理该评论下的子回复
-        commentRepository.findByParentIdIn(List.of(id))
-                .forEach(commentRepository::delete);
-        commentRepository.deleteById(id);
+        commentMapper.findByParentIdIn(List.of(id))
+                .forEach(c -> commentMapper.deleteById(c.getId()));
+        commentMapper.deleteById(id);
     }
 
     private Map<String, Object> decorate(Comment comment) {
         String displayName = comment.getGuestNickname();
         if (comment.getUserId() != null) {
-            displayName = publicUserRepository.findById(comment.getUserId())
+            displayName = Optional.ofNullable(publicUserMapper.selectById(comment.getUserId()))
                     .map(PublicUser::getNickname)
                     .orElse("已注销用户");
         }
@@ -135,7 +128,7 @@ public class CommentAdminService {
     }
 
     private Comment getOrThrow(Long id) {
-        return commentRepository.findById(id)
+        return Optional.ofNullable(commentMapper.selectById(id))
                 .orElseThrow(() -> BusinessException.notFound("评论不存在"));
     }
 }

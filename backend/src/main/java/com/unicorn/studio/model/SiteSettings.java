@@ -1,6 +1,10 @@
 package com.unicorn.studio.model;
 
-import jakarta.persistence.*;
+import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
+import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -8,36 +12,25 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
-/** 站点设置 KV。group：basic/contact/social/seo/notify/content。 */
-@Entity
-@Table(name = "site_settings")
+/** 站点设置 KV。group：basic/contact/social/seo/notify/content。（已迁移至 MyBatis Plus） */
+@TableName("site_settings")
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class SiteSettings {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @TableId(value = "id", type = IdType.AUTO)
     private Long id;
 
-    @Column(nullable = false, length = 50)
     private String groupName;
 
-    @Column(nullable = false, unique = true, length = 100)
     private String settingKey;
 
-    @Column(columnDefinition = "TEXT")
     private String settingValue;
 
-    @Column(length = 255)
     private String description;
 
+    @TableField(fill = FieldFill.INSERT_UPDATE)
     private LocalDateTime updatedAt;
-
-    @PrePersist
-    @PreUpdate
-    void onSave() {
-        updatedAt = LocalDateTime.now();
-    }
 }

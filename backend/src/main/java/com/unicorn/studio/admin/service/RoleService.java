@@ -1,20 +1,21 @@
-﻿package com.unicorn.studio.admin.service;
+package com.unicorn.studio.admin.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.unicorn.studio.common.BusinessException;
-import com.unicorn.studio.model.RolePermissionId;
+import com.unicorn.studio.mapper.SysPermissionMapper;
+import com.unicorn.studio.mapper.SysRoleMapper;
+import com.unicorn.studio.mapper.SysRolePermissionMapper;
+import com.unicorn.studio.mapper.SysUserRoleMapper;
 import com.unicorn.studio.model.SysPermission;
 import com.unicorn.studio.model.SysRole;
 import com.unicorn.studio.model.SysRolePermission;
-import com.unicorn.studio.repository.SysPermissionRepository;
-import com.unicorn.studio.repository.SysRolePermissionRepository;
-import com.unicorn.studio.repository.SysRoleRepository;
-import com.unicorn.studio.repository.SysUserRoleRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 角色管理：CRUD + 权限勾选树（实施方案 §3.6）。
@@ -23,33 +24,33 @@ import java.util.Map;
 @Service
 public class RoleService {
 
-    private final SysRoleRepository roleRepository;
-    private final SysRolePermissionRepository rolePermissionRepository;
-    private final SysUserRoleRepository userRoleRepository;
-    private final SysPermissionRepository permissionRepository;
+    private final SysRoleMapper roleMapper;
+    private final SysRolePermissionMapper rolePermissionMapper;
+    private final SysUserRoleMapper userRoleMapper;
+    private final SysPermissionMapper permissionMapper;
 
-    public RoleService(SysRoleRepository roleRepository,
-                       SysRolePermissionRepository rolePermissionRepository,
-                       SysUserRoleRepository userRoleRepository,
-                       SysPermissionRepository permissionRepository) {
-        this.roleRepository = roleRepository;
-        this.rolePermissionRepository = rolePermissionRepository;
-        this.userRoleRepository = userRoleRepository;
-        this.permissionRepository = permissionRepository;
+    public RoleService(SysRoleMapper roleMapper,
+                       SysRolePermissionMapper rolePermissionMapper,
+                       SysUserRoleMapper userRoleMapper,
+                       SysPermissionMapper permissionMapper) {
+        this.roleMapper = roleMapper;
+        this.rolePermissionMapper = rolePermissionMapper;
+        this.userRoleMapper = userRoleMapper;
+        this.permissionMapper = permissionMapper;
     }
 
     public record RoleItem(SysRole role, List<Long> permissionIds) {
     }
 
     public List<RoleItem> listAll() {
-        return roleRepository.findAll().stream()
+        return roleMapper.selectList(new LambdaQueryWrapper<>()).stream()
                 .map(r -> new RoleItem(r, permissionIdsOf(r.getId())))
                 .toList();
     }
 
     @Transactional
     public SysRole create(String code, String name, String description, List<Long> permissionIds) {
-        if (roleRepository.findByCode(code).isPresent()) {
+        if (roleMapper.findByCode(code).isPresent()) {
             throw BusinessException.conflict("角色编码已存在");
         }
         SysRole role = SysRole.builder()
@@ -59,7 +60,7 @@ public class RoleService {
                 .builtin(0)
                 .status(1)
                 .build();
-        role = roleRepository.save(role);
+        roleMapper.insert(role);
         replacePermissions(role.getId(), permissionIds);
         return role;
     }
@@ -82,7 +83,7 @@ public class RoleService {
         if (permissionIds != null) {
             replacePermissions(id, permissionIds);
         }
-        roleRepository.save(role);
+        roleMapper.updateById(role);
     }
 
     @Transactional
@@ -91,17 +92,17 @@ public class RoleService {
         if (role.getBuiltin() != null && role.getBuiltin() == 1) {
             throw BusinessException.badRequest("内置角色不可删除");
         }
-        if (!userRoleRepository.findByRoleId(id).isEmpty()) {
+        if (!userRoleMapper.findByRoleId(id).isEmpty()) {
             throw BusinessException.conflict("仍有管理员引用该角色，无法删除");
         }
-        rolePermissionRepository.deleteByIdRoleId(id);
-        roleRepository.delete(role);
+        rolePermissionMapper.deleteByIdRoleId(id);
+        roleMapper.deleteById(role.getId());
     }
 
     /** 权限按模块分组（前端权限勾选树数据源）。 */
     public Map<String, List<Map<String, Object>>> permissionTree() {
         Map<String, List<Map<String, Object>>> groups = new LinkedHashMap<>();
-        List<SysPermission> permissions = permissionRepository.findAllByOrderByModuleAscSortOrderAsc();
+        List<SysPermission> permissions = permissionMapper.findAllByOrderByModuleAscSortOrderAsc();
         for (SysPermission p : permissions) {
             groups.computeIfAbsent(p.getModule() == null ? "其他" : p.getModule(), k -> new java.util.ArrayList<>())
                     .add(Map.of("id", p.getId(), "code", p.getCode(), "name", p.getName(), "type", p.getType()));
@@ -110,20 +111,20 @@ public class RoleService {
     }
 
     private SysRole getOrThrow(Long id) {
-        return roleRepository.findById(id)
+        return Optional.ofNullable(roleMapper.selectById(id))
                 .orElseThrow(() -> BusinessException.notFound("角色不存在"));
     }
 
     private List<Long> permissionIdsOf(Long roleId) {
-        return rolePermissionRepository.findByIdRoleId(roleId).stream()
-                .map(rp -> rp.getId().getPermissionId()).toList();
+        return rolePermissionMapper.findByIdRoleId(roleId).stream()
+                .map(SysRolePermission::getPermissionId).toList();
     }
 
     private void replacePermissions(Long roleId, List<Long> permissionIds) {
-        rolePermissionRepository.deleteByIdRoleId(roleId);
+        rolePermissionMapper.deleteByIdRoleId(roleId);
         if (permissionIds != null) {
             for (Long permissionId : permissionIds) {
-                rolePermissionRepository.save(new SysRolePermission(new RolePermissionId(roleId, permissionId)));
+                rolePermissionMapper.insert(new SysRolePermission(roleId, permissionId));
             }
         }
     }

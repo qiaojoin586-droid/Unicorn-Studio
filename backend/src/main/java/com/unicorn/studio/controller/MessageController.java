@@ -2,9 +2,9 @@ package com.unicorn.studio.controller;
 
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.IpUtils;
+import com.unicorn.studio.mapper.MessageMapper;
 import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.model.Message;
-import com.unicorn.studio.repository.MessageRepository;
 import com.unicorn.studio.service.SensitiveWordService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.NotBlank;
@@ -17,12 +17,12 @@ import java.util.Map;
 @RequestMapping("/api/messages")
 public class MessageController {
 
-    private final MessageRepository messageRepository;
+    private final MessageMapper messageMapper;
     private final SensitiveWordService sensitiveWordService;
 
-    public MessageController(MessageRepository messageRepository,
+    public MessageController(MessageMapper messageMapper,
                              SensitiveWordService sensitiveWordService) {
-        this.messageRepository = messageRepository;
+        this.messageMapper = messageMapper;
         this.sensitiveWordService = sensitiveWordService;
     }
 
@@ -50,7 +50,7 @@ public class MessageController {
                 .status("new")
                 .ipHash(IpUtils.sha256(IpUtils.getClientIp(httpRequest)))
                 .build();
-        messageRepository.save(message);
+        messageMapper.insert(message);
         return ApiResponse.ok(Map.of("id", message.getId(), "message", "留言已提交，我们会尽快回复"));
     }
 }

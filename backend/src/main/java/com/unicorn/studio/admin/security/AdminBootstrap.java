@@ -1,12 +1,11 @@
 package com.unicorn.studio.admin.security;
 
+import com.unicorn.studio.mapper.SysRoleMapper;
+import com.unicorn.studio.mapper.SysUserMapper;
+import com.unicorn.studio.mapper.SysUserRoleMapper;
 import com.unicorn.studio.model.SysRole;
 import com.unicorn.studio.model.SysUser;
 import com.unicorn.studio.model.SysUserRole;
-import com.unicorn.studio.model.UserRoleId;
-import com.unicorn.studio.repository.SysRoleRepository;
-import com.unicorn.studio.repository.SysUserRepository;
-import com.unicorn.studio.repository.SysUserRoleRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,20 +29,20 @@ public class AdminBootstrap implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(AdminBootstrap.class);
 
-    private final SysUserRepository userRepository;
-    private final SysRoleRepository roleRepository;
-    private final SysUserRoleRepository userRoleRepository;
+    private final SysUserMapper userMapper;
+    private final SysRoleMapper roleMapper;
+    private final SysUserRoleMapper userRoleMapper;
     private final PasswordEncoder passwordEncoder;
     private final String initPassword;
 
-    public AdminBootstrap(SysUserRepository userRepository,
-                          SysRoleRepository roleRepository,
-                          SysUserRoleRepository userRoleRepository,
+    public AdminBootstrap(SysUserMapper userMapper,
+                          SysRoleMapper roleMapper,
+                          SysUserRoleMapper userRoleMapper,
                           PasswordEncoder passwordEncoder,
                           @Value("${app.admin.init-password:}") String initPassword) {
-        this.userRepository = userRepository;
-        this.roleRepository = roleRepository;
-        this.userRoleRepository = userRoleRepository;
+        this.userMapper = userMapper;
+        this.roleMapper = roleMapper;
+        this.userRoleMapper = userRoleMapper;
         this.passwordEncoder = passwordEncoder;
         this.initPassword = initPassword;
     }
@@ -51,12 +50,12 @@ public class AdminBootstrap implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        if (userRepository.findByUsername("admin").isPresent()) {
+        if (userMapper.findByUsername("admin").isPresent()) {
             return;
         }
-        SysRole superAdmin = roleRepository.findByCode("SUPER_ADMIN").orElse(null);
+        SysRole superAdmin = roleMapper.findByCode("SUPER_ADMIN").orElse(null);
         if (superAdmin == null) {
-            log.warn("SUPER_ADMIN 角色不存在（Flyway V5 未执行？），跳过超管初始化");
+            log.warn("SUPER_ADMIN 角色不存在（初始化 SQL 未执行？），跳过超管初始化");
             return;
         }
 
@@ -77,9 +76,9 @@ public class AdminBootstrap implements ApplicationRunner {
                 .mustChangePassword(1)
                 .failedLoginAttempts(0)
                 .build();
-        admin = userRepository.save(admin);
+        userMapper.insert(admin);
 
-        userRoleRepository.save(new SysUserRole(new UserRoleId(admin.getId(), superAdmin.getId())));
+        userRoleMapper.insert(new SysUserRole(admin.getId(), superAdmin.getId()));
         log.info("初始管理员已创建: admin（角色 SUPER_ADMIN，{}密码）", randomPassword ? "随机" : "环境变量");
     }
 

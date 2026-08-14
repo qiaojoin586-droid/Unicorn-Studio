@@ -1,8 +1,8 @@
 package com.unicorn.studio.controller;
 
+import com.unicorn.studio.mapper.CarouselMapper;
 import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.model.Carousel;
-import com.unicorn.studio.repository.CarouselRepository;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -15,14 +15,14 @@ import java.util.Map;
 @RequestMapping("/api/carousel")
 public class CarouselController {
 
-    private final CarouselRepository carouselRepository;
+    private final CarouselMapper carouselMapper;
 
-    public CarouselController(CarouselRepository carouselRepository) {
-        this.carouselRepository = carouselRepository;
+    public CarouselController(CarouselMapper carouselMapper) {
+        this.carouselMapper = carouselMapper;
     }
 
     @GetMapping
     public ApiResponse<Map<String, List<Carousel>>> list() {
-        return ApiResponse.ok(Map.of("list", carouselRepository.findByStatusOrderBySortOrderAscIdAsc(1)));
+        return ApiResponse.ok(Map.of("list", carouselMapper.findByStatusOrderBySortOrderAscIdAsc(1)));
     }
 }

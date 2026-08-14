@@ -1,8 +1,8 @@
 package com.unicorn.studio.service;
 
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.mapper.PublicUserMapper;
 import com.unicorn.studio.model.PublicUser;
-import com.unicorn.studio.repository.PublicUserRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
@@ -26,14 +26,14 @@ public class PublicAuthService {
 
     private static final long TOKEN_EXPIRE_HOURS = 24 * 7;
 
-    private final PublicUserRepository userRepository;
+    private final PublicUserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final SecretKey key;
 
-    public PublicAuthService(PublicUserRepository userRepository,
+    public PublicAuthService(PublicUserMapper userMapper,
                              PasswordEncoder passwordEncoder,
                              @Value("${app.public.jwt-secret:public-dev-secret-please-override-0123456789}") String secret) {
-        this.userRepository = userRepository;
+        this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
@@ -48,7 +48,7 @@ public class PublicAuthService {
         if (password == null || password.length() < 8) {
             throw BusinessException.badRequest("密码至少 8 位");
         }
-        if (userRepository.existsByEmail(email)) {
+        if (userMapper.existsByEmail(email)) {
             throw BusinessException.conflict("邮箱已注册");
         }
         PublicUser user = PublicUser.builder()
@@ -58,12 +58,12 @@ public class PublicAuthService {
                 .status(1)
                 .registerIp(ip)
                 .build();
-        user = userRepository.save(user);
+        userMapper.insert(user);
         return tokenOf(user, true);
     }
 
     public Map<String, Object> login(String email, String password) {
-        PublicUser user = userRepository.findByEmail(email.trim().toLowerCase())
+        PublicUser user = userMapper.findByEmail(email.trim().toLowerCase())
                 .orElseThrow(() -> new BusinessException(org.springframework.http.HttpStatus.UNAUTHORIZED, "邮箱或密码错误"));
         if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new BusinessException(org.springframework.http.HttpStatus.UNAUTHORIZED, "邮箱或密码错误");
@@ -72,7 +72,7 @@ public class PublicAuthService {
             throw new BusinessException(org.springframework.http.HttpStatus.FORBIDDEN, "账号已被禁言");
         }
         user.setLastLoginAt(LocalDateTime.now());
-        userRepository.save(user);
+        userMapper.updateById(user);
         return tokenOf(user, false);
     }
 
@@ -84,7 +84,7 @@ public class PublicAuthService {
         try {
             Claims claims = Jwts.parser().verifyWith(key).build()
                     .parseSignedClaims(authorization.substring(7)).getPayload();
-            return userRepository.findById(Long.valueOf(claims.getSubject())).orElse(null);
+            return userMapper.selectById(Long.valueOf(claims.getSubject()));
         } catch (JwtException | IllegalArgumentException e) {
             return null;
         }

@@ -1,28 +1,30 @@
 package com.unicorn.studio.admin.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.mapper.CarouselMapper;
 import com.unicorn.studio.model.Carousel;
-import com.unicorn.studio.repository.CarouselRepository;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Optional;
 
 /** 轮播图管理（实施方案 §3.3）。 */
 @Service
 public class CarouselAdminService {
 
-    private final CarouselRepository carouselRepository;
+    private final CarouselMapper carouselMapper;
 
-    public CarouselAdminService(CarouselRepository carouselRepository) {
-        this.carouselRepository = carouselRepository;
+    public CarouselAdminService(CarouselMapper carouselMapper) {
+        this.carouselMapper = carouselMapper;
     }
 
     public PageResult<Carousel> list(int page, int size) {
-        Page<Carousel> result = carouselRepository.findAll(
-                PageRequest.of(page, size, Sort.by(Sort.Direction.ASC, "sortOrder", "id")));
+        Page<Carousel> result = carouselMapper.selectPage(
+                new Page<>(page + 1, size),
+                new LambdaQueryWrapper<Carousel>().orderByAsc(Carousel::getSortOrder, Carousel::getId));
         return PageResult.of(result);
     }
 
@@ -36,7 +38,8 @@ public class CarouselAdminService {
                 .sortOrder(form.sortOrder() == null ? 0 : form.sortOrder())
                 .status(Boolean.TRUE.equals(form.enabled()) ? 1 : 0)
                 .build();
-        return carouselRepository.save(carousel);
+        carouselMapper.insert(carousel);
+        return carousel;
     }
 
     @Transactional
@@ -60,17 +63,17 @@ public class CarouselAdminService {
         if (form.enabled() != null) {
             carousel.setStatus(form.enabled() ? 1 : 0);
         }
-        carouselRepository.save(carousel);
+        carouselMapper.updateById(carousel);
     }
 
     @Transactional
     public void delete(Long id) {
         getOrThrow(id);
-        carouselRepository.deleteById(id);
+        carouselMapper.deleteById(id);
     }
 
     private Carousel getOrThrow(Long id) {
-        return carouselRepository.findById(id)
+        return Optional.ofNullable(carouselMapper.selectById(id))
                 .orElseThrow(() -> BusinessException.notFound("轮播图不存在"));
     }
 

@@ -1,8 +1,8 @@
 package com.unicorn.studio.admin.security;
 
 import com.unicorn.studio.admin.service.AdminPermissionService;
+import com.unicorn.studio.mapper.SysUserMapper;
 import com.unicorn.studio.model.SysUser;
-import com.unicorn.studio.repository.SysUserRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
@@ -27,14 +27,14 @@ import java.util.List;
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
-    private final SysUserRepository userRepository;
+    private final SysUserMapper sysUserMapper;
     private final AdminPermissionService permissionService;
 
     public JwtAuthFilter(JwtService jwtService,
-                         SysUserRepository userRepository,
+                         SysUserMapper sysUserMapper,
                          AdminPermissionService permissionService) {
         this.jwtService = jwtService;
-        this.userRepository = userRepository;
+        this.sysUserMapper = sysUserMapper;
         this.permissionService = permissionService;
     }
 
@@ -46,7 +46,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             try {
                 Claims claims = jwtService.parse(header.substring(7));
                 Long userId = Long.valueOf(claims.getSubject());
-                SysUser user = userRepository.findById(userId).orElse(null);
+                SysUser user = sysUserMapper.selectById(userId);
                 if (user != null && user.getStatus() != null && user.getStatus() == 1) {
                     AdminPermissionService.LoadResult result = permissionService.loadForUser(user);
                     List<SimpleGrantedAuthority> authorities = new ArrayList<>();

@@ -1,8 +1,8 @@
 package com.unicorn.studio.admin.security;
 
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.mapper.SysUserMapper;
 import com.unicorn.studio.model.SysUser;
-import com.unicorn.studio.repository.SysUserRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,10 +19,10 @@ public class LoginLockService {
     private static final int MAX_FAILURES = 5;
     private static final int LOCK_MINUTES = 30;
 
-    private final SysUserRepository userRepository;
+    private final SysUserMapper userMapper;
 
-    public LoginLockService(SysUserRepository userRepository) {
-        this.userRepository = userRepository;
+    public LoginLockService(SysUserMapper userMapper) {
+        this.userMapper = userMapper;
     }
 
     /** 锁定判定：锁定中（未到期）抛 423。 */
@@ -39,7 +39,7 @@ public class LoginLockService {
         if (attempts >= MAX_FAILURES) {
             user.setLockedUntil(LocalDateTime.now().plusMinutes(LOCK_MINUTES));
         }
-        userRepository.save(user);
+        userMapper.updateById(user);
     }
 
     @Transactional
@@ -48,7 +48,7 @@ public class LoginLockService {
             user.setFailedLoginAttempts(0);
         }
         user.setLockedUntil(null);
-        userRepository.save(user);
+        userMapper.updateById(user);
     }
 
     private long minutesLeft(SysUser user) {
