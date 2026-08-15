@@ -1,12 +1,13 @@
 package com.unicorn.studio.model;
 
-import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-/** 角色-权限关联表。（已迁移至 MyBatis Plus） */
-@TableName("sys_role_permission")
+/**
+ * 角色-权限关联表 POJO。
+ * 复合主键 (role_id, permission_id)，非 MyBatis-Plus 实体，由 {@code SysRolePermissionMapper} 注解 SQL 操作。
+ */
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

@@ -1,23 +1,29 @@
 package com.unicorn.studio.mapper;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.unicorn.studio.model.SysUserRole;
+import org.apache.ibatis.annotations.Delete;
+import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
-public interface SysUserRoleMapper extends BaseMapper<SysUserRole> {
+/**
+ * 管理员-角色关联表 mapper。
+ * sys_user_role 为 (user_id, role_id) 复合主键，MyBatis-Plus 不支持复合主键实体，
+ * 故不继承 BaseMapper，改用注解 SQL（仅按列的增删查，无按主键 CRUD 需求）。
+ */
+public interface SysUserRoleMapper {
 
-    default List<SysUserRole> findByIdUserId(Long userId) {
-        return selectList(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId));
-    }
+    @Select("SELECT user_id AS userId, role_id AS roleId FROM sys_user_role WHERE user_id = #{userId}")
+    List<SysUserRole> findByIdUserId(Long userId);
 
     /** 角色被引用的管理员数 > 0 时禁止删除角色 */
-    default List<SysUserRole> findByRoleId(Long roleId) {
-        return selectList(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getRoleId, roleId));
-    }
+    @Select("SELECT user_id AS userId, role_id AS roleId FROM sys_user_role WHERE role_id = #{roleId}")
+    List<SysUserRole> findByRoleId(Long roleId);
 
-    default void deleteByIdUserId(Long userId) {
-        delete(new LambdaQueryWrapper<SysUserRole>().eq(SysUserRole::getUserId, userId));
-    }
+    @Insert("INSERT INTO sys_user_role(user_id, role_id) VALUES(#{userId}, #{roleId})")
+    int insert(SysUserRole row);
+
+    @Delete("DELETE FROM sys_user_role WHERE user_id = #{userId}")
+    int deleteByIdUserId(Long userId);
 }

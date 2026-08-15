@@ -1,18 +1,25 @@
 package com.unicorn.studio.mapper;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.unicorn.studio.model.SysRolePermission;
+import org.apache.ibatis.annotations.Delete;
+import org.apache.ibatis.annotations.Insert;
+import org.apache.ibatis.annotations.Select;
 
 import java.util.List;
 
-public interface SysRolePermissionMapper extends BaseMapper<SysRolePermission> {
+/**
+ * 角色-权限关联表 mapper。
+ * sys_role_permission 为 (role_id, permission_id) 复合主键，MyBatis-Plus 不支持复合主键实体，
+ * 故不继承 BaseMapper，改用注解 SQL（仅按列的增删查，无按主键 CRUD 需求）。
+ */
+public interface SysRolePermissionMapper {
 
-    default List<SysRolePermission> findByIdRoleId(Long roleId) {
-        return selectList(new LambdaQueryWrapper<SysRolePermission>().eq(SysRolePermission::getRoleId, roleId));
-    }
+    @Select("SELECT role_id AS roleId, permission_id AS permissionId FROM sys_role_permission WHERE role_id = #{roleId}")
+    List<SysRolePermission> findByIdRoleId(Long roleId);
 
-    default void deleteByIdRoleId(Long roleId) {
-        delete(new LambdaQueryWrapper<SysRolePermission>().eq(SysRolePermission::getRoleId, roleId));
-    }
+    @Insert("INSERT INTO sys_role_permission(role_id, permission_id) VALUES(#{roleId}, #{permissionId})")
+    int insert(SysRolePermission row);
+
+    @Delete("DELETE FROM sys_role_permission WHERE role_id = #{roleId}")
+    int deleteByIdRoleId(Long roleId);
 }

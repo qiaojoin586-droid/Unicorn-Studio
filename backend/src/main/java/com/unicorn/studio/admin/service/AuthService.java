@@ -5,6 +5,7 @@ import com.unicorn.studio.admin.security.LoginLockService;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.mapper.SysUserMapper;
 import com.unicorn.studio.model.SysUser;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
