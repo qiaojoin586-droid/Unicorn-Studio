@@ -19,7 +19,7 @@
         <el-menu-item
           v-for="item in menuItems"
           :key="item.path"
-          :index="item.path"
+          :index="'/' + item.path"
         >
           <el-icon><component :is="item.meta.icon" /></el-icon>
           <template #title>{{ item.meta.title }}</template>

@@ -30,11 +30,20 @@ public class LearningResource {
 
     private String description;
 
+    /** 富文本正文（wangeditor HTML，保存前经 HtmlSanitizer 消毒） */
+    private String content;
+
     private String url;
 
     private String category;
 
+    /** 逗号分隔标签 */
+    private String tags;
+
     private String coverUrl;
+
+    /** 附件（上传文件 URL） */
+    private String attachmentUrl;
 
     private Integer sortOrder;
 

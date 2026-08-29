@@ -33,7 +33,10 @@ import java.util.UUID;
 @Service
 public class FileService {
 
-    private static final Set<String> ALLOWED_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp", "gif");
+    private static final Set<String> IMAGE_EXTENSIONS = Set.of("jpg", "jpeg", "png", "webp", "gif");
+    /** 文档类附件（学习资料等）：仅扩展名+大小校验，不做图片重解码 */
+    private static final Set<String> DOC_EXTENSIONS =
+            Set.of("pdf", "zip", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "txt", "md");
     private static final DateTimeFormatter MONTH_DIR = DateTimeFormatter.ofPattern("yyyy/MM");
 
     private final UploadFileMapper uploadFileMapper;
@@ -58,17 +61,20 @@ public class FileService {
         }
         String original = file.getOriginalFilename() == null ? "file" : file.getOriginalFilename();
         String ext = extensionOf(original);
-        if (!ALLOWED_EXTENSIONS.contains(ext)) {
-            throw BusinessException.badRequest("仅支持图片格式: jpg/jpeg/png/webp/gif");
+        boolean isImage = IMAGE_EXTENSIONS.contains(ext);
+        if (!isImage && !DOC_EXTENSIONS.contains(ext)) {
+            throw BusinessException.badRequest("仅支持图片(jpg/jpeg/png/webp/gif)或文档(pdf/zip/office/txt/md)");
         }
-        // 魔数校验 + ImageIO 重解码（防二次渲染/伪装文件）
-        try (InputStream in = file.getInputStream()) {
-            BufferedImage image = ImageIO.read(in);
-            if (image == null) {
-                throw BusinessException.badRequest("文件内容不是合法图片");
+        // 图片：魔数校验 + ImageIO 重解码（防二次渲染/伪装文件）；文档类附件跳过
+        if (isImage) {
+            try (InputStream in = file.getInputStream()) {
+                BufferedImage image = ImageIO.read(in);
+                if (image == null) {
+                    throw BusinessException.badRequest("文件内容不是合法图片");
+                }
+            } catch (IOException e) {
+                throw BusinessException.badRequest("文件读取失败");
             }
-        } catch (IOException e) {
-            throw BusinessException.badRequest("文件读取失败");
         }
 
         String uuid = UUID.randomUUID().toString().replace("-", "");

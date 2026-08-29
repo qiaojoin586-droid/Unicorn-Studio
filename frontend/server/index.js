@@ -101,8 +101,8 @@ function handleApi(req, res, pathname, search) {
     return sendJson(res, 200, { ok: true })
   }
 
-  // 其余 /api/* 一律反向代理到 Java 后端——业务数据（学习资料/作品/能力等）统一来自数据库，
-  // 禁止在 Node 层 mock，避免"集成断裂不可见"
+  // 其余 /api/* 与 /uploads/*（后台上传的图片，如轮播图）一律反向代理到 Java 后端——
+  // 业务数据（学习资料/作品/能力等）统一来自数据库，禁止在 Node 层 mock，避免"集成断裂不可见"
   return proxyToBackend(req, res, pathname + search)
 }
 
@@ -257,7 +257,7 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url || '/', 'http://localhost')
     const { pathname, search } = url
 
-    if (pathname.startsWith('/api/')) {
+    if (pathname.startsWith('/api/') || pathname.startsWith('/uploads/')) {
       await handleApi(req, res, pathname, search)
       return
     }

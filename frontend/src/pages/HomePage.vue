@@ -2,6 +2,9 @@
   <div>
     <!-- Hero Section: full-screen, dark gradient -->
     <section class="relative -mt-20 min-h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-gray-950 via-indigo-950 to-gray-950">
+      <!-- Carousel background layer: 仅作为背景图层叠加（无数据/接口失败时不渲染，Hero 保持原样） -->
+      <HeroCarousel v-if="carouselItems.length" :items="carouselItems" />
+
       <!-- Decorative glow blobs -->
       <div class="absolute inset-0 overflow-hidden pointer-events-none">
         <div class="absolute -top-1/4 -left-1/4 w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-3xl"></div>
@@ -133,6 +136,7 @@
 <script setup>
 import { onMounted, ref } from 'vue'
 import BackgroundVideo from '@/components/BackgroundVideo.vue'
+import HeroCarousel from '@/components/HeroCarousel.vue'
 import ServiceCard from '@/components/ServiceCard.vue'
 import WorkCard from '@/components/WorkCard.vue'
 import videoUrl from '@/image/index.mp4'
@@ -145,6 +149,21 @@ function scrollToNext() {
   const target = document.getElementById('services')
   if (target) {
     target.scrollIntoView({ behavior: 'smooth' })
+  }
+}
+
+// 首页轮播：来自数据库 /api/carousel（仅启用项），仅作为 Hero 背景图层叠加；
+// 无数据或接口失败时组件不渲染，Hero 区保持原有默认效果
+const carouselItems = ref([])
+
+async function loadCarousel() {
+  try {
+    const result = await get('/api/carousel')
+    if (!result.error) {
+      carouselItems.value = result.data?.list || []
+    }
+  } catch {
+    // 静默保持默认 Hero
   }
 }
 
@@ -191,6 +210,7 @@ async function loadFeaturedWorks() {
 }
 
 onMounted(() => {
+  loadCarousel()
   loadServices()
   loadFeaturedWorks()
 })

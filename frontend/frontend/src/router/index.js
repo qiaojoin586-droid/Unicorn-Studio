@@ -27,6 +27,11 @@ const routes = [
     component: () => import('@/pages/LearningPage.vue'),
   },
   {
+    path: '/learning/:id',
+    name: 'LearningDetail',
+    component: () => import('@/pages/LearningDetailPage.vue'),
+  },
+  {
     path: '/join',
     name: 'Join',
     component: () => import('@/pages/JoinPage.vue'),

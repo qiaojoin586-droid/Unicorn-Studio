@@ -75,17 +75,31 @@ CREATE TABLE carousel (
 );
 
 -- 学习资源升级（升级方案 3.4：补分类/封面/排序/状态；沿用既有复数表名）
+-- 后台管理模块（V8）：补 tags/attachment_url；分类为 learning_category 字典表，资源存分类名
 CREATE TABLE learning_resources (
   id          BIGINT PRIMARY KEY AUTO_INCREMENT,
   title       VARCHAR(200) NOT NULL,
   description VARCHAR(500) NOT NULL,
+  content     MEDIUMTEXT COMMENT '富文本，保存前已消毒',
   url         VARCHAR(255),
   category    VARCHAR(50),
+  tags        VARCHAR(255) COMMENT '逗号分隔标签',
   cover_url   VARCHAR(255),
+  attachment_url VARCHAR(255) COMMENT '附件（上传文件 URL）',
   sort_order  INT NOT NULL DEFAULT 0,
   status      INTEGER NOT NULL DEFAULT 1,
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 学习资料分类字典（V8 后台学习资料管理模块）
+CREATE TABLE learning_category (
+  id          BIGINT PRIMARY KEY AUTO_INCREMENT,
+  name        VARCHAR(50) NOT NULL UNIQUE,
+  description VARCHAR(255),
+  sort_order  INT NOT NULL DEFAULT 0,
+  status      INTEGER NOT NULL DEFAULT 1 COMMENT '1启用 0停用',
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 能力培养条目（首页"我们培养的能力"）
@@ -400,12 +414,33 @@ INSERT INTO service_item (title, description, icon, sort_order, status, created_
 ('大模型学术论文研究', '聚焦大语言模型前沿方向，开展学术论文撰写与发表。', '🔬', 2, 'published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 ('Agent开发', '基于大模型开发智能体，支持自主规划、工具调用与任务落地。', '🤖', 3, 'published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
--- 3. 学习资源（原 data.sql 4 条，按升级方案 3.4 补分类/排序/状态）
-INSERT INTO learning_resources (title, description, url, category, sort_order, status, created_at, updated_at) VALUES
-('后端入门开发手册', '涵盖 java/SpringBoot/SpringCloud 核心基础，适合零基础快速入门', NULL, '后端', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('Agent 开发实战指南', '从 0 到 1 搭建智能体应用，包含完整案例与可运行代码', NULL, 'AI', 2, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('大模型应用开发教程', '基于大模型的应用开发指南，涵盖 API 调用、数据处理与优化策略', NULL, 'AI', 3, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-('前端开发进阶手册', '深入理解 Vue3、React、TypeScript 等前端技术栈，提升开发效率', NULL, '前端', 4, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+-- 3. 学习资源（原 data.sql 4 条，按升级方案 3.4 补分类/排序/状态；补正文 content 富文本）
+INSERT INTO learning_resources (title, description, content, url, category, sort_order, status, created_at, updated_at) VALUES
+('后端入门开发手册', '涵盖 java/SpringBoot/SpringCloud 核心基础，适合零基础快速入门',
+'<h2>课程大纲</h2><p>本手册覆盖 Java、Spring Boot 与 Spring Cloud 的核心基础，适合零基础同学快速入门。</p><h3>学习路线</h3><ul><li>Java 语法与面向对象</li><li>Spring Boot 自动装配与 Web 开发</li><li>Spring Cloud 微服务与注册中心</li></ul><h3>示例代码</h3><pre><code>@RestController
+public class HelloController {
+    @GetMapping("/hello")
+    public String hello() {
+        return "Hello Unicorn Studio";
+    }
+}</code></pre><p>学完本手册即可独立完成一个前后端分离项目。</p>',
+NULL, '后端', 1, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('Agent 开发实战指南', '从 0 到 1 搭建智能体应用，包含完整案例与可运行代码',
+'<h2>从 0 到 1 搭建智能体</h2><p>本指南从大模型 API 调用出发，逐步构建一个可运行的 Agent 应用。</p><h3>核心组件</h3><ul><li>工具调用与函数声明</li><li>记忆与上下文管理</li><li>多轮任务规划</li></ul><h3>最小实现</h3><pre><code>const agent = new Agent({
+    model: ''deepseek-chat'',
+    tools: [searchTool, codeRunnerTool]
+});
+await agent.run(''帮我查询今天的天气'');</code></pre><p>完整案例代码见附件，可直接下载运行。</p>',
+NULL, 'AI', 2, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('大模型应用开发教程', '基于大模型的应用开发指南，涵盖 API 调用、数据处理与优化策略',
+'<h2>教程简介</h2><p>本教程讲解大模型应用开发全流程：API 调用、提示词工程、数据处理与性能优化。</p><h3>章节安排</h3><ul><li>第一章：模型 API 与流式输出</li><li>第二章：提示词工程最佳实践</li><li>第三章：检索增强与数据清洗</li><li>第四章：部署与成本优化</li></ul><p>学完后你将能够独立完成大模型应用的选型与落地。</p>',
+NULL, 'AI', 3, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('前端开发进阶手册', '深入理解 Vue3、React、TypeScript 等前端技术栈，提升开发效率',
+'<h2>手册内容</h2><p>深入理解 Vue3、React、TypeScript 等主流前端技术栈，提升工程化开发效率。</p><h3>推荐学习顺序</h3><ul><li>TypeScript 类型系统</li><li>Vue3 组合式 API 与响应式原理</li><li>React Hooks 与状态管理</li><li>Vite 构建与工程化实践</li></ul><h3>速查片段</h3><pre><code>const [count, setCount] = useState(0);
+useEffect(() => {
+    document.title = `Count: ${count}`;
+}, [count]);</code></pre><p>结合本项目后台源码（Vue3 + Element Plus）实战练习效果更佳。</p>',
+NULL, '前端', 4, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 -- 4. 新闻示例（2 条）
 INSERT INTO news (slug, title, category, summary, content, status, sort_order, published_at, created_at, updated_at) VALUES
@@ -432,3 +467,20 @@ INSERT INTO carousel (image_url, title, subtitle, sort_order, status, created_at
 -- 不插角色映射行：SUPER_ADMIN 由 AdminPermissionService 代码级全量加载，新增码自动生效
 INSERT INTO sys_permission (code, name, module, type, sort_order) VALUES
 ('system:sql', 'SQL 监控', '系统', 'MENU', 93);
+
+-- ==== V8: 学习资料管理 ====
+-- 学习资料管理权限码（页面 /admin/learning 与 /admin/learning/categories）
+INSERT INTO sys_permission (code, name, module, type, sort_order) VALUES
+('learning:list',     '学习资料列表', '学习资料', 'MENU', 94),
+('learning:create',   '新增学习资料', '学习资料', 'BUTTON', 95),
+('learning:edit',     '编辑学习资料', '学习资料', 'BUTTON', 96),
+('learning:delete',   '删除学习资料', '学习资料', 'BUTTON', 97),
+('learning:publish',  '上下架资料',   '学习资料', 'BUTTON', 98),
+('learning:category', '资料分类管理', '学习资料', 'MENU', 99);
+
+-- 内容小编（EDITOR）同步获得学习资料管理权限
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'EDITOR' AND p.code IN (
+  'learning:list','learning:create','learning:edit','learning:delete','learning:publish','learning:category'
+);

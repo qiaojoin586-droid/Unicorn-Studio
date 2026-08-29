@@ -79,6 +79,18 @@ export const permissionRoutes: RouteRecordRaw[] = [
         meta: { title: '轮播图管理', icon: 'Monitor', permission: 'carousel:list' },
       },
       {
+        path: 'learning',
+        name: 'Learning',
+        component: () => import('@/views/learning/LearningListView.vue'),
+        meta: { title: '学习资料', icon: 'Collection', permission: 'learning:list' },
+      },
+      {
+        path: 'learning/categories',
+        name: 'LearningCategories',
+        component: () => import('@/views/learning/LearningCategoriesView.vue'),
+        meta: { title: '资料分类', icon: 'Files', permission: 'learning:category' },
+      },
+      {
         path: 'comments',
         name: 'Comments',
         component: () => import('@/views/comments/CommentsView.vue'),

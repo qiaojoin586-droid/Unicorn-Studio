@@ -11,7 +11,7 @@
       <el-table :data="list" v-loading="loading">
         <el-table-column label="预览" width="180">
           <template #default="{ row }">
-            <img v-if="row.imageUrl" :src="row.imageUrl" class="thumb" />
+            <img v-if="row.imageUrl && !row.imgError" :src="row.imageUrl" class="thumb" @error="row.imgError = true" />
             <span v-else class="no-thumb">无图</span>
           </template>
         </el-table-column>

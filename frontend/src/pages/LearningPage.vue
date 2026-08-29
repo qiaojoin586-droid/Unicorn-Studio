@@ -56,32 +56,23 @@
       <!-- Learning cards -->
       <section class="relative z-10 max-w-4xl mx-auto px-4 pb-20">
         <div class="space-y-6">
-          <div
+          <router-link
             v-for="item in resources"
-            :key="item.title"
-            class="bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-sm hover:bg-white/10 hover:border-indigo-500/30 transition-all duration-300 hover:-translate-y-1"
+            :key="item.id"
+            :to="`/learning/${item.id}`"
+            class="block bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-sm hover:bg-white/10 hover:border-indigo-500/30 transition-all duration-300 hover:-translate-y-1"
           >
             <h3 class="text-xl font-bold text-white mb-2">{{ item.title }}</h3>
             <p class="text-gray-400 mb-4 leading-relaxed">{{ item.description }}</p>
-            <a
-              v-if="item.url"
-              :href="item.url"
-              target="_blank"
-              rel="noopener noreferrer"
+            <span
               class="inline-flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 font-semibold text-sm transition"
             >
               查看详情
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
               </svg>
-            </a>
-            <span
-              v-else
-              class="inline-flex items-center text-sm font-medium text-gray-500"
-            >
-              资料整理中
             </span>
-          </div>
+          </router-link>
         </div>
       </section>
     </template>

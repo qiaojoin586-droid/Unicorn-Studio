@@ -13,6 +13,8 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': apiProxyTarget,
+      // 后台上传的图片（轮播图等）存于后端 /uploads，需一并代理
+      '/uploads': apiProxyTarget,
     },
   },
   resolve: {
