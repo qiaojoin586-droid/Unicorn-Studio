@@ -34,12 +34,14 @@ public class LoginLockService {
 
     @Transactional
     public void onFailure(SysUser user) {
-        int attempts = (user.getFailedLoginAttempts() == null ? 0 : user.getFailedLoginAttempts()) + 1;
-        user.setFailedLoginAttempts(attempts);
-        if (attempts >= MAX_FAILURES) {
-            user.setLockedUntil(LocalDateTime.now().plusMinutes(LOCK_MINUTES));
+        // 原子自增避免并发失败丢计数，再回读判断是否触达锁定阈值
+        userMapper.incrementFailedAttempts(user.getId());
+        SysUser fresh = userMapper.selectById(user.getId());
+        if (fresh != null && fresh.getFailedLoginAttempts() != null
+                && fresh.getFailedLoginAttempts() >= MAX_FAILURES) {
+            fresh.setLockedUntil(LocalDateTime.now().plusMinutes(LOCK_MINUTES));
+            userMapper.updateById(fresh);
         }
-        userMapper.updateById(user);
     }
 
     @Transactional

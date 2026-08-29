@@ -49,10 +49,10 @@ public class PublicUserAdminService {
             wrapper.eq(PublicUser::getStatus, status);
         }
         if (registerFrom != null && !registerFrom.isBlank()) {
-            wrapper.ge(PublicUser::getCreatedAt, LocalDateTime.parse(registerFrom + "T00:00:00"));
+            wrapper.ge(PublicUser::getCreatedAt, parseDate(registerFrom).atStartOfDay());
         }
         if (registerTo != null && !registerTo.isBlank()) {
-            wrapper.lt(PublicUser::getCreatedAt, LocalDateTime.parse(registerTo + "T00:00:00").plusDays(1));
+            wrapper.lt(PublicUser::getCreatedAt, parseDate(registerTo).plusDays(1).atStartOfDay());
         }
         wrapper.orderByDesc(PublicUser::getId);
         // controller 已做 page-1（0-based），MP Page 为 1-based
@@ -64,7 +64,12 @@ public class PublicUserAdminService {
     public Map<String, Object> detail(Long id) {
         PublicUser user = getOrThrow(id);
         long commentCount = commentMapper.selectCount(new LambdaQueryWrapper<Comment>().eq(Comment::getUserId, id));
-        long messageCount = messageMapper.selectCount(new LambdaQueryWrapper<Message>().eq(Message::getRepliedBy, id));
+        // message 表无 user_id（留言为匿名/游客提交），按联系邮箱匹配该用户的留言
+        long messageCount = 0;
+        if (user.getEmail() != null && !user.getEmail().isBlank()) {
+            messageCount = messageMapper.selectCount(
+                    new LambdaQueryWrapper<Message>().eq(Message::getContact, user.getEmail()));
+        }
         Map<String, Object> result = new java.util.LinkedHashMap<>();
         result.put("user", sanitize(user));
         result.put("commentCount", commentCount);
@@ -119,14 +124,14 @@ public class PublicUserAdminService {
         userMapper.deleteById(id);
     }
 
-    /** 到期自动解禁（每日 03:00）。 */
+    /** 到期自动解禁（每日 03:00）。条件下推到 SQL，不再全表扫描。 */
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
     public void autoUnban() {
-        List<PublicUser> expired = userMapper.selectList(new LambdaQueryWrapper<>()).stream()
-                .filter(u -> u.getStatus() != null && u.getStatus() == 0)
-                .filter(u -> u.getBanUntil() != null && !u.getBanUntil().isAfter(LocalDateTime.now()))
-                .toList();
+        List<PublicUser> expired = userMapper.selectList(new LambdaQueryWrapper<PublicUser>()
+                .eq(PublicUser::getStatus, 0)
+                .isNotNull(PublicUser::getBanUntil)
+                .le(PublicUser::getBanUntil, LocalDateTime.now()));
         for (PublicUser user : expired) {
             user.setStatus(1);
             user.setBanReason(null);
@@ -136,6 +141,15 @@ public class PublicUserAdminService {
         if (!expired.isEmpty()) {
             org.slf4j.LoggerFactory.getLogger(getClass())
                     .info("到期自动解禁用户 {} 个", expired.size());
+        }
+    }
+
+    /** 解析 yyyy-MM-dd 查询参数，非法格式转 400（避免 DateTimeParseException 落到 500）。 */
+    private java.time.LocalDate parseDate(String value) {
+        try {
+            return java.time.LocalDate.parse(value.trim());
+        } catch (java.time.format.DateTimeParseException e) {
+            throw BusinessException.badRequest("日期格式应为 yyyy-MM-dd: " + value);
         }
     }
 

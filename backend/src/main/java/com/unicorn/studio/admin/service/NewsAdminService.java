@@ -98,7 +98,12 @@ public class NewsAdminService {
     public void update(Long id, NewsForm form) {
         News news = getOrThrow(id);
         if (form.slug() != null && !form.slug().isBlank() && !form.slug().trim().equals(news.getSlug())) {
-            news.setSlug(form.slug().trim());
+            String newSlug = form.slug().trim();
+            // 与 create 对齐的唯一性校验，避免撞唯一索引落 500
+            if (newsMapper.findBySlug(newSlug).isPresent()) {
+                throw BusinessException.conflict("slug 已存在");
+            }
+            news.setSlug(newSlug);
         }
         if (form.title() != null) {
             news.setTitle(form.title());
@@ -142,8 +147,10 @@ public class NewsAdminService {
         }
         List<News> all = newsMapper.selectList(new LambdaQueryWrapper<>());
         Map<Long, News> byId = new LinkedHashMap<>();
+        Map<Long, Integer> oldOrders = new LinkedHashMap<>();
         for (News n : all) {
             byId.put(n.getId(), n);
+            oldOrders.put(n.getId(), n.getSortOrder());
         }
         int order = 0;
         for (Long id : ids) {
@@ -155,8 +162,11 @@ public class NewsAdminService {
         for (News n : byId.values()) {
             n.setSortOrder(order++);
         }
+        // 仅更新 sortOrder 实际变化的行，避免全表无条件 UPDATE
         for (News n : all) {
-            newsMapper.updateById(n);
+            if (!java.util.Objects.equals(oldOrders.get(n.getId()), n.getSortOrder())) {
+                newsMapper.updateById(n);
+            }
         }
     }
 

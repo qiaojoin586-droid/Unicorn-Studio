@@ -5,32 +5,38 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="65dcd977-0024-4f2c-a12a-219dfad38296" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources.local.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources/06b959dc-5435-4ba5-935e-f92488f95c7b.xml" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources/06b959dc-5435-4ba5-935e-f92488f95c7b/storage_v2/_src_/schema/information_schema.FNRwLQ.meta" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources/06b959dc-5435-4ba5-935e-f92488f95c7b/storage_v2/_src_/schema/mysql.osA4Bg.meta" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources/06b959dc-5435-4ba5-935e-f92488f95c7b/storage_v2/_src_/schema/performance_schema.kIw0nw.meta" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/dataSources/06b959dc-5435-4ba5-935e-f92488f95c7b/storage_v2/_src_/schema/sys.zb4BAA.meta" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/sqldialects.xml" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/AdminAccountController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/AdminAccountController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/AuthController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/AuthController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/BackupController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/BackupController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/CommentAdminController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/CommentAdminController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/MessageAdminController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/MessageAdminController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/NewsAdminController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/NewsAdminController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/OperationLogController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/OperationLogController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/PublicUserAdminController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/PublicUserAdminController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/RoleController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/RoleController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/SqlMonitorController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/SqlMonitorController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/WorkAdminController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/WorkAdminController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/security/LoginLockService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/security/LoginLockService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/AdminAccountService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/AdminAccountService.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/AuthService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/AuthService.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/CarouselController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/CarouselController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/NewsController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/NewsController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/ServiceItemController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/ServiceItemController.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/WorkController.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/controller/WorkController.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/BackupService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/BackupService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/CarouselAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/CarouselAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/CommentAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/CommentAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/NewsAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/NewsAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/PublicUserAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/PublicUserAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/RoleService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/RoleService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/SiteSettingsService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/SiteSettingsService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/WorkAdminService.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/service/WorkAdminService.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/common/HtmlSanitizer.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/common/HtmlSanitizer.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/common/audit/AuditLogAspect.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/common/audit/AuditLogAspect.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/mapper/BackupRecordMapper.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/mapper/BackupRecordMapper.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/mapper/SysRolePermissionMapper.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/mapper/SysRolePermissionMapper.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/mapper/SysUserMapper.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/mapper/SysUserMapper.java" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/mapper/SysUserRoleMapper.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/mapper/SysUserRoleMapper.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysRolePermission.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysRolePermission.java" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysUserRole.java" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/model/SysUserRole.java" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/src/main/resources/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/src/main/resources/application.yml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/backend/target/classes/application.yml" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/application.yml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/config/SecurityConfig.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/config/SecurityConfig.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/controller/AiChatController.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/controller/AiChatController.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ApiResponse$ApiResponseBuilder.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ApiResponse$ApiResponseBuilder.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ApiResponse.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ApiResponse.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ChatMessage.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/ChatMessage.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/LearningResource$LearningResourceBuilder.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/LearningResource$LearningResourceBuilder.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/LearningResource.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/model/LearningResource.class" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/service/AiChatService.class" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/classes/com/unicorn/studio/service/AiChatService.class" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/backend/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst" beforeDir="false" afterPath="$PROJECT_DIR$/backend/target/maven-status/maven-compiler-plugin/compile/default-compile/inputFiles.lst" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -41,49 +47,49 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "qiaojoin586-droid"
+  <component name="GitHubPullRequestSearchHistory">{
+  &quot;lastFilter&quot;: {
+    &quot;state&quot;: &quot;OPEN&quot;,
+    &quot;assignee&quot;: &quot;qiaojoin586-droid&quot;
   }
-}]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/qiaojoin586-droid/Unicorn-Studio.git",
-    "accountId": "cd45af01-fc59-4a09-8796-8608cb318bd0"
+}</component>
+  <component name="GithubPullRequestsUISettings">{
+  &quot;selectedUrlAndAccountId&quot;: {
+    &quot;url&quot;: &quot;https://github.com/qiaojoin586-droid/Unicorn-Studio.git&quot;,
+    &quot;accountId&quot;: &quot;cd45af01-fc59-4a09-8796-8608cb318bd0&quot;
   }
-}]]></component>
+}</component>
   <component name="ProjectCodeStyleSettingsMigration">
     <option name="version" value="2" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "customColor": "",
-  "associatedIndex": 5
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;customColor&quot;: &quot;&quot;,
+  &quot;associatedIndex&quot;: 5
+}</component>
   <component name="ProjectId" id="3Hw8lul5iIyurXD0SJH0cYNaeTZ" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RequestMappingsPanelOrder0": "0",
-    "RequestMappingsPanelOrder1": "1",
-    "RequestMappingsPanelWidth0": "75",
-    "RequestMappingsPanelWidth1": "75",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "Spring Boot.UnicornStudioApplication.executor": "Debug",
-    "git-widget-placeholder": "main",
-    "node.js.detected.package.eslint": "true",
-    "node.js.detected.package.tslint": "true",
-    "node.js.selected.package.eslint": "(autodetect)",
-    "node.js.selected.package.tslint": "(autodetect)",
-    "nodejs_package_manager_path": "npm",
-    "vue.rearranger.settings.migration": "true"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RequestMappingsPanelOrder0&quot;: &quot;0&quot;,
+    &quot;RequestMappingsPanelOrder1&quot;: &quot;1&quot;,
+    &quot;RequestMappingsPanelWidth0&quot;: &quot;75&quot;,
+    &quot;RequestMappingsPanelWidth1&quot;: &quot;75&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;Spring Boot.UnicornStudioApplication.executor&quot;: &quot;Debug&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;main&quot;,
+    &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
+    &quot;node.js.detected.package.tslint&quot;: &quot;true&quot;,
+    &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
+    &quot;node.js.selected.package.tslint&quot;: &quot;(autodetect)&quot;,
+    &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
+    &quot;vue.rearranger.settings.migration&quot;: &quot;true&quot;
   }
-}]]></component>
+}</component>
   <component name="RunManager">
     <configuration name="UnicornStudioApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot" nameIsGenerated="true">
       <module name="unicorn-studio" />
@@ -112,6 +118,9 @@
       <option name="presentableId" value="Default" />
       <updated>1786767925710</updated>
       <workItem from="1786767927241" duration="3485000" />
+      <workItem from="1786797702232" duration="826000" />
+      <workItem from="1787754178799" duration="7000" />
+      <workItem from="1788009870695" duration="13000" />
     </task>
     <servers />
   </component>
@@ -123,7 +132,7 @@
       <breakpoints>
         <line-breakpoint enabled="true" type="java-method">
           <url>file://$PROJECT_DIR$/backend/src/main/java/com/unicorn/studio/admin/controller/AuthController.java</url>
-          <line>30</line>
+          <line>31</line>
           <properties class="com.unicorn.studio.admin.controller.AuthController" method="login">
             <option name="EMULATED" value="true" />
             <option name="WATCH_EXIT" value="false" />

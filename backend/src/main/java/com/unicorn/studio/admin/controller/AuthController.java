@@ -4,6 +4,7 @@ import com.unicorn.studio.admin.service.AuthService;
 import com.unicorn.studio.common.SecurityUtils;
 import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.model.SysUser;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,12 +29,12 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ApiResponse<Map<String, Object>> login(@RequestBody LoginRequest request) {
+    public ApiResponse<Map<String, Object>> login(@Valid @RequestBody LoginRequest request) {
         return ApiResponse.ok(authService.login(request.username(), request.password()));
     }
 
     @PostMapping("/refresh")
-    public ApiResponse<Map<String, Object>> refresh(@RequestBody RefreshRequest request) {
+    public ApiResponse<Map<String, Object>> refresh(@Valid @RequestBody RefreshRequest request) {
         return ApiResponse.ok(authService.refresh(request.refreshToken()));
     }
 

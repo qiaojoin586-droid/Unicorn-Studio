@@ -6,6 +6,7 @@ import com.unicorn.studio.common.SecurityUtils;
 import com.unicorn.studio.common.audit.AuditLog;
 import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.model.Message;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -47,7 +48,7 @@ public class MessageAdminController {
     @PostMapping("/{id}/reply")
     @PreAuthorize("hasAuthority('message:reply')")
     @AuditLog(module = "留言", action = "回复留言")
-    public ApiResponse<Void> reply(@PathVariable Long id, @RequestBody ReplyRequest request) {
+    public ApiResponse<Void> reply(@PathVariable Long id, @Valid @RequestBody ReplyRequest request) {
         messageService.reply(id, request.content(), SecurityUtils.currentUser().getId());
         return ApiResponse.ok();
     }
@@ -55,7 +56,7 @@ public class MessageAdminController {
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAuthority('message:reply')")
     @AuditLog(module = "留言", action = "变更留言状态")
-    public ApiResponse<Void> changeStatus(@PathVariable Long id, @RequestBody StatusRequest request) {
+    public ApiResponse<Void> changeStatus(@PathVariable Long id, @Valid @RequestBody StatusRequest request) {
         messageService.changeStatus(id, request.status());
         return ApiResponse.ok();
     }

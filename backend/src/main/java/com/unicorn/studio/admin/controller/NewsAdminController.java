@@ -6,6 +6,7 @@ import com.unicorn.studio.common.SecurityUtils;
 import com.unicorn.studio.common.audit.AuditLog;
 import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.model.News;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -69,7 +70,7 @@ public class NewsAdminController {
     @PreAuthorize("hasAuthority('news:publish')")
     @AuditLog(module = "新闻", action = "发布/下线新闻")
     public ApiResponse<Void> changeStatus(@PathVariable Long id,
-                                          @RequestBody StatusRequest request) {
+                                          @Valid @RequestBody StatusRequest request) {
         newsService.changeStatus(id, request.status());
         return ApiResponse.ok();
     }

@@ -5,6 +5,7 @@ import com.unicorn.studio.common.PageResult;
 import com.unicorn.studio.common.audit.AuditLog;
 import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.model.Work;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -68,7 +69,7 @@ public class WorkAdminController {
     @PreAuthorize("hasAuthority('work:publish')")
     @AuditLog(module = "作品", action = "上下架作品")
     public ApiResponse<Void> changeStatus(@PathVariable Long id,
-                                          @RequestBody StatusRequest request) {
+                                          @Valid @RequestBody StatusRequest request) {
         workService.changeStatus(id, request.status());
         return ApiResponse.ok();
     }

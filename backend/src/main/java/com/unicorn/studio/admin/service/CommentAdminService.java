@@ -11,6 +11,7 @@ import com.unicorn.studio.model.PublicUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -21,7 +22,7 @@ import java.util.Set;
 @Service
 public class CommentAdminService {
 
-    private static final Set<String> TARGET_TYPES = Set.of("work", "news");
+    private static final Set<String> BATCH_ACTIONS = Set.of("approve", "reject", "delete");
 
     private final CommentMapper commentMapper;
     private final PublicUserMapper publicUserMapper;
@@ -47,7 +48,10 @@ public class CommentAdminService {
         }
         wrapper.orderByDesc(Comment::getId);
         // controller 已做 page-1（0-based），MP Page 为 1-based
-        return PageResult.of(commentMapper.selectPage(new Page<>(page + 1, size), wrapper), this::decorate);
+        Page<Comment> result = commentMapper.selectPage(new Page<>(page + 1, size), wrapper);
+        // 批量加载评论用户昵称，避免逐条 selectById 的 N+1
+        Map<Long, String> nicknames = nicknamesOf(result.getRecords());
+        return PageResult.of(result, c -> decorate(c, nicknames));
     }
 
     /** 审核：approve/reject。 */
@@ -76,20 +80,29 @@ public class CommentAdminService {
         return reply;
     }
 
-    /** 批量操作：approve/reject/delete。 */
+    /** 批量操作：approve/reject/delete。逐条失败仅跳过该条（业务异常），系统异常直接抛出。 */
     @Transactional
     public Map<String, Object> batch(List<Long> ids, String action) {
+        if (ids == null || ids.isEmpty()) {
+            throw BusinessException.badRequest("ids 不能为空");
+        }
+        if (!BATCH_ACTIONS.contains(action)) {
+            throw BusinessException.badRequest("非法批量操作: " + action);
+        }
         int success = 0;
         int fail = 0;
         for (Long id : ids) {
             try {
                 switch (action) {
-                    case "approve", "reject" -> changeStatus(id, "approved".equals(action) ? "approved" : "rejected");
+                    case "approve" -> changeStatus(id, "approved");
+                    case "reject" -> changeStatus(id, "rejected");
                     case "delete" -> delete(id);
                     default -> throw BusinessException.badRequest("非法批量操作: " + action);
                 }
                 success++;
-            } catch (Exception e) {
+            } catch (BusinessException e) {
+                // 仅跳过业务性失败（如评论不存在）；DB 等系统异常继续抛出，
+                // 避免在 @Transactional 中吞异常导致 rollback-only
                 fail++;
             }
         }
@@ -105,11 +118,24 @@ public class CommentAdminService {
         commentMapper.deleteById(id);
     }
 
-    private Map<String, Object> decorate(Comment comment) {
+    private Map<Long, String> nicknamesOf(List<Comment> comments) {
+        List<Long> userIds = comments.stream()
+                .map(Comment::getUserId)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .toList();
+        Map<Long, String> nicknames = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            publicUserMapper.selectBatchIds(userIds)
+                    .forEach(u -> nicknames.put(u.getId(), u.getNickname()));
+        }
+        return nicknames;
+    }
+
+    private Map<String, Object> decorate(Comment comment, Map<Long, String> nicknames) {
         String displayName = comment.getGuestNickname();
         if (comment.getUserId() != null) {
-            displayName = Optional.ofNullable(publicUserMapper.selectById(comment.getUserId()))
-                    .map(PublicUser::getNickname)
+            displayName = Optional.ofNullable(nicknames.get(comment.getUserId()))
                     .orElse("已注销用户");
         }
         // Map.of 不允许 null 值（游客 userId/parentId 为 null），用 LinkedHashMap

@@ -4,6 +4,7 @@ import com.unicorn.studio.admin.service.PublicUserAdminService;
 import com.unicorn.studio.common.PageResult;
 import com.unicorn.studio.common.audit.AuditLog;
 import com.unicorn.studio.model.ApiResponse;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -45,7 +46,7 @@ public class PublicUserAdminController {
     @PatchMapping("/{id}/ban")
     @PreAuthorize("hasAuthority('user:ban')")
     @AuditLog(module = "用户", action = "禁言用户")
-    public ApiResponse<Void> ban(@PathVariable Long id, @RequestBody BanRequest request) {
+    public ApiResponse<Void> ban(@PathVariable Long id, @Valid @RequestBody BanRequest request) {
         userService.ban(id, request.duration(), request.reason());
         return ApiResponse.ok();
     }

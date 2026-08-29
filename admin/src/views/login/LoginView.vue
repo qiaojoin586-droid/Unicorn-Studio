@@ -82,7 +82,14 @@ async function submit() {
       router.push('/profile')
       return
     }
-    router.push((route.query.redirect as string) || '/')
+    // 兼容历史/外部来源的含 base 前缀的 redirect（如 /admin/dashboard），
+    // vue-router 路径不含 base，直接 push 会拼成 /admin/admin/... 命中 404
+    let target = (route.query.redirect as string) || '/'
+    const base = import.meta.env.BASE_URL
+    if (base !== '/' && target.startsWith(base)) {
+      target = target.slice(base.length - 1) || '/'
+    }
+    router.push(target)
   } catch (e) {
     // 登录接口走 silent 模式（不弹全局提示），错误改为表单内联展示
     loginError.value = getLoginError(e)

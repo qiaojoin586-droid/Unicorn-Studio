@@ -8,9 +8,9 @@ import java.util.List;
 
 public interface BackupRecordMapper extends BaseMapper<BackupRecord> {
 
-    default List<BackupRecord> findTop7ByOrderByCreatedAtDesc() {
+    /** 全量按创建时间倒序（清理策略按 retention-count 在内存裁剪，不再硬编码 LIMIT） */
+    default List<BackupRecord> findAllByOrderByCreatedAtDesc() {
         return selectList(new LambdaQueryWrapper<BackupRecord>()
-                .orderByDesc(BackupRecord::getCreatedAt)
-                .last("LIMIT 7"));
+                .orderByDesc(BackupRecord::getCreatedAt));
     }
 }

@@ -6,6 +6,7 @@ import com.unicorn.studio.common.SecurityUtils;
 import com.unicorn.studio.common.audit.AuditLog;
 import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.model.SysUser;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -53,7 +54,7 @@ public class AdminAccountController {
     @PostMapping("/admins")
     @PreAuthorize("hasAuthority('admin:create')")
     @AuditLog(module = "管理员", action = "新增管理员")
-    public ApiResponse<Map<String, Object>> create(@RequestBody CreateAdminRequest request) {
+    public ApiResponse<Map<String, Object>> create(@Valid @RequestBody CreateAdminRequest request) {
         SysUser user = accountService.create(request.username(), request.password(),
                 request.nickname(), request.roleIds());
         return ApiResponse.ok(Map.of("id", user.getId()));
@@ -89,7 +90,7 @@ public class AdminAccountController {
 
     @PutMapping("/profile/password")
     @AuditLog(module = "个人中心", action = "修改密码")
-    public ApiResponse<Void> changePassword(@RequestBody ChangePasswordRequest request) {
+    public ApiResponse<Void> changePassword(@Valid @RequestBody ChangePasswordRequest request) {
         accountService.changePassword(SecurityUtils.currentUser(),
                 request.oldPassword(), request.newPassword());
         return ApiResponse.ok();

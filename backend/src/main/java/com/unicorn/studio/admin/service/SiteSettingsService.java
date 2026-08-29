@@ -49,7 +49,13 @@ public class SiteSettingsService {
     /** 后台批量更新。 */
     @Transactional
     public void updateAll(List<KeyValueRequest> items) {
+        if (items == null) {
+            return;
+        }
         for (KeyValueRequest item : items) {
+            if (item.key() == null || item.key().isBlank()) {
+                throw BusinessException.badRequest("设置项 key 不能为空");
+            }
             Optional<SiteSettings> existing = settingsMapper.findBySettingKey(item.key());
             SiteSettings setting = existing.orElseGet(() -> SiteSettings.builder()
                     .groupName(item.group())

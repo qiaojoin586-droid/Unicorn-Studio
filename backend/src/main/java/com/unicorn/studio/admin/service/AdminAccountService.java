@@ -57,8 +57,37 @@ public class AdminAccountService {
         }
         wrapper.orderByDesc(SysUser::getId);
         // controller 已做 page-1（0-based），MP Page 为 1-based
-        return PageResult.of(userMapper.selectPage(new Page<>(page + 1, size), wrapper),
-                u -> new AdminItem(sanitize(u), rolesOf(u.getId()), roleNamesOf(u.getId())));
+        Page<SysUser> result = userMapper.selectPage(new Page<>(page + 1, size), wrapper);
+        // 批量加载整页用户的角色，避免逐行 2~4 次查询的 N+1
+        Map<Long, List<SysRole>> rolesByUser = batchRolesOf(
+                result.getRecords().stream().map(SysUser::getId).toList());
+        return PageResult.of(result, u -> {
+            List<SysRole> roles = rolesByUser.getOrDefault(u.getId(), List.of());
+            return new AdminItem(sanitize(u),
+                    roles.stream().map(SysRole::getCode).toList(),
+                    roles.stream().map(SysRole::getName).toList());
+        });
+    }
+
+    /** 批量加载多个用户的角色（2 次 SQL：关联表 + 角色表）。 */
+    private Map<Long, List<SysRole>> batchRolesOf(List<Long> userIds) {
+        Map<Long, List<SysRole>> result = new LinkedHashMap<>();
+        if (userIds.isEmpty()) {
+            return result;
+        }
+        List<SysUserRole> relations = userRoleMapper.findByUserIds(userIds);
+        List<Long> roleIds = relations.stream().map(SysUserRole::getRoleId).distinct().toList();
+        Map<Long, SysRole> roleById = new LinkedHashMap<>();
+        if (!roleIds.isEmpty()) {
+            roleMapper.selectBatchIds(roleIds).forEach(r -> roleById.put(r.getId(), r));
+        }
+        for (SysUserRole relation : relations) {
+            SysRole role = roleById.get(relation.getRoleId());
+            if (role != null) {
+                result.computeIfAbsent(relation.getUserId(), k -> new java.util.ArrayList<>()).add(role);
+            }
+        }
+        return result;
     }
 
     /** 脱敏：只暴露展示字段，杜绝密码哈希/refreshToken 泄漏。 */
@@ -78,14 +107,16 @@ public class AdminAccountService {
 
     @Transactional
     public SysUser create(String username, String password, String nickname, List<Long> roleIds) {
-        if (userMapper.existsByUsername(username)) {
+        // 先归一化再做唯一性检查（与入库值一致，防止 " admin" 绕过检查后撞唯一索引）
+        String normalizedUsername = username.trim();
+        if (userMapper.existsByUsername(normalizedUsername)) {
             throw BusinessException.conflict("用户名已存在");
         }
         if (roleIds == null || roleIds.isEmpty()) {
             throw BusinessException.badRequest("至少分配一个角色");
         }
         SysUser user = SysUser.builder()
-                .username(username.trim())
+                .username(normalizedUsername)
                 .password(passwordEncoder.encode(password))
                 .nickname(nickname)
                 .status(1)
@@ -196,15 +227,6 @@ public class AdminAccountService {
             return List.of();
         }
         return roleMapper.selectBatchIds(roleIds).stream().map(SysRole::getCode).toList();
-    }
-
-    private List<String> roleNamesOf(Long userId) {
-        List<Long> roleIds = userRoleMapper.findByIdUserId(userId).stream()
-                .map(ur -> ur.getRoleId()).toList();
-        if (roleIds.isEmpty()) {
-            return List.of();
-        }
-        return roleMapper.selectBatchIds(roleIds).stream().map(SysRole::getName).toList();
     }
 
     private void replaceRoles(Long userId, List<Long> roleIds) {

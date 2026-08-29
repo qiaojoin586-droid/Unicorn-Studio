@@ -7,8 +7,10 @@ spring:
     # MySQL 8（本机/部署均用 MySQL；表结构由 backend/sql/mysql-init.sql 初始化，无 ORM 自动建表）
     url: jdbc:mysql://127.0.0.1:3306/unicorn_studio?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     driver-class-name: com.mysql.cj.jdbc.Driver
-    username: root
-    password: 123456
+    username: ${DB_USERNAME:root}
+    # 密码走环境变量注入（生产必须设置 DB_PASSWORD）；默认值仅为本地开发便利，
+    # 开源/公开仓库前请移除默认值
+    password: ${DB_PASSWORD:123456}
     # Druid 连接池（stat filter 提供 SQL 监控统计，见 /api/admin/sql-monitor）
     type: com.alibaba.druid.pool.DruidDataSource
     druid:

@@ -43,18 +43,29 @@ public class RoleService {
     }
 
     public List<RoleItem> listAll() {
-        return roleMapper.selectList(new LambdaQueryWrapper<>()).stream()
-                .map(r -> new RoleItem(r, permissionIdsOf(r.getId())))
+        List<SysRole> roles = roleMapper.selectList(new LambdaQueryWrapper<>());
+        // 一次性加载全部角色的权限关联，避免逐角色查询的 N+1
+        Map<Long, List<Long>> permissionIdsByRole = new LinkedHashMap<>();
+        if (!roles.isEmpty()) {
+            rolePermissionMapper.findByRoleIds(roles.stream().map(SysRole::getId).toList())
+                    .forEach(rp -> permissionIdsByRole
+                            .computeIfAbsent(rp.getRoleId(), k -> new java.util.ArrayList<>())
+                            .add(rp.getPermissionId()));
+        }
+        return roles.stream()
+                .map(r -> new RoleItem(r, permissionIdsByRole.getOrDefault(r.getId(), List.of())))
                 .toList();
     }
 
     @Transactional
     public SysRole create(String code, String name, String description, List<Long> permissionIds) {
-        if (roleMapper.findByCode(code).isPresent()) {
+        // 先归一化再做唯一性检查（与入库值一致，防止大小写/空白绕过检查后撞唯一索引）
+        String normalizedCode = code.trim().toUpperCase();
+        if (roleMapper.findByCode(normalizedCode).isPresent()) {
             throw BusinessException.conflict("角色编码已存在");
         }
         SysRole role = SysRole.builder()
-                .code(code.trim().toUpperCase())
+                .code(normalizedCode)
                 .name(name)
                 .description(description)
                 .builtin(0)
@@ -115,15 +126,14 @@ public class RoleService {
                 .orElseThrow(() -> BusinessException.notFound("角色不存在"));
     }
 
-    private List<Long> permissionIdsOf(Long roleId) {
-        return rolePermissionMapper.findByIdRoleId(roleId).stream()
-                .map(SysRolePermission::getPermissionId).toList();
-    }
-
     private void replacePermissions(Long roleId, List<Long> permissionIds) {
         rolePermissionMapper.deleteByIdRoleId(roleId);
         if (permissionIds != null) {
             for (Long permissionId : permissionIds) {
+                // 与 replaceRoles 对齐：校验引用存在，防悬挂关联
+                if (permissionMapper.selectById(permissionId) == null) {
+                    throw BusinessException.badRequest("权限不存在: " + permissionId);
+                }
                 rolePermissionMapper.insert(new SysRolePermission(roleId, permissionId));
             }
         }

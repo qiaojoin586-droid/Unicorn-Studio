@@ -57,8 +57,17 @@ function redirectToLogin() {
   localStorage.removeItem('admin_refresh_token')
   localStorage.removeItem('admin_permissions')
   localStorage.removeItem('admin_user')
-  const redirect = encodeURIComponent(window.location.pathname + window.location.search)
-  window.location.href = `/admin/login?redirect=${redirect}`
+  // window.location.pathname 含 vite base（/admin/），而 vue-router 的路由路径不含 base，
+  // 需先剥离，否则登录后 router.push 会把 base 再拼一次变成 /admin/admin/... 命中 404
+  const base = import.meta.env.BASE_URL || '/'
+  let path = window.location.pathname
+  if (base !== '/' && path.startsWith(base)) {
+    path = path.slice(base.length - 1) // 保留前导 '/'
+  } else if (base !== '/' && path === base.slice(0, -1)) {
+    path = '/'
+  }
+  const redirect = encodeURIComponent(path + window.location.search)
+  window.location.href = `${base}login?redirect=${redirect}`
 }
 
 service.interceptors.response.use(

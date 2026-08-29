@@ -97,6 +97,9 @@ public class SqlMonitorController {
             @RequestParam(required = false) String keyword,
             @RequestParam(defaultValue = "totalTime") String sortKey,
             @RequestParam(defaultValue = "desc") String order) {
+        // 钳制分页参数：page<=0 会导致 subList 越界 500；size 限制上限防内存放大
+        int safePage = Math.max(1, page);
+        int safeSize = Math.max(1, Math.min(size, 100));
         List<Map<String, Object>> raw = statManager.getSqlStatDataList(null);
         List<SqlStatVo> all = new ArrayList<>();
         if (raw != null) {
@@ -131,8 +134,8 @@ public class SqlMonitorController {
         all.sort(comparator);
 
         int total = all.size();
-        int from = Math.min((page - 1) * size, total);
-        int to = Math.min(from + size, total);
+        int from = Math.min((safePage - 1) * safeSize, total);
+        int to = Math.min(from + safeSize, total);
         return ApiResponse.ok(new PageResult<>(all.subList(from, to), total));
     }
 

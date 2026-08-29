@@ -42,6 +42,12 @@ public final class HtmlSanitizer {
             .addProtocols("img", "src", "http", "https")) {
         @Override
         public boolean isSafeAttribute(String tagName, Element el, Attribute attr) {
+            // 本站上传的相对路径图片（/uploads/...）：baseUri 为空时协议校验会误杀，
+            // 且 new URL(相对路径) 抛 MalformedURLException，需在走内置规则前放行
+            if ("img".equals(tagName) && "src".equals(attr.getKey())
+                    && attr.getValue().startsWith("/uploads/")) {
+                return true;
+            }
             // 先走内置规则（标签/属性/协议白名单）
             if (!super.isSafeAttribute(tagName, el, attr)) {
                 return false;

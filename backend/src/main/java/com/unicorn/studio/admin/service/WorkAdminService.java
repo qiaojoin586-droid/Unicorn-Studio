@@ -102,7 +102,12 @@ public class WorkAdminService {
     public void update(Long id, WorkForm form) {
         Work work = getOrThrow(id);
         if (form.slug() != null && !form.slug().isBlank() && !form.slug().trim().equals(work.getSlug())) {
-            work.setSlug(form.slug().trim());
+            String newSlug = form.slug().trim();
+            // 与 create 对齐的唯一性校验，避免撞唯一索引落 500
+            if (workMapper.findBySlug(newSlug).isPresent()) {
+                throw BusinessException.conflict("slug 已存在");
+            }
+            work.setSlug(newSlug);
         }
         if (form.title() != null) {
             work.setTitle(form.title());
@@ -154,8 +159,10 @@ public class WorkAdminService {
         }
         List<Work> all = workMapper.selectList(new LambdaQueryWrapper<>());
         Map<Long, Work> byId = new LinkedHashMap<>();
+        Map<Long, Integer> oldOrders = new LinkedHashMap<>();
         for (Work w : all) {
             byId.put(w.getId(), w);
+            oldOrders.put(w.getId(), w.getSortOrder());
         }
         int order = 0;
         for (Long id : ids) {
@@ -167,8 +174,11 @@ public class WorkAdminService {
         for (Work w : byId.values()) {
             w.setSortOrder(order++);
         }
+        // 仅更新 sortOrder 实际变化的行，避免全表无条件 UPDATE
         for (Work w : all) {
-            workMapper.updateById(w);
+            if (!java.util.Objects.equals(oldOrders.get(w.getId()), w.getSortOrder())) {
+                workMapper.updateById(w);
+            }
         }
     }
 

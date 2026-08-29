@@ -17,6 +17,13 @@ public interface SysRolePermissionMapper {
     @Select("SELECT role_id AS roleId, permission_id AS permissionId FROM sys_role_permission WHERE role_id = #{roleId}")
     List<SysRolePermission> findByIdRoleId(Long roleId);
 
+    /** 批量按角色查关联（角色列表避免 N+1） */
+    @Select({"<script>",
+            "SELECT role_id AS roleId, permission_id AS permissionId FROM sys_role_permission WHERE role_id IN",
+            "<foreach collection='roleIds' item='id' open='(' separator=',' close=')'>#{id}</foreach>",
+            "</script>"})
+    List<SysRolePermission> findByRoleIds(@org.apache.ibatis.annotations.Param("roleIds") List<Long> roleIds);
+
     @Insert("INSERT INTO sys_role_permission(role_id, permission_id) VALUES(#{roleId}, #{permissionId})")
     int insert(SysRolePermission row);
 

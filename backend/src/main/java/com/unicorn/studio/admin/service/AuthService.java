@@ -59,9 +59,9 @@ public class AuthService {
             throw new BusinessException(HttpStatus.UNAUTHORIZED, "用户名或密码错误");
         }
 
-        loginLockService.onSuccess(user);
+        // onSuccess 内部为全列 updateById，先写入 lastLoginAt 可省一次重复 UPDATE
         user.setLastLoginAt(LocalDateTime.now());
-        userMapper.updateById(user);
+        loginLockService.onSuccess(user);
         return tokenPair(user);
     }
 

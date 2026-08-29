@@ -4,7 +4,9 @@ import com.unicorn.studio.admin.service.CommentAdminService;
 import com.unicorn.studio.common.PageResult;
 import com.unicorn.studio.common.audit.AuditLog;
 import com.unicorn.studio.model.ApiResponse;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -28,7 +30,7 @@ public class CommentAdminController {
     public record ReplyRequest(@NotBlank(message = "回复内容不能为空") String content) {
     }
 
-    public record BatchRequest(@NotBlank(message = "ids 不能为空") List<Long> ids,
+    public record BatchRequest(@NotEmpty(message = "ids 不能为空") List<Long> ids,
                                @NotBlank(message = "操作不能为空") String action) {
     }
 
@@ -46,7 +48,7 @@ public class CommentAdminController {
     @PatchMapping("/{id}/status")
     @PreAuthorize("hasAuthority('comment:audit')")
     @AuditLog(module = "评论", action = "审核评论")
-    public ApiResponse<Void> changeStatus(@PathVariable Long id, @RequestBody StatusRequest request) {
+    public ApiResponse<Void> changeStatus(@PathVariable Long id, @Valid @RequestBody StatusRequest request) {
         commentService.changeStatus(id, request.status());
         return ApiResponse.ok();
     }
@@ -54,14 +56,14 @@ public class CommentAdminController {
     @PostMapping("/{id}/reply")
     @PreAuthorize("hasAuthority('comment:reply')")
     @AuditLog(module = "评论", action = "回复评论")
-    public ApiResponse<Map<String, Object>> reply(@PathVariable Long id, @RequestBody ReplyRequest request) {
+    public ApiResponse<Map<String, Object>> reply(@PathVariable Long id, @Valid @RequestBody ReplyRequest request) {
         return ApiResponse.ok(Map.of("id", commentService.reply(id, request.content()).getId()));
     }
 
     @PatchMapping("/batch")
     @PreAuthorize("hasAuthority('comment:audit')")
     @AuditLog(module = "评论", action = "批量操作")
-    public ApiResponse<Map<String, Object>> batch(@RequestBody BatchRequest request) {
+    public ApiResponse<Map<String, Object>> batch(@Valid @RequestBody BatchRequest request) {
         return ApiResponse.ok(commentService.batch(request.ids(), request.action()));
     }
 

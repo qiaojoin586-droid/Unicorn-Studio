@@ -43,14 +43,23 @@ public class OperationLogController {
             wrapper.eq(SysOperationLog::getStatus, status);
         }
         if (from != null && !from.isBlank()) {
-            wrapper.ge(SysOperationLog::getCreatedAt, LocalDate.parse(from).atStartOfDay());
+            wrapper.ge(SysOperationLog::getCreatedAt, parseDate(from).atStartOfDay());
         }
         if (to != null && !to.isBlank()) {
-            wrapper.lt(SysOperationLog::getCreatedAt, LocalDate.parse(to).plusDays(1).atStartOfDay());
+            wrapper.lt(SysOperationLog::getCreatedAt, parseDate(to).plusDays(1).atStartOfDay());
         }
         wrapper.orderByDesc(SysOperationLog::getId);
         // @RequestParam page 为 1-based（defaultValue = "1"），MP Page 亦为 1-based
-        Page<SysOperationLog> logs = logMapper.selectPage(new Page<>(page, size), wrapper);
+        Page<SysOperationLog> logs = logMapper.selectPage(new Page<>(Math.max(1, page), size), wrapper);
         return ApiResponse.ok(PageResult.of(logs));
+    }
+
+    /** 解析 yyyy-MM-dd 查询参数，非法格式转 400（避免 DateTimeParseException 落到 500）。 */
+    private static LocalDate parseDate(String value) {
+        try {
+            return LocalDate.parse(value.trim());
+        } catch (java.time.format.DateTimeParseException e) {
+            throw com.unicorn.studio.common.BusinessException.badRequest("日期格式应为 yyyy-MM-dd: " + value);
+        }
     }
 }

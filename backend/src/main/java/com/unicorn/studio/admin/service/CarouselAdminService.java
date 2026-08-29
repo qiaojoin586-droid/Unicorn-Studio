@@ -30,6 +30,9 @@ public class CarouselAdminService {
 
     @Transactional
     public Carousel create(CarouselForm form) {
+        if (form.imageUrl() == null || form.imageUrl().isBlank()) {
+            throw BusinessException.badRequest("图片地址不能为空");
+        }
         Carousel carousel = Carousel.builder()
                 .imageUrl(form.imageUrl())
                 .title(form.title())
