@@ -9,6 +9,7 @@
 
     <AppFooter />
     <AiAssistant />
+    <MouseTrail />
   </div>
 </template>
 
@@ -16,4 +17,5 @@
 import AppHeader from '@/components/AppHeader.vue'
 import AppFooter from '@/components/AppFooter.vue'
 import AiAssistant from '@/components/AiAssistant.vue'
+import MouseTrail from '@/components/MouseTrail.vue'
 </script>
