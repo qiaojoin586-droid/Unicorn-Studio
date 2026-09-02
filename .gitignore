@@ -4,11 +4,13 @@ logs/
 
 # 构建产物
 backend/target/
+admin/dist/
 frontend/frontend/
 frontend/assets/
 frontend/dist/
 frontend/release/
 node_modules/
+*.tsbuildinfo
 
 # 数据文件与本地配置
 backend/data/
@@ -18,3 +20,7 @@ data/
 # 系统
 .DS_Store
 Thumbs.db
+
+# IDE 配置（本地个人配置，不入库）
+.idea/
+.vscode/
