@@ -23,6 +23,7 @@ public class AuditMetaObjectHandler implements MetaObjectHandler {
         this.strictInsertFill(metaObject, "visitedAt", LocalDateTime.class, now);
     }
 
+
     @Override
     public void updateFill(MetaObject metaObject) {
         if (metaObject.hasSetter("updatedAt")) {

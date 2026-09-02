@@ -29,7 +29,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 审计切面：@AuditLog 标注的写接口执行后异步落库。
+ * 审计切面：@AuditLog 标注的写接口执行后异步落库 + 同步写管理端审计文件。
  * 参数 JSON 序列化后脱敏（password/token/refreshToken → "***"）。
  * 注意：SecurityContext/RequestContext 为 ThreadLocal，异步线程拿不到，
  * 故在请求线程内构建完整日志实体，@Async 仅负责落库（经代理调用才生效）。
@@ -39,6 +39,8 @@ import java.util.Set;
 public class AuditLogAspect {
 
     private static final Logger log = LoggerFactory.getLogger(AuditLogAspect.class);
+    /** 管理端操作审计专用 logger：写入 logs/admin/yyyy-MM-dd/app-admin.log（additivity=false，见 logback-spring.xml） */
+    private static final Logger AUDIT_FILE_LOGGER = LoggerFactory.getLogger("ADMIN_AUDIT");
     private static final Set<String> SENSITIVE_KEYS = Set.of("password", "token", "refreshToken", "oldPassword", "newPassword");
     private static final String MASKED = "***";
 
@@ -67,8 +69,37 @@ public class AuditLogAspect {
             throw t;
         } finally {
             entry.setDurationMs((int) (System.currentTimeMillis() - start));
+            writeAuditFile(entry);
             // 经代理调用 @Async 才生效（自调用会退化为同步）
             selfProvider.getObject().persist(entry);
+        }
+    }
+
+    /**
+     * 同步写审计文件（与异步落库解耦，任一失败互不影响；内部自捕获保证不影响业务主流程）。
+     * 一行一条、含脱敏参数，随 logback 按天归档到 logs/admin/yyyy-MM-dd/app-admin.log。
+     */
+    private void writeAuditFile(SysOperationLog entry) {
+        try {
+            String line = String.format(
+                    "[AUDIT] module=%s | action=%s | user=%s | %s %s | ip=%s | status=%s | duration=%dms | params=%s%s",
+                    entry.getModule(),
+                    entry.getAction(),
+                    entry.getUsername() == null ? "anonymous" : entry.getUsername(),
+                    entry.getMethod() == null ? "-" : entry.getMethod(),
+                    entry.getPath() == null ? "-" : entry.getPath(),
+                    entry.getIp() == null ? "-" : entry.getIp(),
+                    entry.getStatus(),
+                    entry.getDurationMs(),
+                    entry.getParams() == null ? "-" : entry.getParams(),
+                    entry.getErrorMsg() == null ? "" : " | error=" + entry.getErrorMsg());
+            if ("failed".equals(entry.getStatus())) {
+                AUDIT_FILE_LOGGER.error(line);
+            } else {
+                AUDIT_FILE_LOGGER.info(line);
+            }
+        } catch (Exception e) {
+            log.warn("审计文件日志写入异常: {}", e.getMessage());
         }
     }
 

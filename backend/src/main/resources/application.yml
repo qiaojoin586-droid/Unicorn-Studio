@@ -84,8 +84,9 @@ app:
     stats-per-minute: 60
 
 logging:
-  # 日志文件目录（相对运行目录）：logback-spring.xml 会写入
-  # unicorn-studio.log（全量）与 unicorn-studio-error.log（仅错误）
+  # 日志文件目录（相对运行目录）：logback-spring.xml 按级别/日期分目录写入
+  # info/yyyy-MM-dd/app-info.log（全量）、warn/.../app-warn.log（仅警告）、
+  # error/.../app-error.log（仅错误）、admin/.../app-admin.log（管理端操作审计），各保留 30 天
   file:
     path: ./logs
   level:

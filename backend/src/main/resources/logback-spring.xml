@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  日志配置：
+  日志配置（2026-09-02 重构：按级别/日期分目录）：
   - 控制台：开发调试用
-  - logs/unicorn-studio.log：全量业务日志（含接口访问日志），单文件 10MB，按天滚动，保留 30 天
-  - logs/unicorn-studio-error.log：仅 ERROR 级，排查线上问题优先看它
-  日志目录由 application.yml 的 logging.file.path 控制（默认 ./logs，即运行目录下）
+  - logs/info/yyyy-MM-dd/app-info.log    全量日志（INFO 及以上，含接口访问日志）
+  - logs/warn/yyyy-MM-dd/app-warn.log    仅 WARN 级
+  - logs/error/yyyy-MM-dd/app-error.log  仅 ERROR 级，排查线上问题优先看它
+  - logs/admin/yyyy-MM-dd/app-admin.log  管理端操作审计（@AuditLog 切面专用，与常规日志分离）
+  目录由 application.yml 的 logging.file.path 控制（默认 ./logs，即运行目录下）。
+  按天滚动进各自日期目录，保留 30 天；当天的文件即目录下的 app-*.log 本身。
+  注意：<file> 选项不支持 %d 日期模式（会生成字面量"%d{...}"目录，2026-09-02 实测），
+  故统一采用「无 <file> + TimeBasedRollingPolicy 纯模式」写法；代价是无单文件大小上限
+  （本站日志量级下无影响，历史文件由 maxHistory 滚动清理）。
 -->
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
@@ -12,15 +18,32 @@
 
     <property name="LOG_PATH" value="${LOG_PATH:-${user.dir}/logs}"/>
 
-    <!-- 全量业务日志 -->
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_PATH}/unicorn-studio.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/unicorn-studio.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-            <maxFileSize>10MB</maxFileSize>
+    <!-- 全量业务日志：INFO 及以上 -->
+    <appender name="INFO_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/info/%d{yyyy-MM-dd}/app-info.log</fileNamePattern>
             <maxHistory>30</maxHistory>
-            <totalSizeCap>1GB</totalSizeCap>
         </rollingPolicy>
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{40} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 仅警告日志 -->
+    <appender name="WARN_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/warn/%d{yyyy-MM-dd}/app-warn.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>WARN</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{40} - %msg%n</pattern>
             <charset>UTF-8</charset>
@@ -29,13 +52,25 @@
 
     <!-- 仅错误日志：排查线上问题优先看它 -->
     <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>${LOG_PATH}/unicorn-studio-error.log</file>
-        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/error/%d{yyyy-MM-dd}/app-error.log</fileNamePattern>
+            <maxHistory>30</maxHistory>
+        </rollingPolicy>
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
             <level>ERROR</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
         </filter>
-        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/unicorn-studio-error.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
-            <maxFileSize>10MB</maxFileSize>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{40} - %msg%n</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <!-- 管理端操作审计：AuditLogAspect 专用，独立于常规三级文件 -->
+    <appender name="ADMIN_AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/admin/%d{yyyy-MM-dd}/app-admin.log</fileNamePattern>
             <maxHistory>30</maxHistory>
         </rollingPolicy>
         <encoder>
@@ -44,9 +79,16 @@
         </encoder>
     </appender>
 
+    <!-- 审计专用 logger：additivity=false 避免重复进入 info/error 常规文件；控制台保留便于开发观察 -->
+    <logger name="ADMIN_AUDIT" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="ADMIN_AUDIT_FILE"/>
+    </logger>
+
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="FILE"/>
+        <appender-ref ref="INFO_FILE"/>
+        <appender-ref ref="WARN_FILE"/>
         <appender-ref ref="ERROR_FILE"/>
     </root>
 
