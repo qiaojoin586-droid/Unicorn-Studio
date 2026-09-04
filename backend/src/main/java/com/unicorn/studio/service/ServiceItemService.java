@@ -17,7 +17,7 @@ public class ServiceItemService {
         this.serviceItemMapper = serviceItemMapper;
     }
 
-    /** 公开列表：仅已发布条目，按排序展示。 */
+    /** 主要招收方向公开列表：仅已发布条目，按排序展示。 */
     public List<ServiceItem> findPublished() {
         return serviceItemMapper.findByStatusOrderBySortOrderAscIdAsc(PUBLISHED);
     }

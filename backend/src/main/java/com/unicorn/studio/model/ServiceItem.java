@@ -13,10 +13,10 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDateTime;
 
 /**
- * 能力培养条目（首页"我们培养的能力"区块）。
+ * 主要招收方向条目（首页"主要招收方向"区块）。
  *
  * 字段设计说明（为后续升级预留）：
- * - status：published 展示 / offline 下线；管理后台上线后可扩展 draft 草稿流，无需改表
+ * - status：published 展示 / offline 下线
  * - sort_order：后台可拖拽排序，无需改表
  * - created_at / updated_at：审计与内容更新追踪
  * - icon：当前为 emoji，后续可无缝切换为图标库标识或图片 URL（icon 与 cover_url 可并存）
@@ -42,7 +42,7 @@ public class ServiceItem {
     /** 排序值，越小越靠前 */
     private int sortOrder;
 
-    /** published / offline（预留 draft） */
+    /** published / offline */
     private String status;
 
     @TableField(fill = FieldFill.INSERT)

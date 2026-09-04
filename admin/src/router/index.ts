@@ -79,6 +79,12 @@ export const permissionRoutes: RouteRecordRaw[] = [
         meta: { title: '轮播图管理', icon: 'Monitor', permission: 'carousel:list' },
       },
       {
+        path: 'services',
+        name: 'Services',
+        component: () => import('@/views/services/ServicesView.vue'),
+        meta: { title: '招收方向管理', icon: 'Compass', permission: 'service:list' },
+      },
+      {
         path: 'learning',
         name: 'Learning',
         component: () => import('@/views/learning/LearningListView.vue'),
