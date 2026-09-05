@@ -51,36 +51,80 @@
       </div>
     </section>
 
-    <!-- Shared video background wrapper for Services + Works -->
+    <!-- Shared video background wrapper for Capabilities + Services + Works -->
     <div class="relative overflow-hidden">
-      <!-- Single video background spanning both sections -->
+      <!-- Single video background spanning all three sections -->
       <BackgroundVideo :src="videoUrl" :poster="videoPosterUrl" />
-      <!-- Single overlay spanning both sections -->
+      <!-- Single overlay spanning all three sections -->
       <div class="absolute inset-0 bg-black/30"></div>
 
-      <!-- Services Section -->
-      <section id="services" class="relative">
+      <!-- Capabilities Section -->
+      <section id="capabilities" class="relative" :aria-busy="capabilitiesLoading">
         <div class="relative z-10 max-w-6xl mx-auto px-4 py-20">
           <h2 class="text-3xl font-bold text-center text-white mb-4">我们培养的能力</h2>
-          <p class="text-gray-200 text-center mb-12 max-w-xl mx-auto">全方位数字产品技能，助力业务腾飞</p>
-          <p v-if="servicesLoading" class="text-gray-200 text-center mb-8">正在加载能力介绍...</p>
-          <p v-else-if="servicesError" class="text-gray-200 text-center mb-4">
-            {{ servicesError }}
-            <button
-              type="button"
-              @click="loadServices"
-              class="text-indigo-300 hover:text-indigo-200 font-semibold transition"
-            >
-              点击重试
-            </button>
-          </p>
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <p class="text-gray-200 text-center mb-12 max-w-xl mx-auto">在真实项目中锤炼的核心能力，陪你走得更远</p>
+          <div aria-live="polite" aria-atomic="true">
+            <p v-if="capabilitiesLoading" class="text-gray-200 text-center mb-8">正在加载培养能力...</p>
+            <p v-else-if="capabilitiesError" class="text-gray-200 text-center mb-4">
+              {{ capabilitiesError }}
+              <button
+                type="button"
+                @click="loadCapabilities"
+                class="text-indigo-300 hover:text-indigo-200 font-semibold transition"
+              >
+                点击重试
+              </button>
+            </p>
+            <p v-else-if="!capabilities.length" class="text-gray-300 text-center mb-8">
+              能力培养体系整理中，敬请关注
+            </p>
+          </div>
+          <div
+            v-if="!capabilitiesLoading && !capabilitiesError && capabilities.length"
+            class="grid grid-cols-1 md:grid-cols-3 gap-8"
+          >
+            <ServiceCard
+              v-for="capability in capabilities"
+              :key="capability.id"
+              :title="capability.title"
+              :description="capability.description"
+              :icon="capability.icon || undefined"
+            />
+          </div>
+        </div>
+      </section>
+
+      <!-- Recruitment Directions Section -->
+      <section id="services" class="relative" :aria-busy="servicesLoading">
+        <div class="relative z-10 max-w-6xl mx-auto px-4 py-20">
+          <h2 class="text-3xl font-bold text-center text-white mb-4">主要招收方向</h2>
+          <p class="text-gray-200 text-center mb-12 max-w-xl mx-auto">选择适合你的技术方向，与团队共同探索和成长</p>
+          <div aria-live="polite" aria-atomic="true">
+            <p v-if="servicesLoading" class="text-gray-200 text-center mb-8">正在加载招收方向...</p>
+            <p v-else-if="servicesError" class="text-gray-200 text-center mb-4">
+              {{ servicesError }}
+              <button
+                type="button"
+                @click="loadServices"
+                class="text-indigo-300 hover:text-indigo-200 font-semibold transition"
+              >
+                点击重试
+              </button>
+            </p>
+            <p v-else-if="!services.length" class="text-gray-300 text-center mb-8">
+              招收方向筹备中，敬请关注
+            </p>
+          </div>
+          <div
+            v-if="!servicesLoading && !servicesError && services.length"
+            class="grid grid-cols-1 md:grid-cols-3 gap-8"
+          >
             <ServiceCard
               v-for="service in services"
               :key="service.id"
               :title="service.title"
               :description="service.description"
-              :icon="service.icon"
+              :icon="service.icon || undefined"
             />
           </div>
         </div>
@@ -127,6 +171,7 @@
               :cover-class="work.coverClass"
             />
           </div>
+          <p v-else class="text-gray-400 mb-8">作品整理中，敬请期待～</p>
         </div>
       </section>
     </div>
@@ -142,6 +187,12 @@ import WorkCard from '@/components/WorkCard.vue'
 import videoUrl from '@/image/index.mp4'
 import videoPosterUrl from '@/image/index-poster.jpg'
 import { useApi } from '@/composables/useApi'
+import { usePageMeta, DEFAULT_DESCRIPTION } from '@/composables/usePageMeta'
+
+usePageMeta(() => ({
+  title: '用创意点亮未来',
+  description: DEFAULT_DESCRIPTION,
+}))
 
 const { get } = useApi()
 
@@ -167,7 +218,7 @@ async function loadCarousel() {
   }
 }
 
-// 能力培养：来自数据库 /api/services
+// 主要招收方向：来自数据库 /api/services
 const services = ref([])
 const servicesLoading = ref(true)
 const servicesError = ref('')
@@ -182,7 +233,7 @@ async function loadServices() {
     }
     services.value = result.data?.list || []
   } catch (err) {
-    servicesError.value = err.message || '无法加载能力介绍'
+    servicesError.value = err.message || '无法加载招收方向'
   } finally {
     servicesLoading.value = false
   }
@@ -209,10 +260,32 @@ async function loadFeaturedWorks() {
   }
 }
 
+// 我们培养的能力：来自数据库 /api/capabilities
+const capabilities = ref([])
+const capabilitiesLoading = ref(true)
+const capabilitiesError = ref('')
+
+async function loadCapabilities() {
+  capabilitiesLoading.value = true
+  capabilitiesError.value = ''
+  try {
+    const result = await get('/api/capabilities')
+    if (result.error) {
+      throw new Error(result.message)
+    }
+    capabilities.value = result.data?.list || []
+  } catch (err) {
+    capabilitiesError.value = err.message || '无法加载培养能力'
+  } finally {
+    capabilitiesLoading.value = false
+  }
+}
+
 onMounted(() => {
   loadCarousel()
   loadServices()
   loadFeaturedWorks()
+  loadCapabilities()
 })
 </script>
 
