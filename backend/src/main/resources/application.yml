@@ -3,6 +3,15 @@ server:
   address: 127.0.0.1
 
 spring:
+  # 上传体积上限（V11 支持动态壁纸时补齐）：
+  # 此前未配置 spring.servlet.multipart，Spring Boot 默认 max-file-size=1MB，
+  # 导致超过 1MB 的图片/文档在进入 FileService 之前就被 Servlet 层拒绝
+  # （app.upload.max-size 的 10MB 应用上限实际不可达）。
+  # 这里放开到视频所需上限，分类上限仍由 FileService 二次校验（图片/文档 10MB、视频 50MB）。
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 56MB
   datasource:
     # MySQL 8（本机/部署均用 MySQL；表结构由 backend/sql/mysql-init.sql 初始化，无 ORM 自动建表）
     url: jdbc:mysql://127.0.0.1:3306/unicorn_studio?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
@@ -68,6 +77,8 @@ app:
   upload:
     dir: ${FILE_UPLOAD_DIR:data/uploads}
     max-size: ${FILE_UPLOAD_MAX_SIZE:10485760}
+    # 视频（动态壁纸）独立上限：50MB，与 spring.servlet.multipart.max-file-size 对齐
+    video-max-size: ${FILE_UPLOAD_VIDEO_MAX_SIZE:52428800}
     # 富文本外链图白名单域（空=仅允许本站 /uploads/）
     image-allow-origins: ${IMAGE_ALLOW_ORIGINS:}
   backup:

@@ -23,7 +23,9 @@ public class CarouselController {
 
     @GetMapping
     public ApiResponse<Map<String, List<CarouselVO>>> list() {
-        List<CarouselVO> items = carouselMapper.findByStatusOrderBySortOrderAscIdAsc(1).stream()
+        // V11：轮播图新增 page_key 维度后，首页只取 home 分组。
+        // 既有数据默认 page_key='home'，故对原行为等价。
+        List<CarouselVO> items = carouselMapper.findByPageKeyAndStatusOrderBySortOrderAscIdAsc("home", 1).stream()
                 .map(CarouselVO::from)
                 .toList();
         return ApiResponse.ok(Map.of("list", items));

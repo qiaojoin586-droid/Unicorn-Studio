@@ -1,7 +1,27 @@
 <template>
-  <div class="min-h-screen bg-gradient-to-br from-gray-950 via-indigo-950 to-gray-950">
+  <div class="min-h-screen relative bg-gradient-to-br from-gray-950 via-indigo-950 to-gray-950">
+    <!-- 页面背景：来自后台「轮播图管理 → 页面背景」；未配置或加载失败时保持原有渐变 -->
+    <div v-if="background" class="fixed inset-0 z-0 overflow-hidden">
+      <BackgroundVideo
+        v-if="background.mediaType === 'video'"
+        :src="background.videoUrl"
+        :poster="background.imageUrl"
+      />
+      <img
+        v-else
+        :src="background.imageUrl"
+        alt=""
+        aria-hidden="true"
+        fetchpriority="high"
+        decoding="async"
+        class="absolute inset-0 h-full w-full object-cover"
+      />
+      <!-- 遮罩：保证正文可读性 -->
+      <div class="absolute inset-0 bg-gray-950/60"></div>
+    </div>
+
     <!-- Loading state -->
-    <div v-if="loading" class="flex items-center justify-center min-h-screen -mt-20 pt-20 px-4">
+    <div v-if="loading" class="relative z-10 flex items-center justify-center min-h-screen -mt-20 pt-20 px-4">
       <div class="text-center">
         <div class="text-4xl mb-3 animate-bounce-subtle">🦄</div>
         <p class="text-gray-400">正在加载作品详情...</p>
@@ -9,7 +29,7 @@
     </div>
 
     <!-- Error state -->
-    <div v-else-if="error" class="flex items-center justify-center min-h-screen -mt-20 pt-20 px-4">
+    <div v-else-if="error" class="relative z-10 flex items-center justify-center min-h-screen -mt-20 pt-20 px-4">
       <div class="bg-gray-900/90 border border-white/10 rounded-2xl p-8 max-w-sm w-full text-center backdrop-blur-sm shadow-2xl">
         <div class="text-4xl mb-3">⚠️</div>
         <h2 class="text-2xl font-bold text-white mb-2">加载失败</h2>
@@ -35,7 +55,7 @@
     <!-- Content -->
     <template v-else>
       <!-- Hero -->
-      <section class="relative -mt-20 pt-32 pb-12 overflow-hidden">
+      <section class="relative z-10 -mt-20 pt-32 pb-12 overflow-hidden">
         <div class="absolute inset-0 pointer-events-none">
           <div class="absolute -top-1/3 -right-1/4 w-[500px] h-[500px] bg-indigo-600/15 rounded-full blur-3xl"></div>
           <div class="absolute -bottom-1/3 -left-1/4 w-[400px] h-[400px] bg-purple-600/15 rounded-full blur-3xl"></div>
@@ -94,7 +114,7 @@
       </section>
 
       <!-- Cover + Content -->
-      <section class="relative max-w-4xl mx-auto px-4 pb-20">
+      <section class="relative z-10 max-w-4xl mx-auto px-4 pb-20">
         <div class="bg-white/5 border border-white/10 rounded-2xl p-6 sm:p-10 backdrop-blur-sm">
           <!-- Cover -->
           <div class="relative h-56 sm:h-72 overflow-hidden rounded-xl mb-8" :class="work.coverClass || 'bg-gradient-to-br from-indigo-100 to-purple-100'">
@@ -131,16 +151,27 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useApi } from '@/composables/useApi'
+import { usePageMeta } from '@/composables/usePageMeta'
+import { usePageBackground } from '@/composables/usePageBackground'
+import BackgroundVideo from '@/components/BackgroundVideo.vue'
 
 const route = useRoute()
 const { get } = useApi()
 
+// 页面背景由后台「轮播图管理 → 页面背景」配置，未配置时保持原有渐变样式
+const { background } = usePageBackground('work-detail')
+
 const loading = ref(true)
 const error = ref('')
 const work = ref(null)
+
+usePageMeta(() => ({
+  title: work.value?.title || '作品详情',
+  description: work.value?.summary || '',
+}))
 
 async function loadWork() {
   loading.value = true
@@ -156,8 +187,6 @@ async function loadWork() {
     if (!work.value) {
       throw new Error('作品不存在或已下线')
     }
-
-    document.title = `${work.value.title} - 独角兽工作室`
   } catch (err) {
     error.value = err.message || '无法加载作品详情'
   } finally {
@@ -165,7 +194,9 @@ async function loadWork() {
   }
 }
 
+// 同路由记录间参数变化（/works/a → /works/b）会复用组件实例，需 watch 参数重新加载
 onMounted(loadWork)
+watch(() => route.params.slug, loadWork)
 </script>
 
 <style scoped>

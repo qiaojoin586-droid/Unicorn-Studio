@@ -13,4 +13,15 @@ public interface CarouselMapper extends BaseMapper<Carousel> {
                 .eq(Carousel::getStatus, status)
                 .orderByAsc(Carousel::getSortOrder, Carousel::getId));
     }
+
+    /**
+     * 按绑定页面取启用项（V11）。
+     * 背景类页面（about/work-detail）取返回列表首条即单条生效背景。
+     */
+    default List<Carousel> findByPageKeyAndStatusOrderBySortOrderAscIdAsc(String pageKey, Integer status) {
+        return selectList(new LambdaQueryWrapper<Carousel>()
+                .eq(Carousel::getPageKey, pageKey)
+                .eq(Carousel::getStatus, status)
+                .orderByAsc(Carousel::getSortOrder, Carousel::getId));
+    }
 }

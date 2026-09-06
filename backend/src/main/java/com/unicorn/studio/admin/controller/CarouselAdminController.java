@@ -25,8 +25,9 @@ public class CarouselAdminController {
     @PreAuthorize("hasAuthority('carousel:list')")
     public ApiResponse<PageResult<Carousel>> list(
             @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "10") int size) {
-        return ApiResponse.ok(carouselService.list(page - 1, size));
+            @RequestParam(defaultValue = "10") int size,
+            @RequestParam(required = false) String group) {
+        return ApiResponse.ok(carouselService.list(page - 1, size, group));
     }
 
     @PostMapping

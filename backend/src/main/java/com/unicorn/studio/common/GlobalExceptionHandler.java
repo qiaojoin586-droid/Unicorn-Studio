@@ -41,6 +41,17 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(ApiResponse.error(400, "请求体格式错误"));
     }
 
+    /**
+     * 上传文件超过 Servlet 层上限（由 StandardServletMultipartResolver 在进入 Controller 前抛出）
+     * → 400 统一信封，避免落到兜底 500。
+     */
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleMaxUploadSize(
+            org.springframework.web.multipart.MaxUploadSizeExceededException e) {
+        log.warn("上传文件超过大小限制: {}", e.getMessage());
+        return ResponseEntity.badRequest().body(ApiResponse.error(400, "文件超过大小限制，请压缩后重试"));
+    }
+
     /** 带状态码的业务异常（如作品不存在 404）→ 原状态码 + 统一信封 */
     @ExceptionHandler(ResponseStatusException.class)
     public ResponseEntity<ApiResponse<Void>> handleResponseStatus(ResponseStatusException e) {
