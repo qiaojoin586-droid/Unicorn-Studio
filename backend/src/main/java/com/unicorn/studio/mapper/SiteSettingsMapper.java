@@ -17,4 +17,11 @@ public interface SiteSettingsMapper extends BaseMapper<SiteSettings> {
         return selectList(new LambdaQueryWrapper<SiteSettings>()
                 .orderByAsc(SiteSettings::getGroupName, SiteSettings::getSettingKey));
     }
+
+    /** 按分组读取（V12：专用页面配置，如 about 组）。 */
+    default List<SiteSettings> findByGroupName(String groupName) {
+        return selectList(new LambdaQueryWrapper<SiteSettings>()
+                .eq(SiteSettings::getGroupName, groupName)
+                .orderByAsc(SiteSettings::getSettingKey));
+    }
 }

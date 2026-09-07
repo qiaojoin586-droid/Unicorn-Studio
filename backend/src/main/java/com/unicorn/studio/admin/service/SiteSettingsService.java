@@ -14,8 +14,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 站点设置（实施方案 §3.6 / §5.x）：
- * - 后台：按 group 分组读写（basic/contact/social/seo/notify/content）；
+ * - 后台：按 group 分组读写（basic/contact/social/seo/notify/content/about）；
  * - 前台：GET /api/site/settings 缓存 10 分钟（排除敏感组）。
+ * - V12 起 about 组由「关于我们」专用页面读写（AboutPageService），走同一存储与写入通道。
  */
 @Service
 public class SiteSettingsService {
@@ -44,6 +45,15 @@ public class SiteSettingsService {
                     .put(s.getSettingKey(), s.getSettingValue());
         }
         return groups;
+    }
+
+    /** 后台：读取单个分组的 KV（V12 起供「关于我们」等专用页面配置读取）。 */
+    public Map<String, String> listGroup(String groupName) {
+        Map<String, String> values = new LinkedHashMap<>();
+        for (SiteSettings s : settingsMapper.findByGroupName(groupName)) {
+            values.put(s.getSettingKey(), s.getSettingValue());
+        }
+        return values;
     }
 
     /** 后台批量更新。 */
