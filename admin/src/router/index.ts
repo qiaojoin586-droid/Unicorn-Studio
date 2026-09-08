@@ -97,6 +97,12 @@ export const permissionRoutes: RouteRecordRaw[] = [
         meta: { title: '关于我们', icon: 'InfoFilled', permission: 'about:view' },
       },
       {
+        path: 'footer',
+        name: 'Footer',
+        component: () => import('@/views/footer/FooterView.vue'),
+        meta: { title: '页脚设置', icon: 'Bottom', permission: 'footer:view' },
+      },
+      {
         path: 'learning',
         name: 'Learning',
         component: () => import('@/views/learning/LearningListView.vue'),

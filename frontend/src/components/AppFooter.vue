@@ -3,23 +3,33 @@
     <div class="max-w-6xl mx-auto px-6 py-12">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
         <!-- Brand -->
-        <div>
-          <div class="flex items-center gap-2 text-white text-xl font-bold mb-4">
-            <span class="text-2xl">🦄</span>
-            <span>独角兽工作室</span>
+        <div class="relative">
+          <!-- 左侧装饰粒子动效：后台「页脚设置」开关控制，默认关闭 -->
+          <div v-if="page.showParticles" class="brand-particles" aria-hidden="true">
+            <span v-for="n in 6" :key="n" class="particle" :class="`particle-${n}`"></span>
           </div>
-          <p class="text-gray-400 leading-relaxed text-sm">
-            用技术与创意，打造卓越的数字产品。<br />
-            我们专注于AI智能开发、Agent开发与大模型学术研究。
-          </p>
+
+          <div class="relative flex items-center gap-2 text-white text-xl font-bold mb-4" :aria-label="page.brandName">
+            <span class="text-2xl" aria-hidden="true">🦄</span>
+            <span>{{ page.brandName }}</span>
+          </div>
+          <p class="relative text-gray-400 leading-relaxed text-sm whitespace-pre-line">{{ page.brandIntro }}</p>
         </div>
 
         <!-- Quick Links -->
-        <div>
-          <h4 class="text-white font-semibold mb-4">快速链接</h4>
+        <div v-if="page.links.length">
+          <h4 class="text-white font-semibold mb-4">{{ page.linksTitle }}</h4>
           <ul class="space-y-2 text-sm">
-            <li v-for="link in quickLinks" :key="link.path">
-              <router-link :to="link.path" class="hover:text-indigo-400 transition">
+            <li v-for="(link, idx) in page.links" :key="idx">
+              <!-- 新窗口 / 外部链接用原生 a；站内同窗口保留 SPA 跳转 -->
+              <a
+                v-if="link.newTab || isExternal(link.url)"
+                :href="link.url"
+                :target="link.newTab ? '_blank' : undefined"
+                rel="noopener noreferrer"
+                class="hover:text-indigo-400 transition"
+              >{{ link.label }}</a>
+              <router-link v-else :to="link.url" class="hover:text-indigo-400 transition">
                 {{ link.label }}
               </router-link>
             </li>
@@ -28,56 +38,211 @@
 
         <!-- Social -->
         <div>
-          <h4 class="text-white font-semibold mb-4">关注我们</h4>
-          <div class="flex space-x-4">
+          <h4 class="text-white font-semibold mb-4">{{ page.socialTitle }}</h4>
+          <div v-if="page.socials.length" class="flex space-x-4">
             <a
-              v-for="social in socials"
-              :key="social.name"
+              v-for="(social, idx) in page.socials"
+              :key="idx"
               :href="social.url"
-              :aria-label="social.name"
-              target="_blank"
+              :title="social.title"
+              :aria-label="social.title"
+              :target="isExternal(social.url) ? '_blank' : undefined"
               rel="noopener noreferrer"
               class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-800 hover:bg-indigo-600 text-gray-400 hover:text-white transition-all"
             >
-              <!-- GitHub -->
-              <svg v-if="social.name === 'GitHub'" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-              </svg>
-              <!-- QQ -->
-              <svg v-else-if="social.name === 'QQ'" class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M21.395 15.035a39.548 39.548 0 00-1.453-3.563c-.033-.065-.067-.13-.1-.195l-.014-.028c-.476-.92-1.048-1.812-1.68-2.623.16-.56.256-1.155.256-1.776 0-.862-.172-1.685-.48-2.437-.307-.75-.746-1.42-1.286-1.978A6.035 6.035 0 0014.52 1.38 6.077 6.077 0 0012 1.001c-.882 0-1.72.188-2.478.525a6.035 6.035 0 00-2.118 1.553c-.54.558-.979 1.228-1.286 1.978-.308.752-.48 1.575-.48 2.437 0 .621.096 1.216.256 1.776-.632.811-1.204 1.703-1.68 2.623l-.014.028c-.033.065-.067.13-.1.195a39.548 39.548 0 00-1.453 3.563c-.572 1.564-.95 2.87-.95 3.374 0 .39.164.658.41.813.247.155.588.22.97.22.614 0 1.37-.164 2.07-.41.47-.17.906-.376 1.24-.574.155-.092.29-.184.394-.27a4.872 4.872 0 004.24 2.47 4.872 4.872 0 004.24-2.47c.104.086.24.178.394.27.334.198.77.404 1.24.574.7.246 1.456.41 2.07.41.382 0 .723-.065.97-.22.246-.155.41-.423.41-.813 0-.504-.378-1.81-.95-3.374zM12 2.6c.652 0 1.27.132 1.834.37a4.44 4.44 0 011.557 1.147c.433.448.78.986 1.016 1.57.237.583.363 1.22.363 1.88 0 .466-.066.917-.19 1.344a13.42 13.42 0 00-2.104-1.27 4.89 4.89 0 001.088-2.876c0-.18-.02-.356-.057-.527a4.358 4.358 0 01-1.353 1.28 4.87 4.87 0 00-2.154-.502c-.79 0-1.524.186-2.154.502a4.358 4.358 0 01-1.353-1.28 2.47 2.47 0 00-.057.527c0 1.088.398 2.082 1.088 2.876a13.42 13.42 0 00-2.104 1.27 4.855 4.855 0 01-.19-1.344c0-.66.126-1.297.363-1.88.236-.584.583-1.122 1.016-1.57A4.44 4.44 0 0110.166 2.97 4.474 4.474 0 0112 2.6zm-4.2 9.088c.378-.56.81-1.082 1.288-1.554.39.37.83.686 1.308.932a6.89 6.89 0 00-2.596.622zm8.4 0c-.378-.56-.81-1.082-1.288-1.554-.39.37-.83.686-1.308.932a6.89 6.89 0 012.596.622z"/>
-              </svg>
+              <img v-if="social.iconUrl" :src="social.iconUrl" alt="" class="w-5 h-5 object-contain" />
+              <span v-else class="social-icon" v-html="resolveIconSvg(social.icon)"></span>
             </a>
           </div>
           <p class="mt-4 text-sm text-gray-500">
-            邮箱：1351094759@qq.com
+            {{ page.emailLabel }}{{ page.email }}
           </p>
         </div>
       </div>
 
       <!-- Divider & Copyright -->
       <div class="border-t border-gray-800 mt-10 pt-6 flex flex-col md:flex-row items-center justify-between text-sm text-gray-500">
-        <p>&copy; {{ currentYear }} 独角兽工作室 · 用创意点亮未来</p>
-        <p class="mt-2 md:mt-0">每一个人都有一颗炽热的 ❤️ and You</p>
+        <p>{{ copyrightLeft }}</p>
+        <p class="mt-2 md:mt-0">{{ page.copyrightRight }}</p>
       </div>
     </div>
   </footer>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted, reactive } from 'vue'
+import { useApi } from '@/composables/useApi'
+import { resolveIconSvg } from '@/constants/socialIcons'
+
+const { get } = useApi()
 
 const currentYear = computed(() => new Date().getFullYear())
 
-const quickLinks = [
-  { label: '首页', path: '/' },
-  { label: '作品', path: '/works' },
-  { label: '关于我们', path: '/about' },
-  { label: '学习资料', path: '/learning' },
-]
+// 默认值 = 页脚改造前的原始文案/链接；接口失败或字段缺失时回落，保证页脚永不空白
+const DEFAULTS = {
+  brandName: '独角兽工作室',
+  brandIntro: '用技术与创意，打造卓越的数字产品。\n我们专注于AI智能开发、Agent开发与大模型学术研究。',
+  showParticles: false,
+  linksTitle: '快速链接',
+  links: [
+    { label: '首页', url: '/', newTab: false },
+    { label: '作品', url: '/works', newTab: false },
+    { label: '关于我们', url: '/about', newTab: false },
+    { label: '学习资料', url: '/learning', newTab: false },
+  ],
+  socialTitle: '关注我们',
+  socials: [
+    { icon: 'github', iconUrl: '', url: 'https://github.com', title: 'GitHub' },
+    { icon: 'qq', iconUrl: '', url: 'https://qq.com', title: 'QQ' },
+  ],
+  email: '1351094759@qq.com',
+  emailLabel: '邮箱：',
+  copyrightLeft: '© {year} 独角兽工作室 · 用创意点亮未来',
+  copyrightRight: '每个人都有一颗炽热的 ❤️ and You',
+}
 
-const socials = [
-  { name: 'GitHub', url: 'https://github.com' },
-  { name: 'QQ', url: 'https://qq.com' },
-]
+const page = reactive({
+  brandName: DEFAULTS.brandName,
+  brandIntro: DEFAULTS.brandIntro,
+  showParticles: DEFAULTS.showParticles,
+  linksTitle: DEFAULTS.linksTitle,
+  links: DEFAULTS.links.map((l) => ({ ...l })),
+  socialTitle: DEFAULTS.socialTitle,
+  socials: DEFAULTS.socials.map((s) => ({ ...s })),
+  email: DEFAULTS.email,
+  emailLabel: DEFAULTS.emailLabel,
+  copyrightLeft: DEFAULTS.copyrightLeft,
+  copyrightRight: DEFAULTS.copyrightRight,
+})
+
+// {year} 占位符替换为当前年份，避免版权年份被冻结
+const copyrightLeft = computed(() =>
+  (page.copyrightLeft || '').replace(/\{year\}/g, String(currentYear.value)),
+)
+
+const EXTERNAL_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:/
+
+/** 带 scheme 的绝对地址（http/https/mailto/tel）视为外部链接 */
+function isExternal(url) {
+  return EXTERNAL_RE.test(url || '')
+}
+
+async function loadFooter() {
+  try {
+    const result = await get('/api/footer')
+    if (result?.error) return
+    const data = result?.data
+    if (!data) return
+    page.brandName = data.brandName || DEFAULTS.brandName
+    page.brandIntro = data.brandIntro || DEFAULTS.brandIntro
+    page.showParticles = !!data.showParticles
+    page.linksTitle = data.linksTitle || DEFAULTS.linksTitle
+    page.socialTitle = data.socialTitle || DEFAULTS.socialTitle
+    page.email = data.email || DEFAULTS.email
+    page.emailLabel = data.emailLabel ?? DEFAULTS.emailLabel
+    page.copyrightLeft = data.copyrightLeft || DEFAULTS.copyrightLeft
+    page.copyrightRight = data.copyrightRight || DEFAULTS.copyrightRight
+    // 后端显式返回空数组表示「不展示该区域」，此时不回填默认值
+    page.links = Array.isArray(data.links)
+      ? data.links.map((l) => ({ label: l?.label || '', url: l?.url || '', newTab: !!l?.newTab }))
+      : DEFAULTS.links.map((l) => ({ ...l }))
+    page.socials = Array.isArray(data.socials)
+      ? data.socials.map((s) => ({
+          icon: s?.icon || '',
+          iconUrl: s?.iconUrl || '',
+          url: s?.url || '',
+          title: s?.title || '',
+        }))
+      : DEFAULTS.socials.map((s) => ({ ...s }))
+  } catch {
+    // 静默降级：保持默认文案
+  }
+}
+
+onMounted(loadFooter)
 </script>
+
+<style scoped>
+.social-icon {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+}
+.social-icon :deep(svg) {
+  width: 100%;
+  height: 100%;
+}
+
+/* 左侧装饰粒子动效（后台开关控制） */
+.brand-particles {
+  position: absolute;
+  inset: -12px -24px 0 -24px;
+  overflow: hidden;
+  pointer-events: none;
+}
+.particle {
+  position: absolute;
+  border-radius: 9999px;
+  background: rgba(129, 140, 248, 0.55);
+  animation: footer-particle-float 7s ease-in-out infinite;
+}
+.particle-1 {
+  width: 5px;
+  height: 5px;
+  left: 4%;
+  top: 64%;
+  animation-delay: 0s;
+}
+.particle-2 {
+  width: 3px;
+  height: 3px;
+  left: 18%;
+  top: 22%;
+  animation-delay: 1.1s;
+}
+.particle-3 {
+  width: 4px;
+  height: 4px;
+  left: 32%;
+  top: 78%;
+  animation-delay: 2.2s;
+}
+.particle-4 {
+  width: 3px;
+  height: 3px;
+  left: 48%;
+  top: 40%;
+  animation-delay: 3.1s;
+}
+.particle-5 {
+  width: 6px;
+  height: 6px;
+  left: 62%;
+  top: 70%;
+  animation-delay: 1.7s;
+}
+.particle-6 {
+  width: 3px;
+  height: 3px;
+  left: 74%;
+  top: 26%;
+  animation-delay: 2.7s;
+}
+@keyframes footer-particle-float {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateY(-14px);
+    opacity: 0.85;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .particle {
+    animation: none;
+    opacity: 0.4;
+  }
+}
+</style>
