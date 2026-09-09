@@ -8,6 +8,9 @@ import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.model.SysUser;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Size;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -26,13 +29,20 @@ public class AdminAccountController {
         this.accountService = accountService;
     }
 
-    public record CreateAdminRequest(@NotBlank(message = "用户名不能为空") String username,
-                                     @NotBlank(message = "密码不能为空") @Size(min = 8, message = "密码至少 8 位") String password,
-                                     String nickname,
-                                     @NotBlank(message = "至少分配一个角色") List<Long> roleIds) {
+    public record CreateAdminRequest(
+                                     @NotBlank(message = "用户名不能为空")
+                                     @Size(max = 50, message = "用户名不能超过 50 个字符") String username,
+                                     @NotBlank(message = "密码不能为空")
+                                     @Size(min = 8, max = 72, message = "密码长度应为 8 至 72 个字符") String password,
+                                     @Size(max = 50, message = "昵称不能超过 50 个字符") String nickname,
+                                     @NotEmpty(message = "至少分配一个角色") List<Long> roleIds) {
     }
 
-    public record UpdateAdminRequest(String nickname, Integer status, List<Long> roleIds) {
+    public record UpdateAdminRequest(
+            @Size(max = 50, message = "昵称不能超过 50 个字符") String nickname,
+            @Min(value = 0, message = "管理员状态无效")
+            @Max(value = 1, message = "管理员状态无效") Integer status,
+            @Size(min = 1, message = "至少分配一个角色") List<Long> roleIds) {
     }
 
     public record UpdateProfileRequest(String nickname, String avatar) {
@@ -63,7 +73,7 @@ public class AdminAccountController {
     @PutMapping("/admins/{id}")
     @PreAuthorize("hasAuthority('admin:edit')")
     @AuditLog(module = "管理员", action = "编辑管理员")
-    public ApiResponse<Void> update(@PathVariable Long id, @RequestBody UpdateAdminRequest request) {
+    public ApiResponse<Void> update(@PathVariable Long id, @Valid @RequestBody UpdateAdminRequest request) {
         accountService.update(id, request.nickname(), request.status(), request.roleIds(),
                 SecurityUtils.currentUser());
         return ApiResponse.ok();

@@ -14,7 +14,7 @@
       </div>
 
       <el-table :data="list" v-loading="loading">
-        <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column prop="user.id" label="ID" width="70" />
         <el-table-column label="用户名" min-width="130">
           <template #default="{ row }">{{ row.user.username }}</template>
         </el-table-column>
@@ -23,7 +23,15 @@
         </el-table-column>
         <el-table-column label="角色" min-width="160">
           <template #default="{ row }">
-            <el-tag v-for="name in row.roleNames" :key="name" size="small" class="role-tag">{{ name }}</el-tag>
+            <el-tag
+              v-for="(name, index) in row.roleNames"
+              :key="row.roleCodes[index] || name"
+              :type="row.roleCodes[index] === 'SUPER_ADMIN' ? 'warning' : 'info'"
+              size="small"
+              class="role-tag"
+            >
+              {{ name }}
+            </el-tag>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="80">
@@ -39,7 +47,17 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button size="small" link type="primary" v-permission="'admin:edit'" @click="openDialog(row)">编辑</el-button>
-            <el-button size="small" link type="danger" v-permission="'admin:delete'" @click="remove(row)">删除</el-button>
+            <el-button
+              size="small"
+              link
+              type="danger"
+              v-permission="'admin:delete'"
+              :disabled="isProtectedAdmin(row)"
+              :title="protectedReason(row)"
+              @click="remove(row)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -56,6 +74,14 @@
     </el-card>
 
     <el-dialog v-model="dialogVisible" :title="editingId ? '编辑管理员' : '新增管理员'" width="480px">
+      <el-alert
+        v-if="rolesLocked"
+        :title="lockNotice"
+        type="info"
+        :closable="false"
+        show-icon
+        class="lock-notice"
+      />
       <el-form :model="form" label-width="80px">
         <el-form-item label="用户名" required>
           <el-input v-model="form.username" :disabled="!!editingId" placeholder="登录用户名" />
@@ -67,12 +93,31 @@
           <el-input v-model="form.nickname" />
         </el-form-item>
         <el-form-item label="角色" required>
-          <el-select v-model="form.roleIds" multiple placeholder="分配角色" style="width: 100%">
-            <el-option v-for="r in roles" :key="r.id" :label="r.name" :value="r.id" />
+          <el-select
+            v-model="form.roleIds"
+            multiple
+            placeholder="分配角色"
+            style="width: 100%"
+            :disabled="rolesLocked"
+          >
+            <el-option
+              v-for="r in roles"
+              :key="r.id"
+              :label="r.code === 'SUPER_ADMIN' ? `${r.name}（系统唯一）` : r.name"
+              :value="r.id"
+              :disabled="r.code === 'SUPER_ADMIN' || r.status !== 1"
+            />
           </el-select>
         </el-form-item>
         <el-form-item v-if="editingId" label="状态">
-          <el-switch v-model="form.status" :active-value="1" :inactive-value="0" active-text="启用" inactive-text="禁用" />
+          <el-switch
+            v-model="form.status"
+            :active-value="1"
+            :inactive-value="0"
+            active-text="启用"
+            inactive-text="禁用"
+            :disabled="rolesLocked"
+          />
         </el-form-item>
       </el-form>
       <template #footer>
@@ -84,24 +129,34 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminApi } from '@/api/admin'
 import { roleApi, type RoleItem } from '@/api/role'
 import { useTable } from '@/composables/useTable'
 import { formatDateTime } from '@/utils/format'
+import { useAuthStore } from '@/stores/auth'
 
 const table = useTable((params) => adminApi.list(params))
 const { loading, list, total, query, load, search } = table
 
-const roles = ref<{ id: number; name: string }[]>([])
+const auth = useAuthStore()
+const roles = ref<{ id: number; code: string; name: string; status: number }[]>([])
 const dialogVisible = ref(false)
 const saving = ref(false)
 const editingId = ref<number | null>(null)
+const editingIsSelf = ref(false)
+const editingIsSuperAdmin = ref(false)
 const form = reactive<any>({ username: '', password: '', nickname: '', roleIds: [], status: 1 })
+const rolesLocked = computed(() => editingIsSelf.value || editingIsSuperAdmin.value)
+const lockNotice = computed(() => editingIsSuperAdmin.value
+  ? '唯一超级管理员的角色和状态受保护，仅可修改昵称'
+  : '不能修改当前登录账号的角色或状态')
 
 function openDialog(row?: any) {
-  editingId.value = row?.id ?? null
+  editingId.value = row?.user.id ?? null
+  editingIsSelf.value = row ? row.user.id === auth.user?.id : false
+  editingIsSuperAdmin.value = row?.roleCodes?.includes('SUPER_ADMIN') ?? false
   Object.assign(form, {
     username: row?.user.username || '',
     password: '',
@@ -113,7 +168,17 @@ function openDialog(row?: any) {
 }
 
 function roleCodesToIds(codes: string[]): number[] {
-  return roles.value.filter((r) => codes.includes(r.name)).map((r) => r.id)
+  return roles.value.filter((r) => codes.includes(r.code)).map((r) => r.id)
+}
+
+function isProtectedAdmin(row: any): boolean {
+  return row.user.id === auth.user?.id || row.roleCodes?.includes('SUPER_ADMIN')
+}
+
+function protectedReason(row: any): string {
+  if (row.user.id === auth.user?.id) return '不能删除当前登录账号'
+  if (row.roleCodes?.includes('SUPER_ADMIN')) return '唯一超级管理员不能删除'
+  return ''
 }
 
 async function save() {
@@ -121,14 +186,21 @@ async function save() {
     ElMessage.warning('用户名与密码为必填项')
     return
   }
-  if (!form.roleIds.length) {
+  if (!editingId.value && form.password.length < 8) {
+    ElMessage.warning('初始密码至少 8 位')
+    return
+  }
+  if (!rolesLocked.value && !form.roleIds.length) {
     ElMessage.warning('至少分配一个角色')
     return
   }
   saving.value = true
   try {
     if (editingId.value) {
-      await adminApi.update(editingId.value, { nickname: form.nickname, status: form.status, roleIds: form.roleIds })
+      const payload = rolesLocked.value
+        ? { nickname: form.nickname }
+        : { nickname: form.nickname, status: form.status, roleIds: form.roleIds }
+      await adminApi.update(editingId.value, payload)
     } else {
       await adminApi.create({ username: form.username, password: form.password, nickname: form.nickname, roleIds: form.roleIds })
     }
@@ -149,12 +221,21 @@ async function remove(row: any) {
 
 onMounted(async () => {
   const roleList = await roleApi.list()
-  roles.value = roleList.map((r: RoleItem) => ({ id: r.role.id, name: r.role.name }))
+  roles.value = roleList.map((r: RoleItem) => ({
+    id: r.role.id,
+    code: r.role.code,
+    name: r.role.name,
+    status: r.role.status,
+  }))
   load()
 })
 </script>
 
 <style scoped>
+.lock-notice {
+  margin-bottom: 18px;
+}
+
 .role-tag {
   margin-right: 4px;
 }

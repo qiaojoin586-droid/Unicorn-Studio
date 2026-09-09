@@ -2,14 +2,20 @@
   <div class="page-container">
     <div class="page-header">
       <span class="page-title">角色权限</span>
-      <el-button type="primary" v-permission="'role:create'" @click="openDialog()">
+      <el-button
+        type="primary"
+        v-permission="'role:create'"
+        :disabled="!permissionsReady"
+        :title="permissionsReady ? '' : '权限数据加载中'"
+        @click="openDialog()"
+      >
         <el-icon><Plus /></el-icon>&nbsp;新增角色
       </el-button>
     </div>
 
     <el-card shadow="never">
       <el-table :data="list" v-loading="loading">
-        <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column prop="role.id" label="ID" width="70" />
         <el-table-column label="角色" min-width="150">
           <template #default="{ row }">
             <div class="role-name">{{ row.role.name }}</div>
@@ -25,18 +31,45 @@
           </template>
         </el-table-column>
         <el-table-column label="权限数" width="90">
-          <template #default="{ row }">{{ row.permissionIds.length }}</template>
+          <template #default="{ row }">
+            {{ row.role.code === 'SUPER_ADMIN' ? '全部' : row.permissionIds.length }}
+          </template>
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" link type="primary" v-permission="'role:edit'" @click="openDialog(row)">编辑</el-button>
-            <el-button size="small" link type="danger" v-permission="'role:delete'" @click="remove(row)">删除</el-button>
+            <el-button
+              size="small"
+              link
+              type="primary"
+              v-permission="'role:edit'"
+              :disabled="row.role.builtin === 1 || !permissionsReady"
+              :title="!permissionsReady ? '权限数据加载中' : row.role.builtin === 1 ? '内置角色不可修改' : ''"
+              @click="openDialog(row)"
+            >
+              编辑
+            </el-button>
+            <el-button
+              size="small"
+              link
+              type="danger"
+              v-permission="'role:delete'"
+              :disabled="row.role.builtin === 1"
+              :title="row.role.builtin === 1 ? '内置角色不可删除' : ''"
+              @click="remove(row)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑角色' : '新增角色'" width="560px">
+    <el-dialog
+      v-model="dialogVisible"
+      :title="editingId ? '编辑角色' : '新增角色'"
+      width="560px"
+      @opened="syncPermissionSelection"
+    >
       <el-form :model="form" label-width="80px">
         <el-form-item label="编码" required>
           <el-input v-model="form.code" :disabled="!!editingId" placeholder="如 CONTENT_EDITOR" />
@@ -80,24 +113,25 @@ const { loading, list, load } = table
 
 const permTreeRef = ref()
 const permTreeData = ref<any[]>([])
+const permissionsReady = ref(false)
+const pendingPermissionIds = ref<number[]>([])
 const dialogVisible = ref(false)
 const saving = ref(false)
 const editingId = ref<number | null>(null)
 const form = reactive<any>({ code: '', name: '', description: '' })
 
-async function openDialog(row?: any) {
-  editingId.value = row?.id ?? null
+function openDialog(row?: any) {
+  if (!permissionsReady.value) return
+  editingId.value = row?.role?.id ?? null
   form.code = row?.role.code || ''
   form.name = row?.role.name || ''
   form.description = row?.role.description || ''
+  pendingPermissionIds.value = row?.permissionIds ? [...row.permissionIds] : []
   dialogVisible.value = true
-  // 等树渲染后设置勾选
-  await new Promise((r) => setTimeout(r, 50))
-  if (row) {
-    permTreeRef.value?.setCheckedKeys(row.permissionIds)
-  } else {
-    permTreeRef.value?.setCheckedKeys([])
-  }
+}
+
+function syncPermissionSelection() {
+  permTreeRef.value?.setCheckedKeys(pendingPermissionIds.value)
 }
 
 async function save() {
@@ -105,7 +139,7 @@ async function save() {
     ElMessage.warning('编码与名称为必填项')
     return
   }
-  const permissionIds = [...permTreeRef.value.getCheckedKeys(), ...permTreeRef.value.getHalfCheckedKeys()]
+  const permissionIds = permTreeRef.value?.getCheckedKeys(true) ?? []
   saving.value = true
   try {
     if (editingId.value) {
@@ -129,7 +163,6 @@ async function remove(row: any) {
 }
 
 onMounted(async () => {
-  load()
   const groups = await roleApi.permissions()
   permTreeData.value = Object.entries(groups).map(([module, perms]) => ({
     id: `module-${module}`,
@@ -140,6 +173,8 @@ onMounted(async () => {
       type: p.type,
     })),
   }))
+  permissionsReady.value = true
+  await load()
 })
 </script>
 

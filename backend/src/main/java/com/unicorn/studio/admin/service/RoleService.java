@@ -61,6 +61,9 @@ public class RoleService {
     public SysRole create(String code, String name, String description, List<Long> permissionIds) {
         // 先归一化再做唯一性检查（与入库值一致，防止大小写/空白绕过检查后撞唯一索引）
         String normalizedCode = code.trim().toUpperCase();
+        if (AdminPermissionService.SUPER_ADMIN.equals(normalizedCode)) {
+            throw BusinessException.badRequest("SUPER_ADMIN 是系统保留角色编码");
+        }
         if (roleMapper.findByCode(normalizedCode).isPresent()) {
             throw BusinessException.conflict("角色编码已存在");
         }

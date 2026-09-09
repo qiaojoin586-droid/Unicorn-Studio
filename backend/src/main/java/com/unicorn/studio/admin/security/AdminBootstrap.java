@@ -17,6 +17,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.util.HexFormat;
+import java.util.List;
+import java.util.Objects;
+
+import static com.unicorn.studio.admin.service.AdminPermissionService.SUPER_ADMIN;
 
 /**
  * 超管初始化（实施方案 §5.3，密码不硬编码）：
@@ -50,12 +54,31 @@ public class AdminBootstrap implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        if (userMapper.findByUsername("admin").isPresent()) {
-            return;
-        }
-        SysRole superAdmin = roleMapper.findByCode("SUPER_ADMIN").orElse(null);
+        // 锁住内置角色行，使多实例启动时的“检查 + 创建 + 分配”保持串行。
+        SysRole superAdmin = roleMapper.findByCodeForUpdate(SUPER_ADMIN);
         if (superAdmin == null) {
             log.warn("SUPER_ADMIN 角色不存在（初始化 SQL 未执行？），跳过超管初始化");
+            return;
+        }
+
+        List<SysUserRole> assignments = userRoleMapper.findByRoleId(superAdmin.getId());
+        if (assignments.size() > 1) {
+            throw new IllegalStateException("检测到多个 SUPER_ADMIN 账号，请先清理 sys_user_role 中的重复超管关系");
+        }
+        if (assignments.size() == 1) {
+            SysUser soleSuperAdmin = userMapper.selectById(assignments.getFirst().getUserId());
+            if (soleSuperAdmin == null) {
+                throw new IllegalStateException("SUPER_ADMIN 角色关联了不存在的管理员账号");
+            }
+            ensureEnabled(soleSuperAdmin);
+            return;
+        }
+
+        SysUser existingAdmin = userMapper.findByUsername("admin").orElse(null);
+        if (existingAdmin != null) {
+            ensureEnabled(existingAdmin);
+            userRoleMapper.insert(new SysUserRole(existingAdmin.getId(), superAdmin.getId()));
+            log.info("已将现有 admin 账号设为唯一 SUPER_ADMIN");
             return;
         }
 
@@ -80,6 +103,14 @@ public class AdminBootstrap implements ApplicationRunner {
 
         userRoleMapper.insert(new SysUserRole(admin.getId(), superAdmin.getId()));
         log.info("初始管理员已创建: admin（角色 SUPER_ADMIN，{}密码）", randomPassword ? "随机" : "环境变量");
+    }
+
+    private void ensureEnabled(SysUser user) {
+        if (!Objects.equals(user.getStatus(), 1)) {
+            user.setStatus(1);
+            userMapper.updateById(user);
+            log.warn("唯一 SUPER_ADMIN 账号 {} 曾被禁用，已自动恢复启用", user.getUsername());
+        }
     }
 
     private String randomPassword() {

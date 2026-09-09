@@ -14,14 +14,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 管理员 CRUD（实施方案 §3.6）：
- * - 不能删自己；不能禁用/改自己角色；SUPER_ADMIN 账号不可删；
+ * - 不能删自己；不能禁用/改自己角色；唯一 SUPER_ADMIN 不可删、禁用或改角色；
+ * - 普通管理员可自由组合普通角色，但不能获得 SUPER_ADMIN；
  * - 列表带角色名；编辑角色时重建关联。
  */
 @Service
@@ -112,8 +115,9 @@ public class AdminAccountService {
         if (userMapper.existsByUsername(normalizedUsername)) {
             throw BusinessException.conflict("用户名已存在");
         }
-        if (roleIds == null || roleIds.isEmpty()) {
-            throw BusinessException.badRequest("至少分配一个角色");
+        ValidatedRoles requestedRoles = validateRoles(roleIds, true);
+        if (requestedRoles.includesSuperAdmin()) {
+            throw BusinessException.conflict("系统只允许一个超级管理员，不能分配 SUPER_ADMIN 角色");
         }
         SysUser user = SysUser.builder()
                 .username(normalizedUsername)
@@ -124,19 +128,35 @@ public class AdminAccountService {
                 .failedLoginAttempts(0)
                 .build();
         userMapper.insert(user);
-        replaceRoles(user.getId(), roleIds);
+        replaceRoles(user.getId(), requestedRoles.ids());
         return user;
     }
 
     @Transactional
     public void update(Long id, String nickname, Integer status, List<Long> roleIds, SysUser operator) {
         SysUser user = getOrThrow(id);
+        List<Long> currentRoleIds = roleIdsOf(user);
+        boolean targetIsSuperAdmin = isSuperAdmin(user);
+        ValidatedRoles requestedRoles = roleIds == null ? null : validateRoles(roleIds, true);
+
+        // 唯一超管是系统根账号：任何操作者都不能禁用它，也不能改变它的角色集合。
+        if (targetIsSuperAdmin) {
+            if (status != null && status != 1) {
+                throw BusinessException.badRequest("超级管理员账号不可禁用");
+            }
+            if (requestedRoles != null && !sameRoleIds(requestedRoles.ids(), currentRoleIds)) {
+                throw BusinessException.badRequest("超级管理员角色不可修改");
+            }
+        } else if (requestedRoles != null && requestedRoles.includesSuperAdmin()) {
+            throw BusinessException.conflict("系统只允许一个超级管理员，不能分配 SUPER_ADMIN 角色");
+        }
+
         if (Objects.equals(id, operator.getId())) {
             // 不能改自己角色/禁用自己
-            if (status != null && status == 0) {
+            if (status != null && status != 1) {
                 throw BusinessException.badRequest("不能禁用自己");
             }
-            if (roleIds != null && !roleIds.equals(roleIdsOf(user))) {
+            if (requestedRoles != null && !sameRoleIds(requestedRoles.ids(), currentRoleIds)) {
                 throw BusinessException.badRequest("不能修改自己的角色");
             }
         }
@@ -146,8 +166,8 @@ public class AdminAccountService {
         if (status != null) {
             user.setStatus(status);
         }
-        if (roleIds != null) {
-            replaceRoles(id, roleIds);
+        if (requestedRoles != null) {
+            replaceRoles(id, requestedRoles.ids());
         }
         userMapper.updateById(user);
     }
@@ -229,13 +249,41 @@ public class AdminAccountService {
         return roleMapper.selectBatchIds(roleIds).stream().map(SysRole::getCode).toList();
     }
 
+    private ValidatedRoles validateRoles(List<Long> roleIds, boolean requireAtLeastOne) {
+        if (roleIds == null || (requireAtLeastOne && roleIds.isEmpty())) {
+            throw BusinessException.badRequest("至少分配一个角色");
+        }
+        if (roleIds.stream().anyMatch(Objects::isNull)) {
+            throw BusinessException.badRequest("角色不能为空");
+        }
+
+        List<Long> normalizedIds = List.copyOf(new LinkedHashSet<>(roleIds));
+        if (normalizedIds.isEmpty()) {
+            return new ValidatedRoles(normalizedIds, false);
+        }
+        List<SysRole> roles = roleMapper.selectBatchIds(normalizedIds);
+        Set<Long> existingIds = roles.stream().map(SysRole::getId).collect(java.util.stream.Collectors.toSet());
+        for (Long roleId : normalizedIds) {
+            if (!existingIds.contains(roleId)) {
+                throw BusinessException.badRequest("角色不存在: " + roleId);
+            }
+        }
+        boolean includesSuperAdmin = roles.stream()
+                .anyMatch(role -> AdminPermissionService.SUPER_ADMIN.equals(role.getCode()));
+        return new ValidatedRoles(normalizedIds, includesSuperAdmin);
+    }
+
+    private boolean sameRoleIds(List<Long> left, List<Long> right) {
+        return Set.copyOf(left).equals(Set.copyOf(right));
+    }
+
     private void replaceRoles(Long userId, List<Long> roleIds) {
         userRoleMapper.deleteByIdUserId(userId);
         for (Long roleId : roleIds) {
-            if (roleMapper.selectById(roleId) == null) {
-                throw BusinessException.badRequest("角色不存在: " + roleId);
-            }
             userRoleMapper.insert(new SysUserRole(userId, roleId));
         }
+    }
+
+    private record ValidatedRoles(List<Long> ids, boolean includesSuperAdmin) {
     }
 }
