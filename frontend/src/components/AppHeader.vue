@@ -4,8 +4,8 @@
     :class="scrolled ? 'bg-gray-900/95 shadow-lg backdrop-blur-sm' : 'bg-transparent'"
   >
     <div class="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
-      <router-link to="/" class="text-xl font-bold text-white flex items-center gap-2">
-        <span class="text-2xl">🦄</span>
+      <router-link to="/" class="text-xl font-bold text-white flex items-center gap-2" aria-label="独角兽工作室 首页">
+        <span class="text-2xl" aria-hidden="true">🦄</span>
         <span>独角兽工作室</span>
       </router-link>
 
@@ -31,8 +31,10 @@
       <!-- Mobile menu button -->
       <button
         class="md:hidden text-white p-2"
-        @click="mobileMenuOpen = !mobileMenuOpen"
+        :aria-expanded="mobileMenuOpen"
+        aria-controls="mobile-nav"
         aria-label="切换菜单"
+        @click="mobileMenuOpen = !mobileMenuOpen"
       >
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path
@@ -58,7 +60,7 @@
       leave-from-class="opacity-100 translate-y-0"
       leave-to-class="opacity-0 -translate-y-2"
     >
-      <div v-if="mobileMenuOpen" class="md:hidden bg-gray-900/95 backdrop-blur-sm border-t border-white/10 px-6 py-4 space-y-3">
+      <div v-if="mobileMenuOpen" id="mobile-nav" class="md:hidden bg-gray-900/95 backdrop-blur-sm border-t border-white/10 px-6 py-4 space-y-3">
         <router-link
           v-for="item in navItems"
           :key="item.path"

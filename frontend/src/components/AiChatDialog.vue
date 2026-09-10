@@ -11,7 +11,13 @@
       leave-from-class="opacity-100 translate-y-0 scale-100"
       leave-to-class="opacity-0 translate-y-4 scale-95"
     >
-      <div class="bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col" style="height: 500px; max-height: calc(100vh - 10rem);">
+      <div
+        ref="dialogPanel"
+        role="dialog"
+        aria-label="AI 助手对话"
+        class="bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+        style="height: 500px; max-height: calc(100vh - 10rem);"
+      >
         <!-- Header -->
         <div class="flex items-center justify-between px-5 py-4 border-b border-white/10">
           <div class="flex items-center gap-3">
@@ -29,6 +35,7 @@
               @click="store.clearMessages()"
               class="text-gray-500 hover:text-gray-300 transition p-1"
               title="清空对话"
+              aria-label="清空对话"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -38,6 +45,7 @@
               @click="store.closeChat()"
               class="text-gray-500 hover:text-gray-300 transition p-1"
               title="关闭"
+              aria-label="关闭对话"
             >
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -47,7 +55,11 @@
         </div>
 
         <!-- Messages area -->
-        <div ref="messagesContainer" class="flex-1 overflow-y-auto px-5 py-4 space-y-4 scroll-smooth">
+        <div
+          ref="messagesContainer"
+          class="flex-1 overflow-y-auto px-5 py-4 space-y-4 scroll-smooth"
+          @scroll="onMessagesScroll"
+        >
           <!-- Welcome message -->
           <div v-if="!store.hasMessages && !store.streamingText" class="text-center py-8">
             <div class="text-4xl mb-3">🦄</div>
@@ -60,7 +72,7 @@
           <!-- Message bubbles -->
           <ChatMessage
             v-for="msg in store.messages"
-            :key="msg.timestamp"
+            :key="msg.id"
             :role="msg.role"
             :content="msg.content"
           />
@@ -91,6 +103,18 @@
           </div>
         </div>
 
+        <!-- 停止生成（优化方案 F-11）：流式响应期间可中断，保留已生成部分 -->
+        <div v-if="store.isLoading" class="px-4 pt-2.5 flex justify-center">
+          <button
+            type="button"
+            @click="stopStream"
+            class="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-full px-3 py-1 transition"
+          >
+            <span class="w-2 h-2 rounded-sm bg-current inline-block"></span>
+            停止生成
+          </button>
+        </div>
+
         <!-- Input area -->
         <ChatInput @send="handleSend" :disabled="store.isLoading" />
       </div>
@@ -99,28 +123,58 @@
 </template>
 
 <script setup>
-import { ref, watch, nextTick } from 'vue'
+import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import { useAiChatStore } from '@/stores/aiChat'
 import { useAiChat } from '@/composables/useAiChat'
 import ChatMessage from './ChatMessage.vue'
 import ChatInput from './ChatInput.vue'
 
 const store = useAiChatStore()
-const { streamChat } = useAiChat()
+const { streamChat, stopStream } = useAiChat()
 const messagesContainer = ref(null)
+const dialogPanel = ref(null)
+const stickToBottom = ref(true)
 
 function handleSend(message) {
   streamChat(message)
 }
 
-// Auto-scroll to bottom when new messages arrive
+// 滚动跟随（优化方案 F-12）：仅当用户停留在底部附近时自动滚，上翻阅读不被拽回
+function onMessagesScroll() {
+  const el = messagesContainer.value
+  if (!el) return
+  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 40
+}
+
 watch(
   () => [store.messages.length, store.streamingText],
   async () => {
     await nextTick()
-    if (messagesContainer.value) {
-      messagesContainer.value.scrollTop = messagesContainer.value.scrollHeight
+    const el = messagesContainer.value
+    if (el && stickToBottom.value) el.scrollTop = el.scrollHeight
+  },
+)
+
+// ESC 关闭 + 打开时焦点移入输入框（优化方案 F-16）
+function onKeydown(e) {
+  if (e.key === 'Escape' && store.isOpen) store.closeChat()
+}
+
+watch(
+  () => store.isOpen,
+  (open) => {
+    if (open) {
+      window.addEventListener('keydown', onKeydown)
+      nextTick(() => {
+        dialogPanel.value?.querySelector('input')?.focus()
+      })
+    } else {
+      window.removeEventListener('keydown', onKeydown)
     }
   },
 )
+
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+})
 </script>

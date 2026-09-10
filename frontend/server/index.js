@@ -120,7 +120,11 @@ function proxyToBackend(req, res, pathnameWithSearch) {
   }, (upRes) => {
     res.writeHead(upRes.statusCode, {
       ...upRes.headers,
-      'Cache-Control': 'no-store', // SSE 响应不缓存
+      // 缓存分流（优化方案 F-10）：/api/*（含 SSE）不缓存；/uploads/* 上传图片走协商缓存，
+      // 否则轮播图等每次访问全量重下
+      'Cache-Control': pathnameWithSearch.startsWith('/api/')
+        ? 'no-store'
+        : 'public, max-age=3600',
     })
     upRes.pipe(res) // 关键：流式 pipe，不做任何聚合缓冲
   })

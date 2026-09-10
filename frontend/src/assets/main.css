@@ -6,3 +6,15 @@ html,
 body {
   background-color: #030712;
 }
+
+/* 动效降级（优化方案 F-20）：系统开启"减少动态效果"时，停用全站过渡与关键帧动画 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

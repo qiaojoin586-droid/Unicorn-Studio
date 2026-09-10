@@ -14,8 +14,11 @@
 </template>
 
 <script setup>
+import { defineAsyncComponent } from 'vue'
 import AppHeader from '@/components/AppHeader.vue'
 import AppFooter from '@/components/AppFooter.vue'
-import AiAssistant from '@/components/AiAssistant.vue'
 import MouseTrail from '@/components/MouseTrail.vue'
+
+// AI 助手（头像+对话框）非首屏必需，异步加载减小首屏入口包（优化方案 F-11）
+const AiAssistant = defineAsyncComponent(() => import('@/components/AiAssistant.vue'))
 </script>

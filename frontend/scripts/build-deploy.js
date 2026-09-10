@@ -6,13 +6,15 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
 const frontendDir = path.join(rootDir, 'frontend')
 
-const dirsToCopy = ['server', 'scripts', 'src']
+// 部署包内容（优化方案 F-22/F-17）：
+// - 不拷贝 src/ 源码（构建产物自足，源码不进发布目录）
+// - 不拷贝源 index.html（它会覆盖 vite build 产出的编译版，导致生产页引用 /src/main.js 白屏）
+const dirsToCopy = ['server', 'scripts']
 const filesToCopy = [
   'package.json',
   'vite.config.js',
   'tailwind.config.js',
   'postcss.config.js',
-  'index.html',
   '.env.example',
 ]
 

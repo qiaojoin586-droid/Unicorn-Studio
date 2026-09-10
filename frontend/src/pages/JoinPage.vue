@@ -17,7 +17,7 @@
             在这里我们分享前沿技术、实战项目与设计创意，共同成长、一起探索数字世界的更多可能。
           </p>
           <p class="text-gray-400 leading-relaxed">
-            扫码右侧二维码，即可加入社群与我们直接交流。
+            扫描下方二维码，即可加入社群与我们直接交流。
           </p>
         </div>
 
@@ -27,6 +27,8 @@
             <img
               :src="qrUrl"
               alt="社群二维码"
+              width="990"
+              height="1258"
               class="w-72 h-72 object-contain rounded-lg"
             />
           </div>
@@ -39,7 +41,13 @@
 
 <script setup>
 import BackgroundVideo from '@/components/BackgroundVideo.vue'
+import { usePageMeta } from '@/composables/usePageMeta'
 import homeVideoUrl from '@/image/home.mp4'
 import homeVideoPosterUrl from '@/image/home-poster.jpg'
-import qrUrl from '@/image/comeTest.jpg'
+import qrUrl from '@/image/community-qr.jpg'
+
+usePageMeta(() => ({
+  title: '加入我们',
+  description: '欢迎加入独角兽工作室交流社群，分享前沿技术、实战项目与设计创意。',
+}))
 </script>

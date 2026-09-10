@@ -13,3 +13,9 @@
     </div>
   </div>
 </template>
+
+<script setup>
+import { usePageMeta } from '@/composables/usePageMeta'
+
+usePageMeta({ title: '页面不存在' })
+</script>

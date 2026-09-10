@@ -2,9 +2,11 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
+import { initPvTracking } from './composables/useAnalytics'
 import './assets/main.css'
 
 const app = createApp(App)
 app.use(createPinia())
 app.use(router)
+initPvTracking(router)
 app.mount('#app')

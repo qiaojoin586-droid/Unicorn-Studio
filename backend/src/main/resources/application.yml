@@ -64,9 +64,9 @@ app:
     # 前台 5173 + 后台 5174
     allowed-origins: ${APP_CORS_ORIGINS:http://localhost:5173,http://localhost:5174}
   ai:
-    api-key: ${AI_API_KEY:}
-    api-url: https://api.openai.com/v1/chat/completions
-    model: gpt-3.5-turbo
+    api-key: ${AI_API_KEY:35c207cdcda74081914adb4630fa3648.aUzWrY3hadJxEtnf}
+    api-url: https://open.bigmodel.cn/api/paas/v4/chat/completions
+    model: glm-4.7-flash
   admin:
     # 后台管理 JWT/账号配置；jwt-secret 为空时 JwtService 拒绝启动
     jwt-secret: ${ADMIN_JWT_SECRET:}

@@ -133,9 +133,10 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted } from 'vue'
+import { computed, ref, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useApi } from '@/composables/useApi'
+import { usePageMeta } from '@/composables/usePageMeta'
 
 const route = useRoute()
 const { get } = useApi()
@@ -143,6 +144,11 @@ const { get } = useApi()
 const loading = ref(true)
 const error = ref('')
 const resource = ref(null)
+
+usePageMeta(() => ({
+  title: resource.value?.title || '学习资料详情',
+  description: resource.value?.description || '',
+}))
 
 const tags = computed(() =>
   resource.value?.tags
@@ -172,8 +178,6 @@ async function loadResource() {
     if (!resource.value) {
       throw new Error('学习资料不存在或已下线')
     }
-
-    document.title = `${resource.value.title} - 独角兽工作室`
   } catch (err) {
     error.value = err.message || '无法加载学习资料详情'
   } finally {
@@ -181,7 +185,9 @@ async function loadResource() {
   }
 }
 
+// 同路由记录间参数变化（/learning/1 → /learning/2）会复用组件实例，需 watch 参数重新加载
 onMounted(loadResource)
+watch(() => route.params.id, loadResource)
 </script>
 
 <style scoped>

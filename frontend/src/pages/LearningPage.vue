@@ -6,15 +6,17 @@
       <div class="absolute inset-0 bg-gray-950/50"></div>
     </div>
 
-    <!-- Loading state -->
+    <!-- Loading state：内容区骨架屏（优化方案 F-13），不再全屏遮罩 -->
     <div
       v-if="loading"
-      class="fixed inset-0 z-50 flex items-center justify-center px-4"
+      class="relative z-10 max-w-4xl mx-auto px-4 pt-40 pb-20 space-y-6"
+      aria-busy="true"
+      aria-label="正在加载学习资料"
     >
-      <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
-      <div class="relative bg-gray-900/90 border border-white/10 rounded-2xl p-8 max-w-sm w-full text-center backdrop-blur-sm shadow-2xl">
-        <div class="text-white font-semibold mb-2">正在加载学习资料</div>
-        <p class="text-gray-400 text-sm">请稍候...</p>
+      <div v-for="i in 3" :key="i" class="bg-white/5 border border-white/10 rounded-xl p-6 animate-pulse">
+        <div class="h-6 w-1/3 bg-white/10 rounded mb-3"></div>
+        <div class="h-4 w-3/4 bg-white/10 rounded mb-2"></div>
+        <div class="h-4 w-1/2 bg-white/10 rounded"></div>
       </div>
     </div>
 
@@ -83,8 +85,14 @@
 import { onMounted, ref } from 'vue'
 import BackgroundVideo from '@/components/BackgroundVideo.vue'
 import { useApi } from '@/composables/useApi'
+import { usePageMeta } from '@/composables/usePageMeta'
 import homeVideoUrl from '@/image/home.mp4'
 import homeVideoPosterUrl from '@/image/home-poster.jpg'
+
+usePageMeta(() => ({
+  title: '学习资料',
+  description: '精选教程与手册，助力快速成长。',
+}))
 
 const { get } = useApi()
 

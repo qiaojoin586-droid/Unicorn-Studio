@@ -7,8 +7,9 @@
         :disabled="disabled"
         placeholder="输入你的问题..."
         maxlength="2000"
+        aria-label="输入你的问题"
         class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 disabled:opacity-50 disabled:cursor-not-allowed transition"
-        @keydown.enter.exact.prevent="handleSubmit"
+        @keydown.enter.exact.prevent="onEnter"
       />
       <button
         type="submit"
@@ -20,7 +21,7 @@
         </svg>
       </button>
     </form>
-    <p class="text-gray-600 text-[10px] mt-1.5 text-center">AI 生成内容仅供参考</p>
+    <p class="text-gray-500 text-[10px] mt-1.5 text-center">AI 生成内容仅供参考</p>
   </div>
 </template>
 
@@ -43,5 +44,11 @@ function handleSubmit() {
 
   emit('send', text)
   inputText.value = ''
+}
+
+// 中文输入法选词回车不发送（isComposing/229），避免半截话误发（优化方案 F-05）
+function onEnter(e) {
+  if (e.isComposing || e.keyCode === 229) return
+  handleSubmit()
 }
 </script>

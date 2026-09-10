@@ -60,6 +60,12 @@
 import { onMounted, ref } from 'vue'
 import WorkCard from '@/components/WorkCard.vue'
 import { useApi } from '@/composables/useApi'
+import { usePageMeta } from '@/composables/usePageMeta'
+
+usePageMeta(() => ({
+  title: '我们的作品',
+  description: '竞赛获奖与学术论文，记录每一次突破与成长。',
+}))
 
 const { get } = useApi()
 

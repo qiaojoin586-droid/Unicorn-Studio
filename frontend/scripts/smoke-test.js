@@ -91,6 +91,20 @@ async function run() {
     assert.equal(health.status, 200)
     assert.deepEqual(await health.json(), { ok: true })
 
+    // 静态资源：robots/sitemap 由 public/ 随构建产出；favicon 引用被 Vite 重写为哈希路径，
+    // 从产物 index.html 动态解析后验证（防止再次静默丢失，优化方案 F-01）
+    for (const staticPath of ['/robots.txt', '/sitemap.xml']) {
+      const staticRes = await request(baseUrl, staticPath)
+      assert.equal(staticRes.status, 200, staticPath + ' 应存在（frontend/public/）')
+    }
+
+    const homePage = await request(baseUrl, '/')
+    assert.equal(homePage.status, 200)
+    const iconHref = (await homePage.text()).match(/<link rel="icon"[^>]*href="([^"]+)"/)?.[1]
+    assert.ok(iconHref, 'index.html 应包含 favicon 引用')
+    const iconRes = await request(baseUrl, iconHref)
+    assert.equal(iconRes.status, 200, 'favicon ' + iconHref + ' 应可访问')
+
     const resources = await request(baseUrl, '/api/learning/resources')
     assert.equal(resources.status, 200)
     const resourcesPayload = await resources.json()

@@ -1,11 +1,16 @@
 <template>
   <div
-    class="fixed bottom-8 right-8 z-50 select-none"
-    @mousedown="startDrag"
+    class="fixed bottom-8 right-8 z-50 select-none touch-none"
+    @pointerdown="startDrag"
   >
     <div
       class="relative cursor-pointer"
+      role="button"
+      tabindex="0"
+      aria-label="打开或收起 AI 助手"
       @click.stop="handleClick"
+      @keydown.enter.prevent="handleClick"
+      @keydown.space.prevent="handleClick"
     >
       <!-- Outer glow ring -->
       <div
@@ -111,24 +116,28 @@ function startDrag(e) {
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
       hasMoved = true
       isDragging.value = true
-      target.style.position = 'fixed'
-      target.style.left = (elStartX + dx) + 'px'
-      target.style.top = (elStartY + dy) + 'px'
+      // 边界钳制：始终留在视口内（优化方案 F-19），Pointer Events 统一鼠标/触屏
+      const width = target.offsetWidth
+      const height = target.offsetHeight
+      const left = Math.min(Math.max(8, elStartX + dx), window.innerWidth - width - 8)
+      const top = Math.min(Math.max(8, elStartY + dy), window.innerHeight - height - 8)
+      target.style.left = left + 'px'
+      target.style.top = top + 'px'
       target.style.right = 'auto'
       target.style.bottom = 'auto'
     }
   }
 
   const onUp = () => {
-    document.removeEventListener('mousemove', onMove)
-    document.removeEventListener('mouseup', onUp)
+    document.removeEventListener('pointermove', onMove)
+    document.removeEventListener('pointerup', onUp)
     setTimeout(() => {
       isDragging.value = false
     }, 0)
   }
 
-  document.addEventListener('mousemove', onMove)
-  document.addEventListener('mouseup', onUp)
+  document.addEventListener('pointermove', onMove)
+  document.addEventListener('pointerup', onUp)
 }
 
 // Show tooltip after 3 seconds
