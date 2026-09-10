@@ -113,7 +113,11 @@ public class RetentionService {
 
     /** 读取当前生效的保留策略（含默认值兜底）。 */
     public RetentionConfig loadConfig() {
-        Map<String, String> kv = settingsService.listGroup(GROUP);
+        return loadConfig(settingsService.listGroup(GROUP));
+    }
+
+    /** 基于已加载的 KV 构造配置，供同一请求内已读过 group 的调用方复用，避免二次查库。 */
+    private RetentionConfig loadConfig(Map<String, String> kv) {
         int days = normalizeDays(kv.get(KEY_DAYS));
         boolean enabled = parseBoolean(kv.get(KEY_ENABLED), true);
         return new RetentionConfig(days, enabled, cron, maxDeletePerRun, new ArrayList<>(ALLOWED_DAYS_ORDERED));
@@ -145,7 +149,7 @@ public class RetentionService {
                     parseLong(kv.get(KEY_LAST_RUN_DELETED)),
                     0, false, false, 0, 0L);
         }
-        return new RetentionStatus(loadConfig(), lastRun, nextRunAt(), parseDateTime(kv.get(KEY_SQL_LAST_RESET)));
+        return new RetentionStatus(loadConfig(kv), lastRun, nextRunAt(), parseDateTime(kv.get(KEY_SQL_LAST_RESET)));
     }
 
     /** 下次定时执行时间（cron 非法时返回 null，不影响页面渲染）。 */
