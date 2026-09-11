@@ -163,6 +163,12 @@ export const permissionRoutes: RouteRecordRaw[] = [
         meta: { title: '数据备份', icon: 'FolderOpened', permission: 'system:backup' },
       },
       {
+        path: 'retention',
+        name: 'Retention',
+        component: () => import('@/views/settings/RetentionView.vue'),
+        meta: { title: '数据保留', icon: 'Delete', permission: 'retention:view' },
+      },
+      {
         path: 'logs',
         name: 'Logs',
         component: () => import('@/views/logs/LogsView.vue'),

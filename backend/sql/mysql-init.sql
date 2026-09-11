@@ -7,7 +7,8 @@ SET NAMES utf8mb4;
 CREATE DATABASE IF NOT EXISTS unicorn_studio DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE unicorn_studio;
 SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS work, news, carousel, learning_resources, service_item, public_user, `comment`,
+DROP TABLE IF EXISTS work, news, carousel, learning_resources, service_item, capability_item,
+  public_user, `comment`,
   message, visit_log, stats_daily, sys_user, sys_role, sys_permission, sys_user_role,
   sys_role_permission, site_settings, upload_file, sys_operation_log, backup_record;
 SET FOREIGN_KEY_CHECKS = 1;
@@ -70,9 +71,14 @@ CREATE TABLE carousel (
   link_url   VARCHAR(255),
   sort_order INT NOT NULL DEFAULT 0,
   status     INTEGER NOT NULL DEFAULT 1 COMMENT '1启用 0停用',
+  -- V11：页面背景接入轮播图管理。image_url 兼具「静态壁纸」与「视频封面 poster」两种角色
+  page_key   VARCHAR(32) NOT NULL DEFAULT 'home'  COMMENT '绑定页面：home/about/work-detail',
+  media_type VARCHAR(16) NOT NULL DEFAULT 'image' COMMENT 'image=静态壁纸 / video=动态壁纸',
+  video_url  VARCHAR(255) NULL                     COMMENT '动态壁纸视频地址，仅 media_type=video 时必填',
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE INDEX idx_carousel_page_status_sort ON carousel (page_key, status, sort_order);
 
 -- 学习资源升级（升级方案 3.4：补分类/封面/排序/状态；沿用既有复数表名）
 -- 后台管理模块（V8）：补 tags/attachment_url；分类为 learning_category 字典表，资源存分类名
@@ -102,14 +108,26 @@ CREATE TABLE learning_category (
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- 能力培养条目（首页"我们培养的能力"）
+-- 主要招收方向条目（首页"主要招收方向"）
 CREATE TABLE service_item (
   id          BIGINT PRIMARY KEY AUTO_INCREMENT,
   title       VARCHAR(100) NOT NULL,
   description VARCHAR(500) NOT NULL,
   icon        VARCHAR(50),
   sort_order  INT NOT NULL DEFAULT 0,
-  status      VARCHAR(20) NOT NULL DEFAULT 'published' COMMENT 'published/offline/draft',
+  status      VARCHAR(20) NOT NULL DEFAULT 'published' COMMENT 'published/offline',
+  created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 我们培养的能力条目（首页"我们培养的能力"）
+CREATE TABLE capability_item (
+  id          BIGINT PRIMARY KEY AUTO_INCREMENT,
+  title       VARCHAR(100) NOT NULL,
+  description VARCHAR(500) NOT NULL,
+  icon        VARCHAR(50),
+  sort_order  INT NOT NULL DEFAULT 0,
+  status      VARCHAR(20) NOT NULL DEFAULT 'published' COMMENT 'published/offline',
   created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -300,7 +318,7 @@ CREATE TABLE stats_daily (
 
 -- ==== V5: 种子 RBAC ====
 -- ============================================================
--- V5 种子：权限码（39 个）+ 内置角色 + 角色-权限映射
+-- V5 种子：权限码（43 个）+ 内置角色 + 角色-权限映射
 -- 超管账号不在此创建：由 AdminBootstrap 启动任务按环境变量创建（见实施方案 §5.3）
 -- ============================================================
 
@@ -321,6 +339,10 @@ INSERT INTO sys_permission (code, name, module, type, sort_order) VALUES
 ('carousel:create', '新增轮播图', '轮播图', 'BUTTON', 41),
 ('carousel:edit',   '编辑轮播图', '轮播图', 'BUTTON', 42),
 ('carousel:delete', '删除轮播图', '轮播图', 'BUTTON', 43),
+('service:list',    '招收方向列表', '主要招收方向', 'MENU', 44),
+('service:create',  '新增招收方向', '主要招收方向', 'BUTTON', 45),
+('service:edit',    '编辑招收方向', '主要招收方向', 'BUTTON', 46),
+('service:delete',  '删除招收方向', '主要招收方向', 'BUTTON', 47),
 ('comment:list',    '评论列表',   '评论',   'MENU', 50),
 ('comment:audit',   '审核评论',   '评论',   'BUTTON', 51),
 ('comment:reply',   '回复评论',   '评论',   'BUTTON', 52),
@@ -349,7 +371,7 @@ INSERT INTO sys_permission (code, name, module, type, sort_order) VALUES
 -- 2. 内置角色（builtin=1 不可删改）
 INSERT INTO sys_role (code, name, description, builtin) VALUES
 ('SUPER_ADMIN', '超级管理员', '全部权限（代码级绕过，见实施方案 §5.1）', 1),
-('EDITOR',      '内容小编',   '仪表盘 + 作品/新闻/轮播管理', 1),
+('EDITOR',      '内容小编',   '仪表盘 + 作品/新闻/轮播/招收方向/培养能力管理', 1),
 ('OPERATOR',    '客服运营',   '仪表盘 + 评论/留言/用户管理', 1),
 ('AUDITOR',     '审计员',     '只读监督', 0);
 
@@ -359,7 +381,8 @@ SELECT r.id, p.id FROM sys_role r, sys_permission p
 WHERE r.code = 'EDITOR' AND p.code IN (
   'dashboard:view','work:list','work:create','work:edit','work:delete','work:publish',
   'news:list','news:create','news:edit','news:delete','news:publish',
-  'carousel:list','carousel:create','carousel:edit','carousel:delete','file:list','file:upload'
+  'carousel:list','carousel:create','carousel:edit','carousel:delete',
+  'service:list','service:create','service:edit','service:delete','file:list','file:upload'
 );
 INSERT INTO sys_role_permission (role_id, permission_id)
 SELECT r.id, p.id FROM sys_role r, sys_permission p
@@ -408,11 +431,17 @@ NULL, TRUE, 3, 'published', 0, '🥇', 'bg-gradient-to-br from-indigo-100 to-vio
 研究成果被 ACM TOSEM 期刊收录，相关方法已应用于工作室的 Agent 开发实践。',
 NULL, FALSE, 4, 'published', 0, '', 'bg-gradient-to-br from-rose-100 to-pink-100', 'paper', '陈一、林二 等', '2026-01', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
--- 2. 能力培养条目（原 data.sql 3 条原样迁移）
+-- 2. 主要招收方向条目（原 data.sql 3 条原样迁移）
 INSERT INTO service_item (title, description, icon, sort_order, status, created_at, updated_at) VALUES
 ('AI智能应用开发', '使用前沿技术栈，构建高性能、响应式的智能化应用。', '🌐', 1, 'published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 ('大模型学术论文研究', '聚焦大语言模型前沿方向，开展学术论文撰写与发表。', '🔬', 2, 'published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
 ('Agent开发', '基于大模型开发智能体，支持自主规划、工具调用与任务落地。', '🤖', 3, 'published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+
+-- 2.1 我们培养的能力条目（首页"我们培养的能力"）
+INSERT INTO capability_item (title, description, icon, sort_order, status, created_at, updated_at) VALUES
+('工程实践能力', '从需求分析到上线部署的完整工程链路训练，形成可复用的开发规范与协作习惯。', '🛠️', 1, 'published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('学术研究能力', '文献调研、实验设计与论文写作的系统训练，具备独立开展前沿课题研究的能力。', '📚', 2, 'published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+('团队协作能力', '通过真实项目与竞赛锤炼沟通、分工与协作能力，在团队中高效推进目标落地。', '🤝', 3, 'published', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
 
 -- 3. 学习资源（原 data.sql 4 条，按升级方案 3.4 补分类/排序/状态；补正文 content 富文本）
 INSERT INTO learning_resources (title, description, content, url, category, sort_order, status, created_at, updated_at) VALUES
@@ -484,3 +513,120 @@ SELECT r.id, p.id FROM sys_role r, sys_permission p
 WHERE r.code = 'EDITOR' AND p.code IN (
   'learning:list','learning:create','learning:edit','learning:delete','learning:publish','learning:category'
 );
+
+-- ==== V10: 我们培养的能力管理 ====
+-- 培养能力管理权限码（页面 /admin/capabilities）
+INSERT INTO sys_permission (code, name, module, type, sort_order) VALUES
+('capability:list',   '培养能力列表', '我们培养的能力', 'MENU', 100),
+('capability:create', '新增培养能力', '我们培养的能力', 'BUTTON', 101),
+('capability:edit',   '编辑培养能力', '我们培养的能力', 'BUTTON', 102),
+('capability:delete', '删除培养能力', '我们培养的能力', 'BUTTON', 103);
+
+-- 内容小编（EDITOR）同步获得培养能力管理权限
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'EDITOR' AND p.code IN (
+  'capability:list','capability:create','capability:edit','capability:delete'
+);
+
+-- ==== V12: 关于我们页面内容管理 ====
+-- 页面内容存 site_settings 的 about 组（单例页面配置，不新建表）；
+-- 默认值 = 改造前页面原始文案，保证「表为空」时前台表现与改造前一致。
+INSERT INTO site_settings (group_name, setting_key, setting_value, description, updated_at) VALUES
+('about', 'about.eyebrow',   'About Us',
+ '关于我们 · 顶部小标签', CURRENT_TIMESTAMP),
+('about', 'about.title',     '关于独角兽工作室',
+ '关于我们 · 主标题', CURRENT_TIMESTAMP),
+('about', 'about.subtitle',  '一群热爱技术与创造力的伙伴，致力于在数字世界中创造价值',
+ '关于我们 · 副标题', CURRENT_TIMESTAMP),
+('about', 'about.content',   '独角兽工作室是一支充满激情的技术团队，专注于为客户提供高质量的数字产品与服务。我们相信，优秀的技术结合出色的设计，能够为用户带来非凡的体验。\n\n自创立以来，我们已为众多企业提供了 Web 开发、移动应用、大模型学术研究等方面的专业服务，赢得了客户的广泛认可与好评。',
+ '关于我们 · 正文，段落间用空行分隔', CURRENT_TIMESTAMP),
+('about', 'about.image_url', '',
+ '关于我们 · 右侧配图（留空则使用站点默认 LOGO）', CURRENT_TIMESTAMP),
+('about', 'about.stats',     '[{"value":"50+","label":"完成项目"},{"value":"30+","label":"合作客户"},{"value":"5+","label":"年行业经验"}]',
+ '关于我们 · 统计指标（JSON 数组）', CURRENT_TIMESTAMP);
+
+-- 关于我们管理权限码（页面 /admin/about）
+INSERT INTO sys_permission (code, name, module, type, sort_order) VALUES
+('about:view', '关于我们',     '关于我们', 'MENU',   104),
+('about:edit', '编辑关于我们', '关于我们', 'BUTTON', 105);
+
+-- 内容小编（EDITOR）同步获得关于我们管理权限
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'EDITOR' AND p.code IN ('about:view','about:edit');
+
+-- 内置角色说明同步
+UPDATE sys_role
+SET description = '仪表盘 + 作品/新闻/轮播/招收方向/培养能力/关于我们管理'
+WHERE code = 'EDITOR' AND builtin = 1;
+
+-- ==== V13: 页脚设置管理 ====
+-- 页脚配置存 site_settings 的 footer 组（单例页面配置，不新建表）；
+-- 默认值 = 改造前页脚的原始文案/链接，保证「表为空」时前台表现与改造前一致。
+-- copyright_left 中的 {year} 由前台替换为当前年份（避免版权年份被冻结）。
+INSERT INTO site_settings (group_name, setting_key, setting_value, description, updated_at) VALUES
+('footer', 'footer.brand_name',     '独角兽工作室',
+ '页脚 · 工作室名称', CURRENT_TIMESTAMP),
+('footer', 'footer.brand_intro',    '用技术与创意，打造卓越的数字产品。\n我们专注于AI智能开发、Agent开发与大模型学术研究。',
+ '页脚 · 工作室简介（\n 换行）', CURRENT_TIMESTAMP),
+('footer', 'footer.show_particles', 'false',
+ '页脚 · 是否显示左侧装饰粒子动效（true/false）', CURRENT_TIMESTAMP),
+('footer', 'footer.links_title',    '快速链接',
+ '页脚 · 快速链接栏目标题', CURRENT_TIMESTAMP),
+('footer', 'footer.links',          '[{"label":"首页","url":"/","newTab":false},{"label":"作品","url":"/works","newTab":false},{"label":"关于我们","url":"/about","newTab":false},{"label":"学习资料","url":"/learning","newTab":false}]',
+ '页脚 · 快速链接（JSON 数组：label/url/newTab）', CURRENT_TIMESTAMP),
+('footer', 'footer.social_title',   '关注我们',
+ '页脚 · 关注我们栏目标题', CURRENT_TIMESTAMP),
+('footer', 'footer.socials',        '[{"icon":"github","iconUrl":"","url":"https://github.com","title":"GitHub"},{"icon":"qq","iconUrl":"","url":"https://qq.com","title":"QQ"}]',
+ '页脚 · 社交图标（JSON 数组：icon/iconUrl/url/title）', CURRENT_TIMESTAMP),
+('footer', 'footer.email',          '1351094759@qq.com',
+ '页脚 · 邮箱地址', CURRENT_TIMESTAMP),
+('footer', 'footer.email_label',    '邮箱：',
+ '页脚 · 邮箱前缀标签文字', CURRENT_TIMESTAMP),
+('footer', 'footer.copyright_left', '© {year} 独角兽工作室 · 用创意点亮未来',
+ '页脚 · 版权栏左侧文字（{year} 自动替换为当前年份）', CURRENT_TIMESTAMP),
+('footer', 'footer.copyright_right', '每个人都有一颗炽热的 ❤️ and You',
+ '页脚 · 版权栏右侧文字', CURRENT_TIMESTAMP);
+
+-- 页脚设置权限码（页面 /admin/footer）
+INSERT INTO sys_permission (code, name, module, type, sort_order) VALUES
+('footer:view', '页脚设置',     '页脚设置', 'MENU',   106),
+('footer:edit', '编辑页脚设置', '页脚设置', 'BUTTON', 107);
+
+-- 内容小编（EDITOR）同步获得页脚设置权限
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'EDITOR' AND p.code IN ('footer:view','footer:edit');
+
+-- 内置角色说明同步
+UPDATE sys_role
+SET description = '仪表盘 + 作品/新闻/轮播/招收方向/培养能力/关于我们/页脚管理'
+WHERE code = 'EDITOR' AND builtin = 1;
+
+-- ==== V14: 数据保留策略（审计日志 / SQL 监控） ====
+-- 审计日志（sys_operation_log）与 SQL 监控（Druid 内存统计）仅保留最近 N 天；
+-- N 存 site_settings 的 retention 组（默认 7，可选 7/15/30/90），后台「数据保留」页（/admin/retention）可改，
+-- 每次清理都实时读取，改后即时生效（无需重启）。执行周期由 app.retention.cron 决定（默认每日 03:30）。
+-- sql_monitor_last_reset / last_run_* 为系统运行时写入的观测键，初值留空，请勿手工修改。
+INSERT INTO site_settings (group_name, setting_key, setting_value, description, updated_at) VALUES
+('retention', 'retention.days',    '7',
+ '数据保留 · 审计日志/SQL监控保留天数（可选 7/15/30/90）', CURRENT_TIMESTAMP),
+('retention', 'retention.enabled', 'true',
+ '数据保留 · 是否启用定时自动清理（true/false）', CURRENT_TIMESTAMP),
+('retention', 'retention.sql_monitor_last_reset', '',
+ '数据保留 · 上次 SQL 监控统计重置时间（系统写入，勿手改）', CURRENT_TIMESTAMP),
+('retention', 'retention.last_run_at', '',
+ '数据保留 · 上次清理执行时间（系统写入，勿手改）', CURRENT_TIMESTAMP),
+('retention', 'retention.last_run_trigger', '',
+ '数据保留 · 上次清理触发方式（scheduled/manual，系统写入）', CURRENT_TIMESTAMP),
+('retention', 'retention.last_run_deleted', '',
+ '数据保留 · 上次清理删除的审计日志条数（系统写入）', CURRENT_TIMESTAMP);
+
+-- 数据保留权限码（页面 /admin/retention）
+INSERT INTO sys_permission (code, name, module, type, sort_order) VALUES
+('retention:view', '数据保留',     '数据保留', 'MENU',   108),
+('retention:edit', '编辑保留策略', '数据保留', 'BUTTON', 109),
+('retention:run',  '立即执行清理', '数据保留', 'BUTTON', 110);
+
+-- 数据保留属系统级破坏性操作（物理删除），仅 SUPER_ADMIN（代码内加载全部权限）可用，不下发给 EDITOR。

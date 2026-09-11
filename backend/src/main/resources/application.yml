@@ -86,6 +86,14 @@ app:
     retention-count: ${BACKUP_RETENTION_COUNT:7}
     mysqldump-path: ${MYSQLDUMP_PATH:mysqldump}
     cron: ${BACKUP_CRON:0 0 2 * * *}
+  retention:
+    # 数据保留清理（审计日志 / SQL 监控）：保留期限本身存 site_settings(retention.days)，
+    # 后台「数据保留」页面可改为 7/15/30/90 天，改后即时生效（每次执行都重新读取）。
+    # 这里只放部署级参数：执行周期与单轮删除上限。
+    # 默认每日 03:30，错开 01:00 埋点聚合、02:00 备份、03:00 统计聚合等既有定时任务。
+    cron: ${RETENTION_CRON:0 30 3 * * *}
+    # 单轮最多删除行数，防止首次接入时一次性删空历史数据造成长事务/主从延迟
+    max-delete-per-run: ${RETENTION_MAX_DELETE:50000}
   ratelimit:
     login-per-minute: 5
     register-per-hour: 10
@@ -100,6 +108,17 @@ logging:
   # error/.../app-error.log（仅错误）、admin/.../app-admin.log（管理端操作审计），各保留 30 天
   file:
     path: ./logs
+  # 控制台编码（2026-09-11 修复中文乱码）：
+  # Spring Boot 默认把控制台编码设为 UTF-8（LoggingSystemProperties.CONSOLE_CHARSET 默认值），
+  # 而 IDEA Run 控制台 / Windows 中文控制台按系统代码页 CP936(GBK) 解码子进程输出流，
+  # 于是中文日志显示成「闈欐€佽祫婧愪笉瀛樺湪」这类乱码。
+  # 这里把控制台编码对齐为 GBK（由 Spring Boot 发布为 CONSOLE_LOG_CHARSET，
+  # 供 logback-spring.xml 引入的 console-appender.xml 使用）。
+  # 文件日志不受影响：各 file appender 固定 UTF-8。
+  # 若终端本身是 UTF-8（Windows Terminal / Git Bash / IDEA 控制台编码已设为 UTF-8），改回 UTF-8 即可。
+  charset:
+    console: GBK
+    file: UTF-8
   level:
     com.unicorn.studio: INFO
     org.springframework.security: WARN
