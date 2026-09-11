@@ -32,12 +32,15 @@ class RoleServiceTest {
     private SysUserRoleMapper userRoleMapper;
     @Mock
     private SysPermissionMapper permissionMapper;
+    @Mock
+    private AdminPermissionService permissionService;
 
     private RoleService service;
 
     @BeforeEach
     void setUp() {
-        service = new RoleService(roleMapper, rolePermissionMapper, userRoleMapper, permissionMapper);
+        service = new RoleService(roleMapper, rolePermissionMapper, userRoleMapper,
+                permissionMapper, permissionService);
     }
 
     @Test

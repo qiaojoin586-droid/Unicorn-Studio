@@ -65,6 +65,18 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- Redis 服务（V15 缓存方案：StringRedisTemplate + 显式 ObjectMapper） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <!-- Lettuce 连接池（commons-pool2，版本由 Spring Boot BOM 管理） -->
+        <dependency>
+            <groupId>org.apache.commons</groupId>
+            <artifactId>commons-pool2</artifactId>
+        </dependency>
+
+
         <!-- JWT（后台管理 token） -->
         <dependency>
             <groupId>io.jsonwebtoken</groupId>

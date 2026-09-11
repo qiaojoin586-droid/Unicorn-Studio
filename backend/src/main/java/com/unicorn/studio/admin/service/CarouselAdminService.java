@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.common.cache.CacheHelper;
+import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.mapper.CarouselMapper;
 import com.unicorn.studio.model.Carousel;
 import org.springframework.stereotype.Service;
@@ -29,9 +31,11 @@ public class CarouselAdminService {
     private static final Set<String> MEDIA_TYPES = Set.of("image", "video");
 
     private final CarouselMapper carouselMapper;
+    private final CacheHelper cache;
 
-    public CarouselAdminService(CarouselMapper carouselMapper) {
+    public CarouselAdminService(CarouselMapper carouselMapper, CacheHelper cache) {
         this.carouselMapper = carouselMapper;
+        this.cache = cache;
     }
 
     /**
@@ -81,6 +85,7 @@ public class CarouselAdminService {
                 .build();
         carouselMapper.insert(carousel);
         disableSiblingBackgrounds(carousel);
+        evictCarouselCache();
         return carousel;
     }
 
@@ -125,12 +130,22 @@ public class CarouselAdminService {
         }
         carouselMapper.updateById(carousel);
         disableSiblingBackgrounds(carousel);
+        evictCarouselCache();
     }
 
     @Transactional
     public void delete(Long id) {
         getOrThrow(id);
         carouselMapper.deleteById(id);
+        evictCarouselCache();
+    }
+
+    /**
+     * 轮播图写操作统一失效（§5.3 陷阱 4）：carousel 表被 /api/carousel 与 /api/page-background
+     * 共用，且 write 可能改动 pageKey/status/sortOrder，故同时失效首页轮播与两个背景页缓存。
+     */
+    private void evictCarouselCache() {
+        cache.evictAfterCommit(CacheKeys.CAROUSEL_HOME, CacheKeys.bg("about"), CacheKeys.bg("work-detail"));
     }
 
     private Carousel getOrThrow(Long id) {

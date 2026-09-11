@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.common.cache.CacheHelper;
+import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.mapper.CapabilityMapper;
 import com.unicorn.studio.model.Capability;
 import jakarta.validation.constraints.Min;
@@ -25,9 +27,11 @@ public class CapabilityAdminService {
     private static final Set<String> ALLOWED_STATUSES = Set.of(PUBLISHED, OFFLINE);
 
     private final CapabilityMapper capabilityMapper;
+    private final CacheHelper cache;
 
-    public CapabilityAdminService(CapabilityMapper capabilityMapper) {
+    public CapabilityAdminService(CapabilityMapper capabilityMapper, CacheHelper cache) {
         this.capabilityMapper = capabilityMapper;
+        this.cache = cache;
     }
 
     public PageResult<CapabilityView> list(int page, int size) {
@@ -49,6 +53,7 @@ public class CapabilityAdminService {
                 .build();
         validateStatus(item.getStatus());
         capabilityMapper.insert(item);
+        evictListCache();
         return item;
     }
 
@@ -64,12 +69,19 @@ public class CapabilityAdminService {
         item.setStatus(statusFromEnabled(form.enabled(), item.getStatus()));
         validateStatus(item.getStatus());
         capabilityMapper.updateById(item);
+        evictListCache();
     }
 
     @Transactional
     public void delete(Long id) {
         Capability item = getOrThrow(id);
         capabilityMapper.deleteById(item.getId());
+        evictListCache();
+    }
+
+    /** 首页列表缓存失效（§5.3 陷阱 4：CapabilityAdminService.* → cache:home:capabilities）。 */
+    private void evictListCache() {
+        cache.evictAfterCommit(CacheKeys.HOME_CAPABILITIES);
     }
 
     private Capability getOrThrow(Long id) {

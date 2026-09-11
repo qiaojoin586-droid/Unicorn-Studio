@@ -44,6 +44,29 @@ spring:
     properties:
       mail.smtp.auth: true
       mail.smtp.ssl.enable: true
+  data:
+    redis:
+      # ---- 拓扑：单机 与 哨兵 通过环境变量切换，应用代码零改动（Redis 方案 §4.3 A7）----
+      # 单机（开发/小站）：默认走 host+port
+      host: ${REDIS_HOST:39.106.191.149}
+      port: ${REDIS_PORT:6379}
+      # 哨兵（生产推荐）：设置 REDIS_SENTINEL_NODES 后启用，需把上面的 host/port 留空
+      # sentinel:
+      #   master: ${REDIS_SENTINEL_MASTER:mymaster}
+      #   nodes: ${REDIS_SENTINEL_NODES:}
+      #   password: ${REDIS_SENTINEL_PASSWORD:}
+      password: ${REDIS_PASSWORD:hanxi0918}
+      # 本应用独占 db 0（Redis Cluster 只支持 db 0，将来上 Cluster 改按 key 前缀隔离）
+      database: ${REDIS_DATABASE:0}
+      # 必须显式设置超时与连接池（Redis 方案 §4.3 A5）：避免 Redis 不可达时线程长时间挂起
+      timeout: 300ms
+      connect-timeout: 200ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 200ms
 
 # MyBatis Plus
 mybatis-plus:
@@ -101,6 +124,30 @@ app:
     guest-comment-per-hour: 10
     message-per-hour: 5
     stats-per-minute: 60
+    # AI 对话（/api/ai/chat）：每次调用产生真实外部 API 费用，按 IP 限流（§3.4 C6①）
+    ai-per-minute: 5
+  cache:
+    # V15 Redis 缓存方案（docs/Redis缓存设计设计方案.md 附录 A）
+    # enabled=false 必须能一键回到「全部直读 MySQL」—— 灰度上线与故障应急的生命线。
+    enabled: ${CACHE_ENABLED:true}
+    warmup:
+      enabled: ${CACHE_WARMUP_ENABLED:true}
+    ttl:
+      site: 30m
+      content: 30m
+      detail: 60m
+      comment: 5m
+      dashboard: 60s
+      user: 5m
+      permission: 10m
+      null-marker: 60s
+      views-dirty: 7d
+    null-marker:
+      enabled: true
+    jitter-ratio: 0.10
+    circuit-breaker:
+      failure-threshold: 10
+      open-duration: 30s
 
 logging:
   # 日志文件目录（相对运行目录）：logback-spring.xml 按级别/日期分目录写入

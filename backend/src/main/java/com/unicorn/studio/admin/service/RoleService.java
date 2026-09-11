@@ -28,15 +28,18 @@ public class RoleService {
     private final SysRolePermissionMapper rolePermissionMapper;
     private final SysUserRoleMapper userRoleMapper;
     private final SysPermissionMapper permissionMapper;
+    private final AdminPermissionService permissionService;
 
     public RoleService(SysRoleMapper roleMapper,
                        SysRolePermissionMapper rolePermissionMapper,
                        SysUserRoleMapper userRoleMapper,
-                       SysPermissionMapper permissionMapper) {
+                       SysPermissionMapper permissionMapper,
+                       AdminPermissionService permissionService) {
         this.roleMapper = roleMapper;
         this.rolePermissionMapper = rolePermissionMapper;
         this.userRoleMapper = userRoleMapper;
         this.permissionMapper = permissionMapper;
+        this.permissionService = permissionService;
     }
 
     public record RoleItem(SysRole role, List<Long> permissionIds) {
@@ -98,6 +101,8 @@ public class RoleService {
             replacePermissions(id, permissionIds);
         }
         roleMapper.updateById(role);
+        // 角色权限/名称变更 → 该角色下所有用户的权限缓存失效（§6.3 失效表，安全边界 R4）
+        permissionService.evictPermissionCacheForRole(id);
     }
 
     @Transactional
@@ -111,6 +116,8 @@ public class RoleService {
         }
         rolePermissionMapper.deleteByIdRoleId(id);
         roleMapper.deleteById(role.getId());
+        // 删除被引用即拦截，此处失效为兜底（无用户则空操作）
+        permissionService.evictPermissionCacheForRole(id);
     }
 
     /** 权限按模块分组（前端权限勾选树数据源）。 */

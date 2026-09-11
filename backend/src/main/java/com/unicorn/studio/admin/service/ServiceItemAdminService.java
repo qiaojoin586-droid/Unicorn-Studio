@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.common.cache.CacheHelper;
+import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.mapper.ServiceItemMapper;
 import com.unicorn.studio.model.ServiceItem;
 import jakarta.validation.constraints.Min;
@@ -25,9 +27,11 @@ public class ServiceItemAdminService {
     private static final Set<String> ALLOWED_STATUSES = Set.of(PUBLISHED, OFFLINE);
 
     private final ServiceItemMapper serviceItemMapper;
+    private final CacheHelper cache;
 
-    public ServiceItemAdminService(ServiceItemMapper serviceItemMapper) {
+    public ServiceItemAdminService(ServiceItemMapper serviceItemMapper, CacheHelper cache) {
         this.serviceItemMapper = serviceItemMapper;
+        this.cache = cache;
     }
 
     public PageResult<ServiceItemView> list(int page, int size) {
@@ -49,6 +53,7 @@ public class ServiceItemAdminService {
                 .build();
         validateStatus(item.getStatus());
         serviceItemMapper.insert(item);
+        evictListCache();
         return item;
     }
 
@@ -64,12 +69,19 @@ public class ServiceItemAdminService {
         item.setStatus(statusFromEnabled(form.enabled(), item.getStatus()));
         validateStatus(item.getStatus());
         serviceItemMapper.updateById(item);
+        evictListCache();
     }
 
     @Transactional
     public void delete(Long id) {
         ServiceItem item = getOrThrow(id);
         serviceItemMapper.deleteById(item.getId());
+        evictListCache();
+    }
+
+    /** 首页列表缓存失效（§5.3 陷阱 4：ServiceItemAdminService.* → cache:home:services）。 */
+    private void evictListCache() {
+        cache.evictAfterCommit(CacheKeys.HOME_SERVICES);
     }
 
     private ServiceItem getOrThrow(Long id) {

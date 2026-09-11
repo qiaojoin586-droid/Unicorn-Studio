@@ -3,10 +3,13 @@ package com.unicorn.studio.admin.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.common.cache.CacheHelper;
+import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.vo.FooterVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -78,14 +81,26 @@ public class FooterService {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    private final SiteSettingsService settingsService;
+    private static final Duration CACHE_TTL = Duration.ofMinutes(30);
 
-    public FooterService(SiteSettingsService settingsService) {
+    private final SiteSettingsService settingsService;
+    private final CacheHelper cache;
+
+    public FooterService(SiteSettingsService settingsService, CacheHelper cache) {
         this.settingsService = settingsService;
+        this.cache = cache;
     }
 
-    /** 读取页脚配置（含默认值兜底）。 */
+    /** 读取页脚配置（含默认值兜底）；Redis 缓存 30 min（A3）。 */
     public FooterVO load() {
+        return cache.get(CacheKeys.FOOTER_PAGE, FooterVO.class).orElseGet(() -> {
+            FooterVO vo = assemble();
+            cache.set(CacheKeys.FOOTER_PAGE, vo, CACHE_TTL);
+            return vo;
+        });
+    }
+
+    private FooterVO assemble() {
         Map<String, String> kv = settingsService.listGroup(GROUP);
         return new FooterVO(
                 valueOrDefault(kv.get(KEY_BRAND_NAME), DEFAULT_BRAND_NAME),

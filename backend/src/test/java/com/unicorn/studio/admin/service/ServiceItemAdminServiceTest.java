@@ -1,6 +1,7 @@
 package com.unicorn.studio.admin.service;
 
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.common.cache.CacheHelper;
 import com.unicorn.studio.mapper.ServiceItemMapper;
 import com.unicorn.studio.model.ServiceItem;
 import jakarta.validation.ConstraintViolation;
@@ -26,13 +27,15 @@ class ServiceItemAdminServiceTest {
 
     @Mock
     private ServiceItemMapper serviceItemMapper;
+    @Mock
+    private CacheHelper cache;
 
     private ServiceItemAdminService service;
     private Validator validator;
 
     @BeforeEach
     void setUp() {
-        service = new ServiceItemAdminService(serviceItemMapper);
+        service = new ServiceItemAdminService(serviceItemMapper, cache);
         validator = Validation.buildDefaultValidatorFactory().getValidator();
     }
 

@@ -3,10 +3,13 @@ package com.unicorn.studio.admin.service;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.common.cache.CacheHelper;
+import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.vo.AboutPageVO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -52,14 +55,26 @@ public class AboutPageService {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    private final SiteSettingsService settingsService;
+    private static final Duration CACHE_TTL = Duration.ofMinutes(30);
 
-    public AboutPageService(SiteSettingsService settingsService) {
+    private final SiteSettingsService settingsService;
+    private final CacheHelper cache;
+
+    public AboutPageService(SiteSettingsService settingsService, CacheHelper cache) {
         this.settingsService = settingsService;
+        this.cache = cache;
     }
 
-    /** 读取页面内容（含默认值兜底）。 */
+    /** 读取页面内容（含默认值兜底）；Redis 缓存 30 min（A2）。 */
     public AboutPageVO load() {
+        return cache.get(CacheKeys.ABOUT_PAGE, AboutPageVO.class).orElseGet(() -> {
+            AboutPageVO vo = assemble();
+            cache.set(CacheKeys.ABOUT_PAGE, vo, CACHE_TTL);
+            return vo;
+        });
+    }
+
+    private AboutPageVO assemble() {
         Map<String, String> kv = settingsService.listGroup(GROUP);
         return new AboutPageVO(
                 valueOrDefault(kv.get(KEY_EYEBROW), DEFAULT_EYEBROW),

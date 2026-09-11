@@ -22,9 +22,6 @@ public class ServiceItemController {
 
     @GetMapping
     public ApiResponse<Map<String, List<ServiceItemVO>>> list() {
-        List<ServiceItemVO> items = serviceItemService.findPublished().stream()
-                .map(ServiceItemVO::from)
-                .toList();
-        return ApiResponse.ok(Map.of("list", items));
+        return ApiResponse.ok(Map.of("list", serviceItemService.findPublished()));
     }
 }

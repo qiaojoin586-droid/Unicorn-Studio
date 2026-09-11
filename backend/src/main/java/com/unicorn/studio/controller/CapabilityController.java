@@ -22,9 +22,6 @@ public class CapabilityController {
 
     @GetMapping
     public ApiResponse<Map<String, List<CapabilityVO>>> list() {
-        List<CapabilityVO> items = capabilityService.findPublished().stream()
-                .map(CapabilityVO::from)
-                .toList();
-        return ApiResponse.ok(Map.of("list", items));
+        return ApiResponse.ok(Map.of("list", capabilityService.findPublished()));
     }
 }
