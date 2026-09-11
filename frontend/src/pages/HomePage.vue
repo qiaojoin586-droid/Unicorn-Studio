@@ -7,9 +7,9 @@
 
       <!-- Decorative glow blobs -->
       <div class="absolute inset-0 overflow-hidden pointer-events-none">
-        <div class="absolute -top-1/4 -left-1/4 w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-3xl"></div>
-        <div class="absolute -bottom-1/4 -right-1/4 w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-3xl"></div>
-        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-3xl"></div>
+        <div class="absolute -top-1/4 -left-1/4 w-[600px] h-[600px] bg-indigo-600/20 rounded-full blur-3xl transform-gpu"></div>
+        <div class="absolute -bottom-1/4 -right-1/4 w-[500px] h-[500px] bg-purple-600/20 rounded-full blur-3xl transform-gpu"></div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[400px] h-[400px] bg-indigo-500/10 rounded-full blur-3xl transform-gpu"></div>
       </div>
 
       <!-- Subtle grid pattern overlay -->
@@ -52,7 +52,7 @@
     </section>
 
     <!-- Shared video background wrapper for Capabilities + Services + Works -->
-    <div class="relative overflow-hidden">
+    <div id="bg-seam" class="relative overflow-hidden">
       <!-- Single video background spanning all three sections -->
       <BackgroundVideo :src="videoUrl" :poster="videoPosterUrl" />
       <!-- Single overlay spanning all three sections -->
@@ -197,7 +197,7 @@ usePageMeta(() => ({
 const { get } = useApi()
 
 function scrollToNext() {
-  const target = document.getElementById('services')
+  const target = document.getElementById('bg-seam')
   if (target) {
     target.scrollIntoView({ behavior: 'smooth' })
   }

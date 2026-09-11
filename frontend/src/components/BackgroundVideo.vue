@@ -5,12 +5,12 @@
       alt=""
       aria-hidden="true"
       fetchpriority="high"
-      class="absolute inset-0 h-full w-full object-cover"
+      class="absolute inset-0 h-full w-full object-cover transform-gpu"
     />
     <video
       v-if="shouldPlay"
       ref="videoEl"
-      class="absolute inset-0 h-full w-full object-cover"
+      class="absolute inset-0 h-full w-full object-cover transform-gpu"
       autoplay
       muted
       loop
