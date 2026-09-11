@@ -5,7 +5,6 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.mapper.*;
 import com.unicorn.studio.model.Message;
 import com.unicorn.studio.model.PublicUser;
-import com.unicorn.studio.model.StatsDaily;
 import com.unicorn.studio.model.Work;
 import org.springframework.stereotype.Service;
 
@@ -23,7 +22,6 @@ import java.util.Map;
 public class DashboardService {
 
     private final VisitLogMapper visitLogMapper;
-    private final StatsDailyMapper statsDailyMapper;
     private final WorkMapper workMapper;
     private final NewsMapper newsMapper;
     private final CommentMapper commentMapper;
@@ -31,14 +29,12 @@ public class DashboardService {
     private final PublicUserMapper publicUserMapper;
 
     public DashboardService(VisitLogMapper visitLogMapper,
-                            StatsDailyMapper statsDailyMapper,
                             WorkMapper workMapper,
                             NewsMapper newsMapper,
                             CommentMapper commentMapper,
                             MessageMapper messageMapper,
                             PublicUserMapper publicUserMapper) {
         this.visitLogMapper = visitLogMapper;
-        this.statsDailyMapper = statsDailyMapper;
         this.workMapper = workMapper;
         this.newsMapper = newsMapper;
         this.commentMapper = commentMapper;
@@ -71,25 +67,47 @@ public class DashboardService {
                         .ge(PublicUser::getCreatedAt, dayStart)
                         .lt(PublicUser::getCreatedAt, dayStart.plusDays(1)));
 
-        // 近 N 日趋势（stats_daily + 今日实时）
-        Map<LocalDate, StatsDaily> dailyMap = new LinkedHashMap<>();
-        for (StatsDaily d : statsDailyMapper.findByStatDateBetweenOrderByStatDateAsc(
-                windowStart.toLocalDate(), today)) {
-            dailyMap.put(d.getStatDate(), d);
+        // 近 N 日趋势：直读 visit_log 实时聚合（不依赖 stats_daily 定时聚合表）
+        Map<String, long[]> dailyStats = new LinkedHashMap<>();
+        for (Map<String, Object> row : visitLogMapper.findDailyPvUv(windowStart, dayStart.plusDays(1))) {
+            String date = String.valueOf(row.get("date"));
+            long pv = ((Number) row.get("pv")).longValue();
+            long uv = ((Number) row.get("uv")).longValue();
+            dailyStats.put(date, new long[]{pv, uv});
         }
         List<Map<String, Object>> trend = new java.util.ArrayList<>();
         for (int i = window - 1; i >= 0; i--) {
             LocalDate date = today.minusDays(i);
-            StatsDaily d = dailyMap.get(date);
+            long[] s = dailyStats.get(date.toString());
             trend.add(Map.of(
                     "date", date.toString(),
-                    "pv", d == null ? 0 : d.getPv(),
-                    "uv", d == null ? 0 : d.getUv()));
+                    "pv", s == null ? 0L : s[0],
+                    "uv", s == null ? 0L : s[1]));
         }
 
-        // 来源分布：按 referer host 粗分（最近 7 天 visit_log 采样）
+        // 来源分布：直读 visit_log.referer 归类统计（空/站内 → 直接访问；外部 URL → 域名）
+        Map<String, Long> sourceMap = new LinkedHashMap<>();
+        for (Map<String, Object> row : visitLogMapper.findRefererCounts(windowStart, dayStart.plusDays(1))) {
+            Object ref = row.get("referer");
+            long cnt = ((Number) row.get("cnt")).longValue();
+            sourceMap.merge(classifyReferer(ref == null ? null : String.valueOf(ref)), cnt, Long::sum);
+        }
+        List<Map.Entry<String, Long>> sortedSources = sourceMap.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .toList();
         List<Map<String, Object>> sourceDist = new java.util.ArrayList<>();
-        sourceDist.add(Map.of("name", "直接访问", "value", 0));
+        long other = 0;
+        for (int i = 0; i < sortedSources.size(); i++) {
+            Map.Entry<String, Long> e = sortedSources.get(i);
+            if (i < 8) {
+                sourceDist.add(Map.of("name", e.getKey(), "value", e.getValue()));
+            } else {
+                other += e.getValue();
+            }
+        }
+        if (other > 0) {
+            sourceDist.add(Map.of("name", "其他", "value", other));
+        }
 
         // 最近留言 5 条
         List<Message> recentMessages = messageMapper
@@ -112,5 +130,31 @@ public class DashboardService {
         result.put("sourceDist", sourceDist);
         result.put("recentMessages", recentMessages);
         return result;
+    }
+
+    /**
+     * referer 归类：空 / 站内路径（from.fullPath）→ 直接访问；外部 URL → 域名（去 www）；
+     * 解析失败 → 其他。站内导航不算外部流量来源。
+     */
+    private String classifyReferer(String referer) {
+        if (referer == null || referer.isBlank()) {
+            return "直接访问";
+        }
+        String r = referer.trim();
+        if (r.startsWith("/")) {
+            return "直接访问";
+        }
+        try {
+            String host = new java.net.URI(r).getHost();
+            if (host == null || host.isBlank()) {
+                return "直接访问";
+            }
+            if (host.startsWith("www.")) {
+                host = host.substring(4);
+            }
+            return host;
+        } catch (Exception e) {
+            return "其他";
+        }
     }
 }
