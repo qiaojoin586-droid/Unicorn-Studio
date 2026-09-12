@@ -103,12 +103,8 @@
             <version>1.18.1</version>
         </dependency>
 
-        <!-- 限流（Bucket4j，内存版） -->
-        <dependency>
-            <groupId>com.bucket4j</groupId>
-            <artifactId>bucket4j-core</artifactId>
-            <version>8.10.1</version>
-        </dependency>
+        <!-- 限流：自 V15 迁至 Redis（common/cache/RedisRateLimiter，Lua INCR+EXPIRE），
+             原 bucket4j-core 内存版已移除（§4.5） -->
 
         <!-- AOP（审计切面 / 异步） -->
         <dependency>

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.common.cache.RefreshTokenStore;
 import com.unicorn.studio.mapper.SysRoleMapper;
 import com.unicorn.studio.mapper.SysUserMapper;
 import com.unicorn.studio.mapper.SysUserRoleMapper;
@@ -35,17 +36,20 @@ public class AdminAccountService {
     private final SysUserRoleMapper userRoleMapper;
     private final PasswordEncoder passwordEncoder;
     private final AdminPermissionService permissionService;
+    private final RefreshTokenStore refreshTokenStore;
 
     public AdminAccountService(SysUserMapper userMapper,
                                SysRoleMapper roleMapper,
                                SysUserRoleMapper userRoleMapper,
                                PasswordEncoder passwordEncoder,
-                               AdminPermissionService permissionService) {
+                               AdminPermissionService permissionService,
+                               RefreshTokenStore refreshTokenStore) {
         this.userMapper = userMapper;
         this.roleMapper = roleMapper;
         this.userRoleMapper = userRoleMapper;
         this.passwordEncoder = passwordEncoder;
         this.permissionService = permissionService;
+        this.refreshTokenStore = refreshTokenStore;
     }
 
     /** 管理员列表项：user 为脱敏字段（不含 password/refreshToken） */
@@ -170,6 +174,14 @@ public class AdminAccountService {
             replaceRoles(id, requestedRoles.ids());
         }
         userMapper.updateById(user);
+        // 角色集合变更 → 该用户权限缓存失效（§6.3 失效表，安全边界 R4）
+        if (requestedRoles != null) {
+            permissionService.evictPermissionCache(id);
+        }
+        // 禁用账号 → 清掉其所有刷新令牌（§4.6 点 2，Redis 唯一权威）
+        if (status != null && status == 0) {
+            refreshTokenStore.deleteAllForUser(id);
+        }
     }
 
     @Transactional
@@ -183,6 +195,10 @@ public class AdminAccountService {
         }
         userRoleMapper.deleteByIdUserId(id);
         userMapper.deleteById(user.getId());
+        // 删除管理员 → 其权限缓存失效（账号实时 selectById 已即时 401，此处清残留缓存）
+        permissionService.evictPermissionCache(id);
+        // 删除账号 → 清掉其所有刷新令牌（§4.6 点 2）
+        refreshTokenStore.deleteAllForUser(id);
     }
 
     /** 个人中心：昵称/头像 */
@@ -207,10 +223,10 @@ public class AdminAccountService {
             throw BusinessException.badRequest("新密码至少 8 位");
         }
         user.setPassword(passwordEncoder.encode(newPassword));
-        user.setRefreshToken(null);
-        user.setRefreshTokenExpiresAt(null);
         user.setMustChangePassword(0);
         userMapper.updateById(user);
+        // 改密 → 全量失效刷新令牌（其他会话立即退出，Redis 唯一权威 §4.6 点 2）
+        refreshTokenStore.deleteAllForUser(user.getId());
     }
 
     public Map<String, Object> profile(SysUser user) {

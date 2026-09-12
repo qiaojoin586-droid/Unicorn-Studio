@@ -3,6 +3,8 @@ package com.unicorn.studio.admin.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.common.cache.CacheHelper;
+import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.mapper.LearningCategoryMapper;
 import com.unicorn.studio.mapper.LearningResourceMapper;
 import com.unicorn.studio.model.LearningCategory;
@@ -25,11 +27,14 @@ public class LearningCategoryService {
 
     private final LearningCategoryMapper categoryMapper;
     private final LearningResourceMapper resourceMapper;
+    private final CacheHelper cache;
 
     public LearningCategoryService(LearningCategoryMapper categoryMapper,
-                                   LearningResourceMapper resourceMapper) {
+                                   LearningResourceMapper resourceMapper,
+                                   CacheHelper cache) {
         this.categoryMapper = categoryMapper;
         this.resourceMapper = resourceMapper;
+        this.cache = cache;
     }
 
     /** 分类列表项：category + 引用该分类的资料数。 */
@@ -75,6 +80,8 @@ public class LearningCategoryService {
                     .eq(LearningResource::getCategory, oldName)
                     .set(LearningResource::getCategory, newName));
             category.setName(newName);
+            // 资源行 category 变更 → 学习资料列表缓存失效（§5.3 陷阱 4）
+            cache.evictAfterCommit(CacheKeys.LEARNING_LIST);
         }
         if (description != null) {
             category.setDescription(description);

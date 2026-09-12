@@ -1,6 +1,7 @@
 package com.unicorn.studio.admin.service;
 
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.common.cache.RefreshTokenStore;
 import com.unicorn.studio.mapper.SysRoleMapper;
 import com.unicorn.studio.mapper.SysUserMapper;
 import com.unicorn.studio.mapper.SysUserRoleMapper;
@@ -40,13 +41,15 @@ class AdminAccountServiceTest {
     private PasswordEncoder passwordEncoder;
     @Mock
     private AdminPermissionService permissionService;
+    @Mock
+    private RefreshTokenStore refreshTokenStore;
 
     private AdminAccountService service;
 
     @BeforeEach
     void setUp() {
         service = new AdminAccountService(userMapper, roleMapper, userRoleMapper,
-                passwordEncoder, permissionService);
+                passwordEncoder, permissionService, refreshTokenStore);
     }
 
     @Test

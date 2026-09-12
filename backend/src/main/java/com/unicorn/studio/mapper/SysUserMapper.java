@@ -12,9 +12,8 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
         return Optional.ofNullable(selectOne(new LambdaQueryWrapper<SysUser>().eq(SysUser::getUsername, username)));
     }
 
-    default Optional<SysUser> findByRefreshToken(String refreshToken) {
-        return Optional.ofNullable(selectOne(new LambdaQueryWrapper<SysUser>().eq(SysUser::getRefreshToken, refreshToken)));
-    }
+    // 注意：刷新令牌自 V15 起迁至 Redis（RefreshTokenStore，§4.6），不再按 DB 列查询。
+    // sys_user.refresh_token / refresh_token_expires_at 两列保留为历史残留，不再读写。
 
     default boolean existsByUsername(String username) {
         return selectCount(new LambdaQueryWrapper<SysUser>().eq(SysUser::getUsername, username)) > 0;

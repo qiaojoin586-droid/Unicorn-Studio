@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.HtmlSanitizer;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.common.cache.CacheHelper;
+import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.mapper.LearningResourceMapper;
 import com.unicorn.studio.model.LearningResource;
 import org.springframework.stereotype.Service;
@@ -19,9 +21,11 @@ import java.util.Optional;
 public class LearningAdminService {
 
     private final LearningResourceMapper resourceMapper;
+    private final CacheHelper cache;
 
-    public LearningAdminService(LearningResourceMapper resourceMapper) {
+    public LearningAdminService(LearningResourceMapper resourceMapper, CacheHelper cache) {
         this.resourceMapper = resourceMapper;
+        this.cache = cache;
     }
 
     public PageResult<LearningResource> list(String category, Integer status, String keyword,
@@ -60,6 +64,8 @@ public class LearningAdminService {
                 .status(Boolean.TRUE.equals(form.enabled()) ? 1 : 0)
                 .build();
         resourceMapper.insert(resource);
+        evictListCache();
+        cache.evictAfterCommit(CacheKeys.nullLearning(resource.getId()));
         return resource;
     }
 
@@ -97,6 +103,8 @@ public class LearningAdminService {
             resource.setStatus(form.enabled() ? 1 : 0);
         }
         resourceMapper.updateById(resource);
+        evictListCache();
+        cache.evictAfterCommit(CacheKeys.nullLearning(id));
     }
 
     /** 上下架：1 上架 / 0 下架。 */
@@ -108,12 +116,16 @@ public class LearningAdminService {
         LearningResource resource = getOrThrow(id);
         resource.setStatus(status);
         resourceMapper.updateById(resource);
+        evictListCache();
+        cache.evictAfterCommit(CacheKeys.nullLearning(id));
     }
 
     @Transactional
     public void delete(Long id) {
         getOrThrow(id);
         resourceMapper.deleteById(id);
+        evictListCache();
+        cache.evictAfterCommit(CacheKeys.nullLearning(id));
     }
 
     /** 批量删除。 */
@@ -123,7 +135,14 @@ public class LearningAdminService {
             throw BusinessException.badRequest("ids 不能为空");
         }
         int deleted = resourceMapper.deleteBatchIds(ids);
+        evictListCache();
+        cache.evictAfterCommit(ids.stream().map(CacheKeys::nullLearning).toArray(String[]::new));
         return Map.of("successCount", deleted, "failCount", ids.size() - deleted);
+    }
+
+    /** 学习资料列表缓存失效（§5.3 陷阱 4：LearningAdminService.* → cache:learning:list）。 */
+    private void evictListCache() {
+        cache.evictAfterCommit(CacheKeys.LEARNING_LIST);
     }
 
     private void validate(LearningForm form) {

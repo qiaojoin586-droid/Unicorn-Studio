@@ -2,12 +2,17 @@ package com.unicorn.studio.admin.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.type.TypeFactory;
+import com.unicorn.studio.common.cache.CacheHelper;
+import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.mapper.*;
 import com.unicorn.studio.model.Message;
 import com.unicorn.studio.model.PublicUser;
 import com.unicorn.studio.model.Work;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -21,29 +26,46 @@ import java.util.Map;
 @Service
 public class DashboardService {
 
+    /** B11：仪表盘汇总短 TTL（60s，数据本就容忍延迟；§3.3 B11） */
+    private static final Duration CACHE_TTL = Duration.ofSeconds(60);
+    private static final JavaType MAP_TYPE = TypeFactory.defaultInstance()
+            .constructMapType(Map.class, String.class, Object.class);
+
     private final VisitLogMapper visitLogMapper;
     private final WorkMapper workMapper;
     private final NewsMapper newsMapper;
     private final CommentMapper commentMapper;
     private final MessageMapper messageMapper;
     private final PublicUserMapper publicUserMapper;
+    private final CacheHelper cache;
 
     public DashboardService(VisitLogMapper visitLogMapper,
                             WorkMapper workMapper,
                             NewsMapper newsMapper,
                             CommentMapper commentMapper,
                             MessageMapper messageMapper,
-                            PublicUserMapper publicUserMapper) {
+                            PublicUserMapper publicUserMapper,
+                            CacheHelper cache) {
         this.visitLogMapper = visitLogMapper;
         this.workMapper = workMapper;
         this.newsMapper = newsMapper;
         this.commentMapper = commentMapper;
         this.messageMapper = messageMapper;
         this.publicUserMapper = publicUserMapper;
+        this.cache = cache;
     }
 
     public Map<String, Object> summary(int days) {
         int window = Math.max(1, Math.min(days, 90));
+        // B11：缓存异构 Map 往返（CacheObjectMapper 与 MVC 的 LocalDateTime 均为 ISO 字符串，口径一致）
+        return cache.<Map<String, Object>>get(CacheKeys.dashboardSummary(window), MAP_TYPE).orElseGet(() -> {
+            Map<String, Object> result = buildSummary(window);
+            cache.set(CacheKeys.dashboardSummary(window), result, CACHE_TTL);
+            return result;
+        });
+    }
+
+    private Map<String, Object> buildSummary(int window) {
         LocalDate today = LocalDate.now();
         LocalDateTime dayStart = today.atStartOfDay();
         LocalDateTime windowStart = today.minusDays(window - 1L).atStartOfDay();

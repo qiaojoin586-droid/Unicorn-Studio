@@ -1,5 +1,6 @@
 package com.unicorn.studio.controller;
 
+import com.unicorn.studio.common.SlugValidator;
 import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.model.Work;
 import com.unicorn.studio.service.WorkService;
@@ -35,6 +36,10 @@ public class WorkController {
 
     @GetMapping("/{slug}")
     public ApiResponse<Map<String, WorkDetailVO>> detail(@PathVariable String slug) {
+        // 穿透防护（§4.1 P2）：形状不符直接 404，不打库
+        if (!SlugValidator.isValidSlug(slug)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "作品不存在或已下线");
+        }
         Work work = workService.findPublishedBySlug(slug)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "作品不存在或已下线"));
         return ApiResponse.ok(Map.of("work", WorkDetailVO.from(work)));

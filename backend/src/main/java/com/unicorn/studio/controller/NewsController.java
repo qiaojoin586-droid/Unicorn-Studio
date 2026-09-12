@@ -1,5 +1,6 @@
 package com.unicorn.studio.controller;
 
+import com.unicorn.studio.common.SlugValidator;
 import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.model.News;
 import com.unicorn.studio.service.NewsService;
@@ -33,6 +34,9 @@ public class NewsController {
 
     @GetMapping("/{slug}")
     public ApiResponse<Map<String, NewsDetailVO>> detail(@PathVariable String slug) {
+        if (!SlugValidator.isValidSlug(slug)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "新闻不存在或已下线");
+        }
         News news = newsService.findPublishedBySlug(slug)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "新闻不存在或已下线"));
         return ApiResponse.ok(Map.of("news", NewsDetailVO.from(news)));

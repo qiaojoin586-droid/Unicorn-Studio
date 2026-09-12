@@ -24,23 +24,30 @@ public class AiChatController {
     public SseEmitter chat(@Valid @RequestBody ChatMessage request) {
         SseEmitter emitter = new SseEmitter(60_000L);
 
-        CompletableFuture.runAsync(() -> {
-            try {
-                aiChatService.streamResponse(request.getMessage(), chunk -> {
-                    try {
-                        emitter.send(SseEmitter.event().data(chunk));
-                    } catch (IOException e) {
-                        emitter.completeWithError(e);
-                    }
-                });
+//        CompletableFuture.runAsync(() -> {
+//            try {
+//                aiChatService.streamResponse(request.getMessage(), chunk -> {
+//                    try {
+//                        emitter.send(SseEmitter.event().data(chunk));
+//                    } catch (IOException e) {
+//                        emitter.completeWithError(e);
+//                    }
+//                });
+//
+//                emitter.send(SseEmitter.event().data("[DONE]"));
+//                emitter.complete();
+//            } catch (IOException e) {
+//                emitter.completeWithError(e);
+//            }
+//        });
 
-                emitter.send(SseEmitter.event().data("[DONE]"));
-                emitter.complete();
-            } catch (IOException e) {
-                emitter.completeWithError(e);
-            }
-        });
-
+        try {
+            emitter.send(SseEmitter.event().data("当前AI对话升级中，升级完成后恢复使用"));
+            emitter.send(SseEmitter.event().data("[DONE]"));
+            emitter.complete();
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
         emitter.onTimeout(emitter::complete);
         emitter.onError((e) -> emitter.complete());
 

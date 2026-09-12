@@ -9,6 +9,7 @@
 
     <AppFooter />
     <AiAssistant />
+    <BackToTop />
     <MouseTrail />
   </div>
 </template>
@@ -17,6 +18,7 @@
 import { defineAsyncComponent } from 'vue'
 import AppHeader from '@/components/AppHeader.vue'
 import AppFooter from '@/components/AppFooter.vue'
+import BackToTop from '@/components/BackToTop.vue'
 import MouseTrail from '@/components/MouseTrail.vue'
 
 // AI 助手（头像+对话框）非首屏必需，异步加载减小首屏入口包（优化方案 F-11）

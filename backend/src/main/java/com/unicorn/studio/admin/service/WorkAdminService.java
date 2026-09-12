@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.HtmlSanitizer;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.common.cache.CacheHelper;
+import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.mapper.CommentMapper;
 import com.unicorn.studio.mapper.SiteSettingsMapper;
 import com.unicorn.studio.mapper.WorkMapper;
@@ -33,14 +35,17 @@ public class WorkAdminService {
     private final WorkMapper workMapper;
     private final CommentMapper commentMapper;
     private final SiteSettingsMapper settingsMapper;
+    private final CacheHelper cache;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public WorkAdminService(WorkMapper workMapper,
                             CommentMapper commentMapper,
-                            SiteSettingsMapper settingsMapper) {
+                            SiteSettingsMapper settingsMapper,
+                            CacheHelper cache) {
         this.workMapper = workMapper;
         this.commentMapper = commentMapper;
         this.settingsMapper = settingsMapper;
+        this.cache = cache;
     }
 
     public PageResult<Work> list(String keyword, String category, String status, int page, int size) {
@@ -95,6 +100,8 @@ public class WorkAdminService {
         }
         workMapper.insert(work);
         saveSeo(work.getId(), form.seo());
+        // 穿透防护（§4.1 P1 要点 3）：新建后清空该 slug 的空值哨兵，否则「刚发的作品 404」
+        cache.evictAfterCommit(CacheKeys.nullWork(work.getSlug()));
         return work;
     }
 
@@ -141,6 +148,8 @@ public class WorkAdminService {
         }
         workMapper.updateById(work);
         saveSeo(id, form.seo());
+        // 发布/改 slug 后清空该 slug 的空值哨兵（§4.1 P1 要点 3）
+        cache.evictAfterCommit(CacheKeys.nullWork(work.getSlug()));
     }
 
     /** 状态机：draft/published/offline；发布时补 publishedAt。 */

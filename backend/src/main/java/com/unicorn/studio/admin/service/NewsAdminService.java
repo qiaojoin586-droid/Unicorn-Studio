@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.HtmlSanitizer;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.common.cache.CacheHelper;
+import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.mapper.CommentMapper;
 import com.unicorn.studio.mapper.NewsMapper;
 import com.unicorn.studio.mapper.SiteSettingsMapper;
@@ -30,14 +32,17 @@ public class NewsAdminService {
     private final NewsMapper newsMapper;
     private final CommentMapper commentMapper;
     private final SiteSettingsMapper settingsMapper;
+    private final CacheHelper cache;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public NewsAdminService(NewsMapper newsMapper,
                             CommentMapper commentMapper,
-                            SiteSettingsMapper settingsMapper) {
+                            SiteSettingsMapper settingsMapper,
+                            CacheHelper cache) {
         this.newsMapper = newsMapper;
         this.commentMapper = commentMapper;
         this.settingsMapper = settingsMapper;
+        this.cache = cache;
     }
 
     public PageResult<News> list(String keyword, String category, String status, int page, int size) {
@@ -91,6 +96,7 @@ public class NewsAdminService {
         }
         newsMapper.insert(news);
         saveSeo(news.getId(), form.seo());
+        cache.evictAfterCommit(CacheKeys.nullNews(news.getSlug()));
         return news;
     }
 
@@ -131,6 +137,7 @@ public class NewsAdminService {
         }
         newsMapper.updateById(news);
         saveSeo(id, form.seo());
+        cache.evictAfterCommit(CacheKeys.nullNews(news.getSlug()));
     }
 
     @Transactional

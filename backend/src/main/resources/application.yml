@@ -89,7 +89,7 @@ app:
   ai:
     api-key: ${AI_API_KEY:35c207cdcda74081914adb4630fa3648.aUzWrY3hadJxEtnf}
     api-url: https://open.bigmodel.cn/api/paas/v4/chat/completions
-    model: glm-4.7-flash
+    model: GLM-4.5-Air
   admin:
     # 后台管理 JWT/账号配置；jwt-secret 为空时 JwtService 拒绝启动
     jwt-secret: ${ADMIN_JWT_SECRET:}
