@@ -25,8 +25,13 @@ import java.util.Set;
 @RequestMapping("/api/page-background")
 public class PageBackgroundController {
 
-    /** 允许绑定单背景的页面白名单 */
-    private static final Set<String> SUPPORTED_PAGES = Set.of("about", "work-detail", "works");
+    /**
+     * 允许绑定单背景的页面白名单。
+     * <p>
+     * 取自 {@link CacheKeys#BG_PAGE_KEYS} 而非在这里另写一份：白名单与后台的缓存失效点
+     * 必须来自同一份定义，否则「新增了页面但忘了加失效」会再次发生（B-03 就是这么来的）。
+     */
+    private static final Set<String> SUPPORTED_PAGES = Set.copyOf(CacheKeys.BG_PAGE_KEYS);
 
     private static final Duration CACHE_TTL = Duration.ofMinutes(30);
 

@@ -10,6 +10,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.task.TaskRejectedException;
+import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -82,7 +84,19 @@ public class BackupService {
                 .createdBy(operatorId)
                 .build();
         recordMapper.insert(record);
-        selfProvider.getObject().runBackup(record.getId());
+        try {
+            selfProvider.getObject().runBackup(record.getId());
+        } catch (TaskRejectedException e) {
+            // B-04：backupExecutor 用的是 AbortPolicy（备份是分钟级慢 IO，绝不能像埋点那样
+            // 用 CallerRuns 兜底把请求线程拖住），因此队列满时提交会在此同步抛出。
+            // 那条 status=running 的记录是【提交之前】就已自动提交入库的，若不补偿，
+            // 后台备份列表里就会留下一条永不结束的「运行中」备份，且没有任何机制会清理它。
+            log.error("备份任务提交被拒绝（队列已满），将记录标记为失败: recordId={}", record.getId(), e);
+            record.setStatus("failed");
+            record.setErrorMsg("备份任务提交被拒绝：备份队列已满，请稍后重试");
+            recordMapper.updateById(record);
+            throw new BusinessException(HttpStatus.SERVICE_UNAVAILABLE, "备份队列已满，请稍后重试");
+        }
         return record;
     }
 

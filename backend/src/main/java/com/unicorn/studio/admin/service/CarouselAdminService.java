@@ -11,6 +11,7 @@ import com.unicorn.studio.model.Carousel;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -142,10 +143,17 @@ public class CarouselAdminService {
 
     /**
      * 轮播图写操作统一失效（§5.3 陷阱 4）：carousel 表被 /api/carousel 与 /api/page-background
-     * 共用，且 write 可能改动 pageKey/status/sortOrder，故同时失效首页轮播与两个背景页缓存。
+     * 共用，且 write 可能改动 pageKey/status/sortOrder，故同时失效首页轮播与全部背景页缓存。
+     * <p>
+     * <b>用 {@link CacheKeys#ALL_BG_KEYS} 而非手写若干 {@code bg("...")}</b>：此前这里写死了两个
+     * 页面键，而白名单有第三个（{@code works}）—— 于是 {@code cache:bg:works} 被预热但永不被清除，
+     * 管理员改「作品页」背景后前台最长 30 分钟不生效，且无任何强制刷新手段（B-03）。
      */
     private void evictCarouselCache() {
-        cache.evictAfterCommit(CacheKeys.CAROUSEL_HOME, CacheKeys.bg("about"), CacheKeys.bg("work-detail"));
+        List<String> keys = new ArrayList<>();
+        keys.add(CacheKeys.CAROUSEL_HOME);
+        keys.addAll(CacheKeys.ALL_BG_KEYS);
+        cache.evictAfterCommit(keys.toArray(String[]::new));
     }
 
     private Carousel getOrThrow(Long id) {

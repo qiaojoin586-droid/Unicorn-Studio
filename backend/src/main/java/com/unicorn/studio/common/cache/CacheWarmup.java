@@ -28,7 +28,7 @@ import java.util.concurrent.Executor;
  * 应用启动就绪后**异步**预填首页 / 关于页的 A/B 级热点 key，避免冷启动首个请求
  * 「缓存全 miss + 打库 + 回填」的尖峰。设计约束（见方案原文）：
  * <ul>
- *   <li>绝不阻塞启动：在 {@code asyncExecutor} 后台线程执行；</li>
+ *   <li>绝不阻塞启动：在 {@code warmupExecutor} 后台线程执行；</li>
  *   <li>尽力而为：任一 key 预热失败只记日志，不抛异常、不影响启动；</li>
  *   <li>幂等且无副作用：命中已有缓存直接返回，不重复打库；</li>
  *   <li>多实例互斥：{@code SETNX cache:lock:warmup} 短锁，避免重复预热。</li>
@@ -45,7 +45,7 @@ public class CacheWarmup {
 
     private final CacheHelper cache;
     private final StringRedisTemplate redis;
-    private final Executor asyncExecutor;
+    private final Executor warmupExecutor;
     private final boolean enabled;
 
     private final FooterService footerService;
@@ -57,7 +57,7 @@ public class CacheWarmup {
 
     public CacheWarmup(CacheHelper cache,
                        StringRedisTemplate redis,
-                       @Qualifier("asyncExecutor") Executor asyncExecutor,
+                       @Qualifier("warmupExecutor") Executor warmupExecutor,
                        @Value("${app.cache.warmup.enabled:true}") boolean enabled,
                        FooterService footerService,
                        AboutPageService aboutPageService,
@@ -67,7 +67,7 @@ public class CacheWarmup {
                        CarouselMapper carouselMapper) {
         this.cache = cache;
         this.redis = redis;
-        this.asyncExecutor = asyncExecutor;
+        this.warmupExecutor = warmupExecutor;
         this.enabled = enabled;
         this.footerService = footerService;
         this.aboutPageService = aboutPageService;
@@ -82,8 +82,8 @@ public class CacheWarmup {
         if (!enabled || !cache.isEnabled()) {
             return;
         }
-        // 后台预热，绝不阻塞启动（asyncExecutor 由 AsyncConfig 提供，core 2 / max 8）
-        asyncExecutor.execute(this::warm);
+        // 后台预热，绝不阻塞启动（warmupExecutor 由 AsyncConfig 提供，单线程）
+        warmupExecutor.execute(this::warm);
     }
 
     /** 预热 A/B 级热点 key；每条独立 try/catch，单点失败不影响其余。 */

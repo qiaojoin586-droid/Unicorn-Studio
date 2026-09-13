@@ -1,5 +1,6 @@
 package com.unicorn.studio.controller;
 
+import com.unicorn.studio.common.IpUtils;
 import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.service.StatsService;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,7 +31,12 @@ public class StatsController {
         }
         String path = request == null ? null : request.path();
         String referer = request == null ? null : request.referer();
-        statsService.recordPv(path, referer, httpRequest);
+        // B-01：在【请求线程内】把异步方法要用到的字段全部取出，只传值。
+        // 不能把 httpRequest 直接交给 @Async 方法 —— 届时容器线程已归还，Tomcat 会回收并复用
+        // 该 request 对象，异步线程再解引用会读到下一个请求的数据或直接抛异常。
+        statsService.recordPv(path, referer,
+                httpRequest.getHeader("User-Agent"),
+                IpUtils.getClientIp(httpRequest));
         return ApiResponse.ok();
     }
 }

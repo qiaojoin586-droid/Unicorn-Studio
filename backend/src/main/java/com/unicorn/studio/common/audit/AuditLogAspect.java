@@ -120,7 +120,7 @@ public class AuditLogAspect {
     }
 
     /** 异步落库：审计写入失败不影响主流程。 */
-    @Async("asyncExecutor")
+    @Async("auditExecutor")
     public void persist(SysOperationLog entry) {
         try {
             logMapper.insert(entry);

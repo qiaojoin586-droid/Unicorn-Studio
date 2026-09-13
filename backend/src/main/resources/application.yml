@@ -32,6 +32,22 @@ spring:
     multipart:
       max-file-size: 50MB
       max-request-size: 56MB
+  # 定时任务调度器（B-05）：不配置时全部 @Scheduled 落在 Spring Boot 自动配置的
+  # ThreadPoolTaskScheduler 上，池大小 = 1。而当前有 5 个定时任务，其中
+  # ViewCountService.flush 每 2 分钟一轮（逐 key 两次 Redis 往返 + N 条 UPDATE），
+  # 一旦某轮耗时超过 2 分钟就会持续挤占唯一的调度线程，使 01:00 埋点聚合、
+  # 03:00 统计、03:30 数据保留清理被无限推迟（同一调度器上串行执行）。
+  # 这里用配置项而非自定义 Bean：Boot 自动配置本身也提供一个 TaskScheduler，
+  # 两个同类型 Bean 共存时 Spring 的选取规则依赖版本，容易出现「配了却没生效」。
+  task:
+    scheduling:
+      pool:
+        # 5 个任务里同一时刻最多 2 个真正重叠（心跳类 flush 与日级整点任务），4 足够并留余量
+        size: 4
+      thread-name-prefix: sched-
+      shutdown:
+        await-termination: true
+        await-termination-period: 60s
   datasource:
     # MySQL 8（本机/部署均用 MySQL；表结构由 backend/sql/mysql-init.sql 初始化，无 ORM 自动建表）
     url: jdbc:mysql://127.0.0.1:3306/unicorn_studio?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true

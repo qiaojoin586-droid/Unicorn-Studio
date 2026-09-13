@@ -22,16 +22,20 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * <b>缓存策略</b>：以「apiUrl + model + apiKey 指纹」为键缓存 ChatClient，
  * 避免每轮对话都重建（构建包含连接池与序列化器，代价不低）；
- * 一旦后台改配置，指纹变化自然切到新实例，旧实例随 LRU 上限淘汰，无需显式清理。
+ * 一旦后台改配置，指纹变化自然切到新实例，旧实例在容量达到上限时被整体淘汰，无需显式清理。
  */
 @Component
 public class ChatClientFactory {
 
     /**
-     * 实例缓存上限。并发对话场景下配置基本不变，命中率极高；
-     * 给足余量以防「频繁改配置 + 多 key 轮换」把内存撑爆。
+     * 实例缓存上限。
+     * <p>
+     * 取值偏保守（8）是刻意的：每个 value 是一个完整的 {@code OpenAiChatModel} + {@code OpenAiApi}，
+     * 各自持有 HTTP 客户端资源（连接池、socket、fd），单个实例的开销远不止一个 Java 对象。
+     * 而正常使用下并发配置基本不变、命中率极高，上限低不会影响命中率，
+     * 只在「管理员连续改多轮配置」时才触发整体淘汰 —— 那种场景下重建几个实例完全可以接受。
      */
-    private static final int MAX_CACHE = 16;
+    private static final int MAX_CACHE = 8;
 
     /** 连接超时与读超时：对话场景要能容忍首字慢的推理模型 */
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(15);
@@ -52,10 +56,20 @@ public class ChatClientFactory {
      */
     public ChatClient client(AiRuntimeConfig config, Object... tools) {
         String fingerprint = fingerprint(config);
-        return cache.computeIfAbsent(fingerprint, key -> {
-            evictIfOversized();
-            return build(config);
-        });
+
+        ChatClient cached = cache.get(fingerprint);
+        if (cached != null) {
+            return cached;
+        }
+
+        // ⚠️ 淘汰必须在 computeIfAbsent 【之外】完成。
+        // ConcurrentHashMap 的 Javadoc 明确规定：mapping function 不得修改此 map。
+        // 在 mapping function 内执行 clear() 会：① 该 bin 的锁与其他线程的更新互相等待，存在死锁风险；
+        // ② 其他线程并发写入的条目被无声丢弃；③ 某些 JDK 版本下直接抛 IllegalStateException。
+        // 触发条件是「缓存达到上限 + 又来一个新指纹」，即管理员改过几轮 AI 配置后必然踩到。
+        evictIfOversized();
+
+        return cache.computeIfAbsent(fingerprint, key -> build(config));
     }
 
     /** 构建并缓存 AI 配置指纹，用于判断是否需要重建模型实例。 */

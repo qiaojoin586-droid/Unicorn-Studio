@@ -1,5 +1,7 @@
 package com.unicorn.studio.common.cache;
 
+import java.util.List;
+
 /**
  * 缓存键常量（Redis 方案 §5.1 键命名规范）。
  * <p>
@@ -34,6 +36,25 @@ public final class CacheKeys {
 
     /** 学习资料列表（B5，{@code cache:learning:list}） */
     public static final String LEARNING_LIST = "cache:learning:list";
+
+    /**
+     * 支持「单页背景」绑定的页面键。
+     * <p>
+     * <b>这里是唯一来源</b>：前台白名单（{@code PageBackgroundController.SUPPORTED_PAGES}）与
+     * 后台缓存失效（{@code CarouselAdminService}）都取自它。此前两者各写一份，导致新增
+     * {@code works} 页时白名单加了、失效点没加 —— 于是 {@code cache:bg:works} 只被预热、
+     * 永不被清除，管理员改完「作品页」背景后前台最长 30 分钟看不到变化，且没有任何强制刷新手段。
+     */
+    public static final List<String> BG_PAGE_KEYS = List.of("about", "work-detail", "works");
+
+    /**
+     * 全部页面背景缓存键，供失效处整体遍历。
+     * <p>
+     * 失效一律用 {@code ALL_BG_KEYS} 而不是手写若干 {@code bg("...")}：后者在新增页面时
+     * 会静默漏配，而「漏配」的表现是「后台改了前台没变」，排查成本远高于多清一个键。
+     */
+    public static final List<String> ALL_BG_KEYS =
+            BG_PAGE_KEYS.stream().map(CacheKeys::bg).toList();
 
     /** 组装页面背景键。 */
     public static String bg(String pageKey) {

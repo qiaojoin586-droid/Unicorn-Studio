@@ -8,7 +8,6 @@ import com.unicorn.studio.model.Message;
 import com.unicorn.studio.model.PublicUser;
 import com.unicorn.studio.model.StatsDaily;
 import com.unicorn.studio.model.VisitLog;
-import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Async;
@@ -48,21 +47,42 @@ public class StatsService {
         this.commentMapper = commentMapper;
     }
 
-    @Async("asyncExecutor")
-    public void recordPv(String path, String referer, HttpServletRequest request) {
+    /**
+     * 记录一次 PV 埋点（B-01）。
+     * <p>
+     * <b>入参全部是「值」，不是 {@code HttpServletRequest}</b>：本方法跑在 {@code @Async} 线程上，
+     * 而 Servlet 规范不允许在请求返回后访问 request —— Tomcat 会回收并复用该对象，此时
+     * {@code getHeader} 可能读到<b>下一个请求的 User-Agent</b>（数据串号），或抛
+     * {@code IllegalStateException}。而本方法的 catch 会把异常吞成一行 WARN，
+     * 故障完全静默，只表现为「PV 数据对不上」，极难排查。
+     * <p>
+     * 因此调用方（{@code StatsController}）必须在<b>请求线程内</b>把字段取完再传进来 ——
+     * 这与 {@code AuditLogAspect} 的做法一致（那里的注释已明确警告过这个模式）。
+     * <p>
+     * UA/referer/path 一律截断到建表长度：超长会被 MySQL 严格模式拒绝（整条埋点丢失），
+     * 而非严格模式则静默截断 —— 两者都不如在这里显式截断。
+     */
+    @Async("statsExecutor")
+    public void recordPv(String path, String referer, String userAgent, String clientIp) {
         try {
-            String ua = request.getHeader("User-Agent");
             VisitLog logEntry = VisitLog.builder()
-                    .pagePath(path == null || path.isBlank() ? "/" : path)
-                    .ipHash(IpUtils.sha256(IpUtils.getClientIp(request)))
-                    .ua(ua == null ? null : ua.substring(0, Math.min(ua.length(), 255)))
-                    .referer(referer)
+                    .pagePath(path == null || path.isBlank() ? "/" : truncate(path, 255))
+                    .ipHash(IpUtils.sha256(clientIp))
+                    .ua(truncate(userAgent, 255))
+                    .referer(truncate(referer, 500))
                     .visitedAt(LocalDateTime.now())
                     .build();
             visitLogMapper.insert(logEntry);
         } catch (Exception e) {
             log.warn("PV 埋点写入失败: {}", e.getMessage());
         }
+    }
+
+    private static String truncate(String value, int maxLength) {
+        if (value == null) {
+            return null;
+        }
+        return value.length() <= maxLength ? value : value.substring(0, maxLength);
     }
 
     /** 每日 01:00 聚合昨日数据。 */
