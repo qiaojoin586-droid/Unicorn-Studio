@@ -1,6 +1,17 @@
 server:
   port: 8080
   address: 127.0.0.1
+  # HTTP 响应压缩（B-14）：此前 server 段只有 port/address，compression 默认关闭，
+  # 所有 JSON 以明文传输。后台列表接口、仪表盘汇总、站点配置等高度可压缩的文本收益明显。
+  # 生产若由 nginx 反代，nginx 侧开 gzip 也可，但两者不冲突，且开发/直连与内网调用只能靠应用侧。
+  compression:
+    enabled: true
+    # ⚠️ 刻意【不含 text/event-stream】：AI 对话的 SSE 分片靠「逐片直出」保证实时性，
+    # 而压缩器要攒够缓冲才吐数据 —— 一旦把 SSE 纳入压缩，逐字回显会变成「卡一下冒一段」。
+    # 这是本节唯一需要谨慎的点，故宁可让 SSE 不压缩。
+    mime-types: application/json,application/javascript,text/html,text/plain,text/css,text/xml
+    # 小于 1KB 不压：压完反而可能变大（gzip 头开销 + 小响应本来就没有冗余）
+    min-response-size: 1024
 
 spring:
   # ==================== 本地开发配置（不入库）====================

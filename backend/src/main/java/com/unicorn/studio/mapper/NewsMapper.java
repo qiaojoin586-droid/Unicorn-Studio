@@ -19,14 +19,28 @@ public interface NewsMapper extends BaseMapper<News> {
         return Optional.ofNullable(selectOne(new LambdaQueryWrapper<News>().eq(News::getSlug, slug)));
     }
 
+    /**
+     * 列表用列投影（B-09）：<b>不含 MEDIUMTEXT 的 {@code content}</b>。
+     * <p>
+     * 与 {@link WorkMapper#cardProjection()} 同一考量：列表结果只用于组装
+     * {@link com.unicorn.studio.vo.NewsCardVO}（不含正文），若不投影，SQL 会把整列正文
+     * 读出来再丢掉，同时放大 Redis 里的列表缓存体积。
+     * 字段清单与 {@code NewsCardVO} 的记录分量一一对应，<b>改 VO 时务必同步这里</b>。
+     */
+    default LambdaQueryWrapper<News> cardProjection() {
+        return new LambdaQueryWrapper<News>()
+                .select(News::getId, News::getSlug, News::getTitle, News::getCategory,
+                        News::getCoverUrl, News::getSummary, News::getPublishedAt);
+    }
+
     default List<News> findByStatusOrderBySortOrderAscIdDesc(String status) {
-        return selectList(new LambdaQueryWrapper<News>()
+        return selectList(cardProjection()
                 .eq(News::getStatus, status)
                 .orderByDesc(News::getSortOrder, News::getId));
     }
 
     default List<News> findByStatusAndCategoryOrderBySortOrderAscIdDesc(String status, String category) {
-        return selectList(new LambdaQueryWrapper<News>()
+        return selectList(cardProjection()
                 .eq(News::getStatus, status)
                 .eq(News::getCategory, category)
                 .orderByDesc(News::getSortOrder, News::getId));

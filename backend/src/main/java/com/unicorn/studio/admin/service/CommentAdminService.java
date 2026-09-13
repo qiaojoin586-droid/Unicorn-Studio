@@ -48,7 +48,7 @@ public class CommentAdminService {
         }
         wrapper.orderByDesc(Comment::getId);
         // controller 已做 page-1（0-based），MP Page 为 1-based
-        Page<Comment> result = commentMapper.selectPage(new Page<>(page + 1, size), wrapper);
+        Page<Comment> result = commentMapper.selectPage(PageResult.safePage(page + 1, size), wrapper);
         // 批量加载评论用户昵称，避免逐条 selectById 的 N+1
         Map<Long, String> nicknames = nicknamesOf(result.getRecords());
         return PageResult.of(result, c -> decorate(c, nicknames));

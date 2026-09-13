@@ -2,6 +2,7 @@ package com.unicorn.studio.common.audit;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.unicorn.studio.common.cache.CacheObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.unicorn.studio.common.IpUtils;
 import com.unicorn.studio.mapper.SysOperationLogMapper;
@@ -62,7 +63,19 @@ public class AuditLogAspect {
 
     private final SysOperationLogMapper logMapper;
     private final ObjectProvider<AuditLogAspect> selfProvider;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    /**
+     * 用 {@link CacheObjectMapper#create()} 而非 {@code new ObjectMapper()}（B-22）。
+     * <p>
+     * 本切面序列化的是<b>任意 Controller 入参</b>，其中大量 DTO 带 {@code LocalDateTime}。
+     * 裸 {@code new ObjectMapper()} 没有注册 {@code JavaTimeModule}，遇到日期字段会抛
+     * {@code InvalidDefinitionException} —— 而异常又被下面的 catch 吞掉，
+     * 结果是<b>这些接口的审计参数一直是空的，且无人知晓</b>。
+     * <p>
+     * 选用项目自有的 {@code CacheObjectMapper} 而不是注入 Spring 的 MVC ObjectMapper：
+     * 前者是既定的无时区 ISO-8601 口径（且刻意不定义成 Bean，以免覆盖 Boot 自动配置的
+     * MVC ObjectMapper 影响所有 REST 接口的序列化）。
+     */
+    private final ObjectMapper objectMapper = CacheObjectMapper.create();
 
     public AuditLogAspect(SysOperationLogMapper logMapper, ObjectProvider<AuditLogAspect> selfProvider) {
         this.logMapper = logMapper;
@@ -172,6 +185,9 @@ public class AuditLogAspect {
             }
             return objectMapper.writeValueAsString(nodes);
         } catch (Exception e) {
+            // 曾经这里是 `return null;` —— 静默失败正是「某些接口的审计参数一直是空的」
+            // 能藏这么久的原因。审计日志的价值恰恰在于参数留痕，序列化失败必须留下痕迹。
+            log.warn("审计参数序列化失败，本次将不记录参数: {}", e.getMessage());
             return null;
         }
     }

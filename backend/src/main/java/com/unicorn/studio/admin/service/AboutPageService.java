@@ -2,6 +2,7 @@ package com.unicorn.studio.admin.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.unicorn.studio.common.cache.CacheObjectMapper;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.cache.CacheHelper;
 import com.unicorn.studio.common.cache.CacheKeys;
@@ -53,7 +54,7 @@ public class AboutPageService {
     /** 统计指标条数上限（防误填导致首屏拥挤） */
     private static final int MAX_STATS = 8;
 
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectMapper JSON = CacheObjectMapper.create();
 
     private static final Duration CACHE_TTL = Duration.ofMinutes(30);
 

@@ -36,7 +36,7 @@ public class CapabilityAdminService {
 
     public PageResult<CapabilityView> list(int page, int size) {
         Page<Capability> result = capabilityMapper.selectPage(
-                new Page<>(page + 1, size),
+                PageResult.safePage(page + 1, size),
                 new LambdaQueryWrapper<Capability>()
                         .orderByAsc(Capability::getSortOrder, Capability::getId));
         return PageResult.of(result, CapabilityView::from);

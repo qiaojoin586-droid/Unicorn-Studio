@@ -30,10 +30,26 @@ public class LearningService {
         this.cache = cache;
     }
 
-    /** 公开列表：仅上架资料，按排序值升序；Redis 缓存 30 min（B5，返回不含 content 的卡片 VO）。 */
+    /**
+     * 公开列表：仅上架资料，按排序值升序；Redis 缓存 30 min（B5，返回不含 content 的卡片 VO）。
+     * <p>
+     * <b>查询必须做列投影（B-09）</b>：{@code learning_resources.content} 是 MEDIUMTEXT（上限 16MB），
+     * 而 {@link LearningCardVO} 刻意不含正文 —— 此前 SQL 层照样把整列正文查了出来，
+     * 再在 {@code LearningCardVO.from()} 里丢掉。{@code LearningCardVO} 的类注释专门解释了
+     * 「列表接口避免过度返回，缓存也不放大字段」，但只做到 VO 这一层是无效的：
+     * <b>字段是在 SQL 层被读出来的，VO 只是没有序列化它</b>，回源开销与缓存体积都没降下来。
+     * <p>
+     * 投影字段与 {@link LearningCardVO} 的记录分量一一对应，改 VO 时务必同步这里。
+     */
     public List<LearningCardVO> findAll() {
         return cache.<List<LearningCardVO>>get(CacheKeys.LEARNING_LIST, LIST_TYPE).orElseGet(() -> {
             List<LearningCardVO> list = repository.selectList(new LambdaQueryWrapper<LearningResource>()
+                            .select(LearningResource::getId, LearningResource::getTitle,
+                                    LearningResource::getDescription, LearningResource::getUrl,
+                                    LearningResource::getCategory, LearningResource::getTags,
+                                    LearningResource::getCoverUrl, LearningResource::getAttachmentUrl,
+                                    LearningResource::getSortOrder, LearningResource::getCreatedAt,
+                                    LearningResource::getUpdatedAt)
                             .eq(LearningResource::getStatus, 1)
                             .orderByAsc(LearningResource::getSortOrder, LearningResource::getId))
                     .stream()

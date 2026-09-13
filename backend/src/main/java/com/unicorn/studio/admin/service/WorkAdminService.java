@@ -3,6 +3,7 @@ package com.unicorn.studio.admin.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.unicorn.studio.common.cache.CacheObjectMapper;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.HtmlSanitizer;
 import com.unicorn.studio.common.PageResult;
@@ -36,7 +37,7 @@ public class WorkAdminService {
     private final CommentMapper commentMapper;
     private final SiteSettingsMapper settingsMapper;
     private final CacheHelper cache;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = CacheObjectMapper.create();
 
     public WorkAdminService(WorkMapper workMapper,
                             CommentMapper commentMapper,
@@ -49,7 +50,13 @@ public class WorkAdminService {
     }
 
     public PageResult<Work> list(String keyword, String category, String status, int page, int size) {
-        LambdaQueryWrapper<Work> wrapper = new LambdaQueryWrapper<>();
+        // 列投影（B-09）：列表排除 MEDIUMTEXT 的 content。
+        // 后台列表是「每页 10 条富文本原样进 JSON」，正文占了响应体的绝大部分，
+        // 而管理端列表视图并不展示正文 —— 编辑表单走的是 detail(id) 单独取完整实体
+        // （WorkEditView.vue 的分支已确认），所以这里返回 content=null 不影响编辑。
+        // 用「除 content 外的所有列」而非逐个列出字段：后者会在实体新增字段时静默漏掉。
+        LambdaQueryWrapper<Work> wrapper = new LambdaQueryWrapper<Work>()
+                .select(Work.class, info -> !"content".equals(info.getProperty()));
         if (keyword != null && !keyword.isBlank()) {
             String like = "%" + keyword.trim() + "%";
             wrapper.and(w -> w.like(Work::getTitle, like).or().like(Work::getSlug, like));
@@ -62,7 +69,7 @@ public class WorkAdminService {
         }
         wrapper.orderByAsc(Work::getSortOrder, Work::getId);
         // controller 已做 page-1（0-based），MP Page 为 1-based
-        return PageResult.of(workMapper.selectPage(new Page<>(page + 1, size), wrapper));
+        return PageResult.of(workMapper.selectPage(PageResult.safePage(page + 1, size), wrapper));
     }
 
     public Map<String, Object> detail(Long id) {

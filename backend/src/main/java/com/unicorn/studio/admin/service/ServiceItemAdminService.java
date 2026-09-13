@@ -36,7 +36,7 @@ public class ServiceItemAdminService {
 
     public PageResult<ServiceItemView> list(int page, int size) {
         Page<ServiceItem> result = serviceItemMapper.selectPage(
-                new Page<>(page + 1, size),
+                PageResult.safePage(page + 1, size),
                 new LambdaQueryWrapper<ServiceItem>()
                         .orderByAsc(ServiceItem::getSortOrder, ServiceItem::getId));
         return PageResult.of(result, ServiceItemView::from);

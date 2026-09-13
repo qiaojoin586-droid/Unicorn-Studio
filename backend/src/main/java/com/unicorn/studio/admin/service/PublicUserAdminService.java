@@ -57,7 +57,7 @@ public class PublicUserAdminService {
         wrapper.orderByDesc(PublicUser::getId);
         // controller 已做 page-1（0-based），MP Page 为 1-based
         // 脱敏：去掉 password（BCrypt 哈希也不可暴露）
-        return PageResult.of(userMapper.selectPage(new Page<>(page + 1, size), wrapper), this::sanitize);
+        return PageResult.of(userMapper.selectPage(PageResult.safePage(page + 1, size), wrapper), this::sanitize);
     }
 
     /** 详情：用户（脱敏）+ 评论数 + 留言数。 */

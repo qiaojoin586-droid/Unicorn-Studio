@@ -42,7 +42,7 @@ public class MessageAdminService {
         }
         wrapper.orderByDesc(Message::getId);
         // controller 已做 page-1（0-based），MP Page 为 1-based
-        return PageResult.of(messageMapper.selectPage(new Page<>(page + 1, size), wrapper));
+        return PageResult.of(messageMapper.selectPage(PageResult.safePage(page + 1, size), wrapper));
     }
 
     public Message detail(Long id) {

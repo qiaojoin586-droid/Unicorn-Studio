@@ -64,7 +64,7 @@ public class AdminAccountService {
         }
         wrapper.orderByDesc(SysUser::getId);
         // controller 已做 page-1（0-based），MP Page 为 1-based
-        Page<SysUser> result = userMapper.selectPage(new Page<>(page + 1, size), wrapper);
+        Page<SysUser> result = userMapper.selectPage(PageResult.safePage(page + 1, size), wrapper);
         // 批量加载整页用户的角色，避免逐行 2~4 次查询的 N+1
         Map<Long, List<SysRole>> rolesByUser = batchRolesOf(
                 result.getRecords().stream().map(SysUser::getId).toList());

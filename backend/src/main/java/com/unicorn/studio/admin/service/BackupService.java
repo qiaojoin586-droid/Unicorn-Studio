@@ -206,7 +206,7 @@ public class BackupService {
 
     public PageResult<BackupRecord> list(int page, int size) {
         Page<BackupRecord> records = recordMapper.selectPage(
-                new Page<>(page + 1, size),
+                PageResult.safePage(page + 1, size),
                 new LambdaQueryWrapper<BackupRecord>().orderByDesc(BackupRecord::getId));
         return PageResult.of(records);
     }

@@ -3,6 +3,7 @@ package com.unicorn.studio.admin.service;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.unicorn.studio.common.cache.CacheObjectMapper;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.HtmlSanitizer;
 import com.unicorn.studio.common.PageResult;
@@ -33,7 +34,7 @@ public class NewsAdminService {
     private final CommentMapper commentMapper;
     private final SiteSettingsMapper settingsMapper;
     private final CacheHelper cache;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = CacheObjectMapper.create();
 
     public NewsAdminService(NewsMapper newsMapper,
                             CommentMapper commentMapper,
@@ -46,7 +47,10 @@ public class NewsAdminService {
     }
 
     public PageResult<News> list(String keyword, String category, String status, int page, int size) {
-        LambdaQueryWrapper<News> wrapper = new LambdaQueryWrapper<>();
+        // 列投影（B-09）：列表排除 MEDIUMTEXT 的 content，理由同 WorkAdminService.list ——
+        // 管理端列表视图不展示正文，编辑表单走 detail(id) 单独取完整实体。
+        LambdaQueryWrapper<News> wrapper = new LambdaQueryWrapper<News>()
+                .select(News.class, info -> !"content".equals(info.getProperty()));
         if (keyword != null && !keyword.isBlank()) {
             String like = "%" + keyword.trim() + "%";
             wrapper.and(w -> w.like(News::getTitle, like).or().like(News::getSlug, like));
@@ -59,7 +63,7 @@ public class NewsAdminService {
         }
         wrapper.orderByAsc(News::getSortOrder, News::getId);
         // controller 已做 page-1（0-based），MP Page 为 1-based
-        return PageResult.of(newsMapper.selectPage(new Page<>(page + 1, size), wrapper));
+        return PageResult.of(newsMapper.selectPage(PageResult.safePage(page + 1, size), wrapper));
     }
 
     public Map<String, Object> detail(Long id) {

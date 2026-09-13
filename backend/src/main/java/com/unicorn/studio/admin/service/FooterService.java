@@ -2,6 +2,7 @@ package com.unicorn.studio.admin.service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.unicorn.studio.common.cache.CacheObjectMapper;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.cache.CacheHelper;
 import com.unicorn.studio.common.cache.CacheKeys;
@@ -79,7 +80,7 @@ public class FooterService {
     private static final Pattern SCHEME_PREFIX = Pattern.compile("^([a-zA-Z][a-zA-Z0-9+.\\-]*):");
     private static final Set<String> ALLOWED_SCHEMES = Set.of("http", "https", "mailto", "tel");
 
-    private static final ObjectMapper JSON = new ObjectMapper();
+    private static final ObjectMapper JSON = CacheObjectMapper.create();
 
     private static final Duration CACHE_TTL = Duration.ofMinutes(30);
 

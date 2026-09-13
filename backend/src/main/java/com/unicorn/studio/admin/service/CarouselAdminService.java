@@ -55,7 +55,7 @@ public class CarouselAdminService {
             }
             wrapper.orderByAsc(Carousel::getSortOrder, Carousel::getId);
         }
-        Page<Carousel> result = carouselMapper.selectPage(new Page<>(page + 1, size), wrapper);
+        Page<Carousel> result = carouselMapper.selectPage(PageResult.safePage(page + 1, size), wrapper);
         return PageResult.of(result);
     }
 
