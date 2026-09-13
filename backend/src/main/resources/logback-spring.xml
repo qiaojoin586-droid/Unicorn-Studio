@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   日志配置（2026-09-02 重构：按级别/日期分目录；2026-09-13 B-25：异步落盘 + 单文件上限 + 生产关控制台）：
-  - 控制台：开发调试用（仅 dev profile，见文末 springProfile 处说明）
+  - 控制台：默认开启（非 prod profile 一律挂载，见文末 springProfile 处说明）
   - logs/info/yyyy-MM-dd/app-info.log.%i    全量日志（INFO 及以上，含接口访问日志）
   - logs/warn/yyyy-MM-dd/app-warn.log.%i    仅 WARN 级
   - logs/error/yyyy-MM-dd/app-error.log.%i  仅 ERROR 级，排查线上问题优先看它
@@ -19,13 +19,13 @@
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
     <!--
-      注意：console-appender.xml 的 include 放在文末的 <springProfile name="dev"> 里，不在这里。
-      它是 Spring Boot 内置的 CONSOLE appender 定义。若无条件 include，非 dev 环境下这个 appender
+      注意：console-appender.xml 的 include 放在文末的 <springProfile name="!prod"> 里，不在这里。
+      它是 Spring Boot 内置的 CONSOLE appender 定义。若无条件 include，prod 环境下这个 appender
       就处于「已定义但无人引用」状态，logback 每次启动都会报一条
         WARN ... Appender named [CONSOLE] not referenced. Skipping further processing.
       而 Spring Boot 的日志系统一旦见到 WARN，就会把整份 logback 内部状态（约 23KB）dump 到 stdout ——
       在「生产本就不要控制台输出」的前提下，这等于把刚省下的控制台开销又还回去了一部分。
-      移进 dev 块后，非 dev 环境根本不存在这个 appender，启动输出干净。
+      放进条件块后，prod 环境根本不存在这个 appender，启动输出干净。
     -->
 
     <property name="LOG_PATH" value="${LOG_PATH:-${user.dir}/logs}"/>
@@ -162,25 +162,28 @@
     </root>
 
     <!--
-      仅 dev 追加 CONSOLE。控制台生产常开是纯开销：application.yml 的 logging.charset.console=GBK
-      让每次写入都多一次字符集转换，而生产环境（systemd / 重定向到文件）并不看控制台。
-      本地联调请激活 dev profile（IDEA 运行配置里勾选 dev，或加启动参数 spring.profiles.active=dev），
-      否则控制台没有任何输出 —— 文件日志不受影响，照常写。
+      【非 prod】追加 CONSOLE —— 注意条件是 "!prod" 而不是 "dev"。
+
+      这里是 B-25 的一处修正：最初写成「仅 dev 挂载 CONSOLE」，但本地最常见的运行方式
+      （IDEA 直接 Run、命令行 java -jar）【不会激活任何 profile】—— 于是控制台一片空白，
+      看起来像「启动日志丢了」，实际只是没输出到控制台（文件日志一直正常）。
+
+      正确的边界是「生产才摘控制台」：
+        · 生产：spring.profiles.active=prod（见 application-prod.yml），控制台常开是纯开销 ——
+          application.yml 的 logging.charset.console=GBK 让每次写入都多一次字符集转换，
+          而 systemd / 重定向到文件的部署并不看控制台；
+        · 其余一切情况（无 profile、dev、test…）：保留控制台。
+      这样「默认有输出」是符合直觉的，也不需要谁记得去激活 profile。
 
       写法说明：Spring Boot 不允许 <springProfile> 嵌在 <root> / <logger> / <appender> 内部
       （实测会报 "<springProfile> elements cannot be nested within ..." 并整块丢弃），
       所以只能另起一个 <root> / <logger> 元素来追加 appender：logback 对同一个 logger 的多次声明
-      是「继续挂 appender」，不是覆盖，故上面的 INFO/WARN/ERROR 三级文件在 dev 下同样生效。
+      是「继续挂 appender」，不是覆盖，故上面的 INFO/WARN/ERROR 三级文件在这里同样生效。
 
-      两点预期内的现象，不必当成故障：
-      ① 非 dev 下 CONSOLE 只是「定义了但没人引用」，以 Boot 的 debug 模式启动时 logback 会提示
-         "Appender named [CONSOLE] not referenced"，属正常；
-      ② CONSOLE 仍保持同步（没再包一层 AsyncAppender）：它只在 dev 挂载，控制台输出本身
-         就是阻塞式写入，套队列既没有收益，还会让终端上的报错延迟出现。
+      另一点预期内的现象，不必当成故障：CONSOLE 保持同步（没再包一层 AsyncAppender）——
+      控制台输出本身就是阻塞式写入，套队列既没有收益，还会让终端上的报错延迟出现。
     -->
-    <springProfile name="dev">
-        <!-- CONSOLE appender 的定义也放在这里（理由见文件头部 include 处的说明）：
-             仅在 dev 下存在，非 dev 下不定义、自然也不会报「未引用」 -->
+    <springProfile name="!prod">
         <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
         <logger name="ADMIN_AUDIT" level="INFO" additivity="false">
             <appender-ref ref="CONSOLE"/>
