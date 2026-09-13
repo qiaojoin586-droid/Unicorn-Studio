@@ -32,17 +32,32 @@ public class RedisRateLimiter {
 
     private final StringRedisTemplate redis;
 
-    public RedisRateLimiter(StringRedisTemplate redis) {
+    private final CacheCircuitBreaker breaker;
+
+    public RedisRateLimiter(StringRedisTemplate redis, CacheCircuitBreaker breaker) {
         this.redis = redis;
+        this.breaker = breaker;
     }
 
-    /** 判定一次请求是否放行；窗口内计数 ≤ limit 即放行。Redis 异常时放行（fail-open）。 */
+    /**
+     * 判定一次请求是否放行；窗口内计数 ≤ limit 即放行。Redis 异常时放行（fail-open）。
+     * <p>
+     * <b>接入熔断器（B-30③）</b>：本类原先只有 catch 降级 —— Redis 宕机时<b>每个受限请求</b>
+     * 都要先白等一次连接超时（`timeout: 300ms` / `max-wait: 200ms`）才走到 catch。
+     * 限流在每条受限路径上，这个固定开销会叠加成可感知的延迟。
+     * 熔断打开后直接放行，不再尝试连接。
+     */
     public boolean isAllowed(String key, long limit, Duration window) {
+        if (breaker.isOpen()) {
+            return true;
+        }
         try {
             Long count = redis.execute(INCR_AND_EXPIRE, List.of(key),
                     String.valueOf(Math.max(1, window.getSeconds())));
+            breaker.onSuccess();
             return count != null && count <= limit;
         } catch (Exception e) {
+            breaker.onFailure();
             log.warn("限流计数降级（放行）key={}: {}", key, e.getMessage());
             return true;
         }

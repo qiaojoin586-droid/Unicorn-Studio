@@ -74,17 +74,37 @@ public final class IpUtils {
         return candidate.isEmpty() ? remote : candidate;
     }
 
+    /**
+     * 每个线程复用一个 {@code MessageDigest}（B-27①）。
+     * <p>
+     * {@code MessageDigest} <b>不是线程安全的</b>，所以不能做成静态单例；
+     * 但每次调用都 {@code getInstance("SHA-256")} 又要走一遍 provider 查找 + 对象创建。
+     * 而本方法在<b>热点路径</b>上：每条评论一次（{@code CommentService}）、
+     * 每次 PV 埋点一次（{@code StatsService}）、每次留言一次（{@code MessageController}）。
+     * {@code ThreadLocal} 是这两者之间唯一正确的折中。
+     * <p>
+     * 关于「ThreadLocal + 线程池要 remove」的顾虑：这里<b>不构成泄漏</b> ——
+     * 复用同一个 digest 实例，每次用前 {@code reset()}、用后不持有任何业务数据，
+     * 线程池里的线程长期复用同一个对象是预期行为，没有「把请求数据带进下一个请求」的风险。
+     */
+    private static final ThreadLocal<java.security.MessageDigest> SHA_256 =
+            ThreadLocal.withInitial(() -> {
+                try {
+                    return java.security.MessageDigest.getInstance("SHA-256");
+                } catch (java.security.NoSuchAlgorithmException e) {
+                    throw new IllegalStateException("SHA-256 不可用", e);
+                }
+            });
+
+    /** SHA-256 十六进制摘要（IP 哈希等，不用于口令）。 */
     public static String sha256(String input) {
-        try {
-            var digest = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] hash = digest.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(hash.length * 2);
-            for (byte b : hash) {
-                sb.append(Character.forDigit((b >> 4) & 0xF, 16)).append(Character.forDigit(b & 0xF, 16));
-            }
-            return sb.toString();
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 不可用", e);
+        java.security.MessageDigest digest = SHA_256.get();
+        digest.reset();
+        byte[] hash = digest.digest(input.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        StringBuilder sb = new StringBuilder(hash.length * 2);
+        for (byte b : hash) {
+            sb.append(Character.forDigit((b >> 4) & 0xF, 16)).append(Character.forDigit(b & 0xF, 16));
         }
+        return sb.toString();
     }
 }

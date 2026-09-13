@@ -1,5 +1,6 @@
 package com.unicorn.studio.config;
 
+import com.unicorn.studio.common.HtmlSanitizer;
 import com.unicorn.studio.common.IpUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,7 +29,8 @@ public class IpUtilsConfig {
 
     private static final Logger log = LoggerFactory.getLogger(IpUtilsConfig.class);
 
-    public IpUtilsConfig(@Value("${app.security.trusted-proxy-count:0}") int trustedProxyCount) {
+    public IpUtilsConfig(@Value("${app.security.trusted-proxy-count:0}") int trustedProxyCount,
+                         @Value("${app.upload.image-allow-origins:}") String imageAllowOrigins) {
         IpUtils.configureTrustedProxyCount(trustedProxyCount);
 
         if (trustedProxyCount <= 0) {
@@ -37,6 +39,17 @@ public class IpUtilsConfig {
             log.info("客户端 IP 提取：信任 X-Forwarded-For 最右 {} 跳作为客户端 IP。"
                     + "请确认该值与实际代理层数一致——配小会让全站共用一个限流桶，"
                     + "配大则等于采信攻击者提供的值。", trustedProxyCount);
+        }
+
+        // 富文本外链图白名单（B-23③）：这个配置此前【完全没有生效】——
+        // HtmlSanitizer.configureAllowedOrigins 全仓无调用者，意味着
+        // app.upload.image-allow-origins 填了也没用，富文本里的外链图恒被消毒规则拒绝。
+        // 放在这里是因为它和上面那项一样，都是「启动时把配置灌进静态工具类」。
+        HtmlSanitizer.configureAllowedOrigins(imageAllowOrigins);
+        if (imageAllowOrigins == null || imageAllowOrigins.isBlank()) {
+            log.info("富文本外链图白名单未配置：仅允许本站 /uploads/ 的图片");
+        } else {
+            log.info("富文本外链图白名单已生效：{}", imageAllowOrigins);
         }
     }
 }

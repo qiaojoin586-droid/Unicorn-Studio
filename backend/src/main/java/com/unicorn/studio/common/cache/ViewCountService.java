@@ -32,22 +32,37 @@ public class ViewCountService {
     private final StringRedisTemplate redis;
     private final WorkMapper workMapper;
     private final NewsMapper newsMapper;
+    private final CacheCircuitBreaker breaker;
 
-    public ViewCountService(StringRedisTemplate redis, WorkMapper workMapper, NewsMapper newsMapper) {
+    public ViewCountService(StringRedisTemplate redis, WorkMapper workMapper, NewsMapper newsMapper,
+                            CacheCircuitBreaker breaker) {
         this.redis = redis;
         this.workMapper = workMapper;
         this.newsMapper = newsMapper;
+        this.breaker = breaker;
     }
 
-    /** 记录一次浏览：INCR 计数 + SADD 脏索引；返回自增后的累计增量（0 = 降级）。 */
+    /**
+     * 记录一次浏览：INCR 计数 + SADD 脏索引；返回自增后的累计增量（0 = 降级）。
+     * <p>
+     * <b>接入熔断器（B-30③）</b>：这是全站最热的 Redis 路径 —— <b>每次作品/新闻详情浏览</b>
+     * 都会走一次（详情页是本站访问量最大的页面）。Redis 宕机时原先每次浏览都要白等
+     * 一次连接超时，而浏览量是「弱一致指标，丢了也无所谓」——
+     * 为一个可丢弃的计数让每个详情页请求都慢几百毫秒，代价与收益完全不成比例。
+     */
     public long increment(String type, Long id) {
         String key = CacheKeys.view(type, id);
+        if (breaker.isOpen()) {
+            return 0;
+        }
         try {
             Long delta = redis.opsForValue().increment(key);
             redis.opsForSet().add(CacheKeys.VIEW_DIRTY, key);
             redis.expire(CacheKeys.VIEW_DIRTY, DIRTY_TTL);
+            breaker.onSuccess();
             return delta == null ? 0 : delta;
         } catch (Exception e) {
+            breaker.onFailure();
             log.warn("浏览量计数降级 {}/{}: {}", type, id, e.getMessage());
             return 0;
         }
@@ -106,6 +121,9 @@ public class ViewCountService {
             log.warn("浏览量回写取增量失败 {}: {}", key, e.getMessage());
             return;
         }
+        // raw 可以为 null：Lua 里 GETDEL 未命中时返回 false，Spring 会把它映射成 null。
+        // （IDE 可能把这里标成 dead code —— 那是误报，脚本 API 被标注为非空而已。
+        //  这条分支是必要的：计数 key 已过期、只剩脏索引条目时就会走到。）
         if (raw == null) {
             return;
         }

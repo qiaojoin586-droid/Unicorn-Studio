@@ -93,8 +93,16 @@ public class StatsService {
         aggregate(yesterday);
     }
 
-    /** 聚合指定日期（供手动触发/测试）。 */
-    @Transactional
+    /**
+     * 聚合指定日期（供手动触发/测试）。
+     * <p>
+     * <b>这里刻意没有 {@code @Transactional}（B-30⑤）</b>：本方法只被同类的
+     * {@link #aggregateDaily()} <b>自调用</b>，而自调用绕过 Spring 代理 ——
+     * 注解即使写上也不会生效，属于会误导后人的「死注解」。
+     * 事务由调用方 {@code aggregateDaily} 提供；若将来需要单独调用本方法，
+     * 必须改为经代理调用（注入自身或用 {@code ObjectProvider}，与
+     * {@code AuditLogAspect} / {@code BackupService} 的做法一致），而不是加回注解。
+     */
     public void aggregate(LocalDate date) {
         LocalDateTime from = date.atStartOfDay();
         LocalDateTime to = date.plusDays(1).atStartOfDay();

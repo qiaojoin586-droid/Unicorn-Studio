@@ -30,9 +30,11 @@ public class RefreshTokenStore {
     private static final Logger log = LoggerFactory.getLogger(RefreshTokenStore.class);
 
     private final StringRedisTemplate redis;
+    private final CacheCircuitBreaker breaker;
 
-    public RefreshTokenStore(StringRedisTemplate redis) {
+    public RefreshTokenStore(StringRedisTemplate redis, CacheCircuitBreaker breaker) {
         this.redis = redis;
+        this.breaker = breaker;
     }
 
     /** 保存令牌：SET cache:refresh:{token} = userId（TTL） + SADD 用户令牌索引（索引同 TTL 续期）。 */
@@ -48,10 +50,25 @@ public class RefreshTokenStore {
         }
     }
 
-    /** 查询令牌归属：GET cache:refresh:{token} → userId；未命中/降级返回 empty。 */
+    /**
+     * 查询令牌归属：GET cache:refresh:{token} → userId；未命中/降级返回 empty。
+     * <p>
+     * <b>接入熔断器（B-30③）</b>：每个刷新请求都会走到这里，Redis 宕机时原先每个请求
+     * 都要白等一次连接超时才落到 catch。熔断打开后直接返回 empty（= 未登录），
+     * 对调用方的语义与 catch 分支完全一致。
+     * <p>
+     * <b>只有读路径接熔断，写与删除不接</b>：{@code delete}/{@code deleteAllForUser} 是
+     * 登出、改密、禁用、删号时的令牌清理，属安全相关操作 —— 熔断器的状态可能因别处的失败
+     * 而处于打开状态（而 Redis 实际已恢复），此时跳过删除会让本该失效的令牌继续可用。
+     * 让它们照常尝试、失败再降级，是更稳妥的选择。
+     */
     public Optional<Long> find(String token) {
+        if (breaker.isOpen()) {
+            return Optional.empty();
+        }
         try {
             String value = redis.opsForValue().get(CacheKeys.refresh(token));
+            breaker.onSuccess();
             if (value == null) {
                 return Optional.empty();
             }
@@ -61,6 +78,7 @@ public class RefreshTokenStore {
                 return Optional.empty();
             }
         } catch (Exception e) {
+            breaker.onFailure();
             log.warn("刷新令牌读取降级: {}", e.getMessage());
             return Optional.empty();
         }
