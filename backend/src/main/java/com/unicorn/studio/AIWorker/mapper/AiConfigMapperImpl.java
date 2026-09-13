@@ -46,4 +46,9 @@ public class AiConfigMapperImpl implements AiConfigMapper {
     public int updateById(SiteSettings setting) {
         return delegate.updateById(setting);
     }
+
+    @Override
+    public int batchUpsert(List<SiteSettings> items) {
+        return delegate.batchUpsert(items);
+    }
 }

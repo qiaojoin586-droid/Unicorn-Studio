@@ -1,6 +1,7 @@
 package com.unicorn.studio.admin.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
@@ -124,24 +125,34 @@ public class PublicUserAdminService {
         userMapper.deleteById(id);
     }
 
-    /** 到期自动解禁（每日 03:00）。条件下推到 SQL，不再全表扫描。 */
+    /**
+     * 到期自动解禁（每日 03:00）。
+     * <p>
+     * <b>一条 UPDATE 完成（B-11）</b>：原实现是「先 selectList 查出全部到期用户 → 逐条
+     * {@code updateById}」。两个问题：① 查出实体再逐条写回，往返数与解禁人数线性相关；
+     * ② {@code updateById} 在 {@code update-strategy: ignored} 下是<b>全列覆盖</b>，
+     * 每条都要把所有列写一遍（含 password 哈希）。解禁在语义上只涉及三列，
+     * 且判定条件本身就能直接下推到 WHERE —— 连「先查出来」这一步都不需要。
+     * <p>
+     * {@code update(null, wrapper)} 不触发 MP 的 updateFill，且 {@code PublicUser}
+     * 本就没有 updatedAt 列，故无需处理时间戳。
+     *
+     * @return 实际解禁的人数（原实现只能拿到「查出来的条数」，与真正更新的行数未必一致）
+     */
     @Scheduled(cron = "0 0 3 * * *")
     @Transactional
-    public void autoUnban() {
-        List<PublicUser> expired = userMapper.selectList(new LambdaQueryWrapper<PublicUser>()
+    public int autoUnban() {
+        int unbanned = userMapper.update(null, new LambdaUpdateWrapper<PublicUser>()
+                .set(PublicUser::getStatus, 1)
+                .set(PublicUser::getBanReason, null)
+                .set(PublicUser::getBanUntil, null)
                 .eq(PublicUser::getStatus, 0)
                 .isNotNull(PublicUser::getBanUntil)
                 .le(PublicUser::getBanUntil, LocalDateTime.now()));
-        for (PublicUser user : expired) {
-            user.setStatus(1);
-            user.setBanReason(null);
-            user.setBanUntil(null);
-            userMapper.updateById(user);
+        if (unbanned > 0) {
+            org.slf4j.LoggerFactory.getLogger(getClass()).info("到期自动解禁用户 {} 个", unbanned);
         }
-        if (!expired.isEmpty()) {
-            org.slf4j.LoggerFactory.getLogger(getClass())
-                    .info("到期自动解禁用户 {} 个", expired.size());
-        }
+        return unbanned;
     }
 
     /** 解析 yyyy-MM-dd 查询参数，非法格式转 400（避免 DateTimeParseException 落到 500）。 */

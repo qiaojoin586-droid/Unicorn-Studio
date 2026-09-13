@@ -120,8 +120,17 @@ public class AiConfigService {
             values.put(AiConfigProvider.KEY_ENABLED, String.valueOf(form.enabled()));
         }
 
-        for (Map.Entry<String, String> e : values.entrySet()) {
-            upsert(e.getKey(), e.getValue());
+        // 单条语句批量 upsert（B-11）：原先循环内逐条 upsert = 每个字段 2 条语句
+        // （findBySettingKey + updateById/insert），7 个字段就是 14 条。
+        // 与 SiteSettingsService.updateAll 同语义、同实现（setting_key 上有唯一约束）。
+        if (!values.isEmpty()) {
+            configMapper.batchUpsert(values.entrySet().stream()
+                    .map(e -> SiteSettings.builder()
+                            .groupName(AiConfigProvider.GROUP)
+                            .settingKey(e.getKey())
+                            .settingValue(e.getValue())
+                            .build())
+                    .toList());
         }
         // 配置改了：事务提交后统一失效快照缓存（避免「清完缓存又回滚」竞态）
         cache.evictAfterCommit(AiConfigProvider.CACHE_KEY);
@@ -223,21 +232,6 @@ public class AiConfigService {
             return "无法建立连接：请检查 API URL 域名是否正确、服务器能否访问外网";
         }
         return "调用失败：" + (msg.isBlank() ? e.getClass().getSimpleName() : msg);
-    }
-
-    /** upsert：存在则更新，不存在则插入（与 SiteSettingsService.updateAll 同语义）。 */
-    private void upsert(String key, String value) {
-        SiteSettings existing = configMapper.findBySettingKey(key).orElse(null);
-        if (existing != null) {
-            existing.setSettingValue(value);
-            configMapper.updateById(existing);
-            return;
-        }
-        configMapper.insert(SiteSettings.builder()
-                .groupName(AiConfigProvider.GROUP)
-                .settingKey(key)
-                .settingValue(value)
-                .build());
     }
 
     private static void putIfPresent(Map<String, String> values, String key, String value) {

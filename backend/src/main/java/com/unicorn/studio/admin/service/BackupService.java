@@ -45,6 +45,9 @@ public class BackupService {
     private static final Logger log = LoggerFactory.getLogger(BackupService.class);
     private static final DateTimeFormatter FILE_TIME = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 
+    /** 单轮清理最多删除的行数（B-26）：防止 retention-count 配得过小时一次删掉海量历史记录 */
+    private static final int MAX_CLEANUP_BATCH = 200;
+
     private final BackupRecordMapper recordMapper;
     private final ObjectProvider<BackupService> selfProvider;
     private final Path backupDir;
@@ -133,15 +136,25 @@ public class BackupService {
         }
     }
 
+    /**
+     * 执行 mysqldump 并把输出以 gzip 流式落盘。
+     * <p>
+     * <b>子进程必须显式回收（B-26）</b>：原实现拿到 {@code Process} 后从不 {@code destroy()}。
+     * 若 {@code in.transferTo(out)} 因磁盘满或 gzip 异常抛错，异常会从 try 块直接抛出，
+     * <b>mysqldump 子进程仍在运行</b>——它继续持有数据库连接与文件句柄，
+     * 而备份线程池只有 1 个线程，泄漏会逐轮累积。
+     * 故这里把 Process 提到 try 之外，在 finally 里强制回收。
+     */
     private void runMysqldump(Path target) throws Exception {
         String dbName = extractDbName(jdbcUrl);
         Path credentials = Files.createTempFile("mysqldump-creds", ".cnf");
         Path errFile = Files.createTempFile("mysqldump-err", ".log");
+        Process process = null;
         try {
             Files.writeString(credentials,
                     "[client]\nuser=" + dbUsername + "\npassword=" + dbPassword + "\n",
                     StandardCharsets.UTF_8);
-            Process process = new ProcessBuilder(mysqldumpPath,
+            process = new ProcessBuilder(mysqldumpPath,
                     "--defaults-extra-file=" + credentials,
                     "--single-transaction", "--routines", dbName)
                     // stderr 落临时文件：避免缓冲区填满导致 waitFor 死锁，失败时也能取到错误详情
@@ -159,6 +172,13 @@ public class BackupService {
                         + (errDetail.isEmpty() ? "" : ": " + errDetail.substring(0, Math.min(errDetail.length(), 300))));
             }
         } finally {
+            // 无论成功、失败还是被中断，都不留活着的子进程。
+            // 注意顺序：先回收进程，再删临时文件 —— 反过来的话，仍在运行的 mysqldump
+            // 会因凭据文件被删而报错，虽然不影响我们释放资源，但会在 stderr 留下误导性的错误。
+            if (process != null && process.isAlive()) {
+                log.warn("mysqldump 子进程仍在运行，强制回收（备份可能因异常提前中断）");
+                process.destroyForcibly();
+            }
             Files.deleteIfExists(credentials);
             Files.deleteIfExists(errFile);
         }
@@ -180,13 +200,39 @@ public class BackupService {
         return slash >= 0 && slash < clean.length() - 1 ? clean.substring(slash + 1) : clean;
     }
 
-    /** 保留最近 retention-count 份备份（按创建时间，全量查询后裁剪，不再硬编码 LIMIT 7）。 */
+    /**
+     * 保留最近 retention-count 份备份。
+     * <p>
+     * <b>裁剪下推到 DB（B-26）</b>：原实现是 {@code findAllByOrderByCreatedAtDesc()} 把
+     * <b>整表载入内存</b>，再 {@code subList(retentionCount, size)} 丢掉前面几条，
+     * 最后逐条 {@code deleteById}。备份记录只增不减，这个类的内存占用会随运行年限线性增长，
+     * 而它其实只需要「最近 N 条之外的那些」。
+     * <p>
+     * 三点改动：
+     * <ol>
+     *   <li>用 {@code LIMIT ... OFFSET retentionCount} 让 DB 直接返回「该删的那批」，
+     *       内存占用与表总量脱钩；</li>
+     *   <li>排序键由 {@code created_at} 换成 {@code id}：id 是自增主键，插入序即时间序，
+     *       且不存在同一秒创建导致排序不稳定的问题（清理逻辑必须确定性地保留「最近 N 份」）；</li>
+     *   <li>逐条 {@code deleteById} 换成一次 {@code deleteBatchIds}。</li>
+     * </ol>
+     * 另加 {@link #MAX_CLEANUP_BATCH} 上限：即使 retention-count 被配得很小而历史记录极多，
+     * 单轮也不会一次删掉海量行（每轮备份后都会再跑一次清理）。
+     */
     public void cleanupOldBackups() {
-        List<BackupRecord> records = recordMapper.findAllByOrderByCreatedAtDesc();
-        if (records.size() <= retentionCount) {
+        List<BackupRecord> stale;
+        try {
+            stale = recordMapper.selectList(new LambdaQueryWrapper<BackupRecord>()
+                    .orderByDesc(BackupRecord::getId)
+                    .last("LIMIT " + MAX_CLEANUP_BATCH + " OFFSET " + retentionCount));
+        } catch (Exception e) {
+            log.warn("查询待清理备份记录失败: {}", e.getMessage());
             return;
         }
-        for (BackupRecord record : records.subList(retentionCount, records.size())) {
+        if (stale.isEmpty()) {
+            return;
+        }
+        for (BackupRecord record : stale) {
             if (record.getFileName() != null) {
                 try {
                     Files.deleteIfExists(backupDir.resolve(record.getFileName()));
@@ -194,8 +240,9 @@ public class BackupService {
                     log.warn("删除旧备份文件失败: {}", record.getFileName());
                 }
             }
-            recordMapper.deleteById(record.getId());
         }
+        recordMapper.deleteBatchIds(stale.stream().map(BackupRecord::getId).toList());
+        log.info("已清理 {} 份过期备份", stale.size());
     }
 
     @Scheduled(cron = "${app.backup.cron:0 0 2 * * *}")

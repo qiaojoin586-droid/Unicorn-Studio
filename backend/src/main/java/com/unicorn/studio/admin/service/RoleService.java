@@ -16,6 +16,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * 角色管理：CRUD + 权限勾选树（实施方案 §3.6）。
@@ -136,16 +138,32 @@ public class RoleService {
                 .orElseThrow(() -> BusinessException.notFound("角色不存在"));
     }
 
+    /**
+     * 重建角色的权限关联（B-11）。
+     * <p>
+     * 原实现是循环内「逐条 {@code selectById} 校验 + 逐条 {@code insert}」——
+     * 勾 40 个权限就是 <b>40 次查询 + 40 次插入 = 80 次往返</b>，整段还在事务里，
+     * 事务持有时长与勾选数量线性相关。
+     * <p>
+     * 改为「一次 {@code selectBatchIds} 校验 + 一条批量 INSERT」= 2 次往返。
+     * 校验语义不变（仍是「引用不存在则 400，防悬挂关联」），且因为先把全部 id 查出来，
+     * 报错时能一次性给出所有不存在的 id，比逐个报更有用。
+     */
     private void replacePermissions(Long roleId, List<Long> permissionIds) {
         rolePermissionMapper.deleteByIdRoleId(roleId);
-        if (permissionIds != null) {
-            for (Long permissionId : permissionIds) {
-                // 与 replaceRoles 对齐：校验引用存在，防悬挂关联
-                if (permissionMapper.selectById(permissionId) == null) {
-                    throw BusinessException.badRequest("权限不存在: " + permissionId);
-                }
-                rolePermissionMapper.insert(new SysRolePermission(roleId, permissionId));
-            }
+        if (permissionIds == null || permissionIds.isEmpty()) {
+            return;
         }
+        List<Long> distinctIds = permissionIds.stream().distinct().toList();
+        Set<Long> existing = permissionMapper.selectBatchIds(distinctIds).stream()
+                .map(SysPermission::getId)
+                .collect(Collectors.toSet());
+        List<Long> missing = distinctIds.stream().filter(id -> !existing.contains(id)).toList();
+        if (!missing.isEmpty()) {
+            throw BusinessException.badRequest("权限不存在: " + missing);
+        }
+        rolePermissionMapper.insertBatch(distinctIds.stream()
+                .map(permissionId -> new SysRolePermission(roleId, permissionId))
+                .toList());
     }
 }

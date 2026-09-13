@@ -144,18 +144,38 @@ public class CacheHelper {
     }
 
     /** 按模式删除（SCAN + 游标，不用 KEYS，避免阻塞 Redis，§5.1）；失败仅记日志。 */
+    /** 按模式删除时的单批大小（B-26）：边扫描边分批删，避免把所有命中 key 攒在内存里 */
+    private static final int DELETE_BATCH_SIZE = 500;
+
+    /**
+     * 按模式删除缓存键。
+     * <p>
+     * <b>边扫描边分批删（B-26）</b>：原实现把所有命中 key 累积进 {@code ArrayList} 后才一次
+     * {@code DEL}。当前调用方只有 {@code cache:auth:perm:*} 与 {@code cache:site:group:*}
+     * （量小，安全），但 pattern 一旦扩散（例如误用 {@code cache:*}）就会变成无界内存操作 ——
+     * 而 {@code SCAN} 存在的意义恰恰是「不让一次操作把内存吃掉」，
+     * 先累积再删等于把这个好处又丢了回去。
+     * <p>
+     * 每 {@link #DELETE_BATCH_SIZE} 个删一批：内存占用与命中 key 总量脱钩。
+     */
     public void deleteByPattern(String pattern) {
         if (!enabled || pattern == null || pattern.isBlank()) {
             return;
         }
         try {
-            List<String> keys = new ArrayList<>();
+            List<String> batch = new ArrayList<>(DELETE_BATCH_SIZE);
             ScanOptions options = ScanOptions.scanOptions().match(pattern).count(100).build();
             try (Cursor<String> cursor = redis.scan(options)) {
-                cursor.forEachRemaining(keys::add);
+                while (cursor.hasNext()) {
+                    batch.add(cursor.next());
+                    if (batch.size() >= DELETE_BATCH_SIZE) {
+                        redis.delete(batch);
+                        batch.clear();
+                    }
+                }
             }
-            if (!keys.isEmpty()) {
-                redis.delete(keys);
+            if (!batch.isEmpty()) {
+                redis.delete(batch);
             }
         } catch (Exception e) {
             breaker.onFailure();

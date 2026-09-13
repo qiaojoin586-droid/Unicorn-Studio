@@ -78,8 +78,11 @@ class AdminAccountServiceTest {
 
         service.create("editor", "password123", "编辑", List.of(2L));
 
-        verify(userRoleMapper).insert(argThat(relation ->
-                relation.getUserId().equals(20L) && relation.getRoleId().equals(2L)));
+        // B-11：关联写入由「循环内逐条 insert」改为一次 insertBatch，断言随之调整
+        verify(userRoleMapper).insertBatch(argThat(rows ->
+                rows.size() == 1
+                        && rows.get(0).getUserId().equals(20L)
+                        && rows.get(0).getRoleId().equals(2L)));
     }
 
     @Test
@@ -139,8 +142,11 @@ class AdminAccountServiceTest {
         service.update(2L, null, 1, List.of(2L), operator);
 
         verify(userRoleMapper).deleteByIdUserId(2L);
-        verify(userRoleMapper).insert(argThat(relation ->
-                relation.getUserId().equals(2L) && relation.getRoleId().equals(2L)));
+        // B-11：同上，断言改为批量写入
+        verify(userRoleMapper).insertBatch(argThat(rows ->
+                rows.size() == 1
+                        && rows.get(0).getUserId().equals(2L)
+                        && rows.get(0).getRoleId().equals(2L)));
     }
 
     private void stubCurrentRoles(SysUser user, List<Long> roleIds, List<SysRole> roles) {

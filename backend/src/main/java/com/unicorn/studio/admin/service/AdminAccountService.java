@@ -293,11 +293,16 @@ public class AdminAccountService {
         return Set.copyOf(left).equals(Set.copyOf(right));
     }
 
+    /** 重建管理员的角色关联（B-11）：一条批量 INSERT 替代循环内逐条 insert。 */
     private void replaceRoles(Long userId, List<Long> roleIds) {
         userRoleMapper.deleteByIdUserId(userId);
-        for (Long roleId : roleIds) {
-            userRoleMapper.insert(new SysUserRole(userId, roleId));
+        if (roleIds == null || roleIds.isEmpty()) {
+            return;
         }
+        userRoleMapper.insertBatch(roleIds.stream()
+                .distinct()
+                .map(roleId -> new SysUserRole(userId, roleId))
+                .toList());
     }
 
     private record ValidatedRoles(List<Long> ids, boolean includesSuperAdmin) {

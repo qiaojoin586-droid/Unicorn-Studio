@@ -1,6 +1,7 @@
 package com.unicorn.studio.admin.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
@@ -80,7 +81,19 @@ public class CommentAdminService {
         return reply;
     }
 
-    /** 批量操作：approve/reject/delete。逐条失败仅跳过该条（业务异常），系统异常直接抛出。 */
+    /**
+     * 批量操作：approve/reject/delete。
+     * <p>
+     * <b>按动作批量执行（B-11）</b>：原实现是 for 循环内逐条调用单条方法，
+     * 而单条方法各自「先 selectById 再 updateById/deleteById」—— 批量审 50 条评论
+     * 就是 <b>100+ 次往返</b>，且整段在一个事务里，持有时长与勾选数量线性相关。
+     * <p>
+     * 现在先用一次 {@code selectBatchIds} 把存在的 id 查出来，再一条语句写完；
+     * 不存在的 id 计入 failCount，与原先「单条抛 notFound → 计入 fail」的对外语义一致。
+     * <p>
+     * 之所以可以先查再写：「某条不存在」是<b>业务性失败</b>（跳过后继续），
+     * 而 DB 系统异常仍会直接抛出并由事务回滚 —— 与原实现的区分保持一致。
+     */
     @Transactional
     public Map<String, Object> batch(List<Long> ids, String action) {
         if (ids == null || ids.isEmpty()) {
@@ -89,33 +102,54 @@ public class CommentAdminService {
         if (!BATCH_ACTIONS.contains(action)) {
             throw BusinessException.badRequest("非法批量操作: " + action);
         }
-        int success = 0;
-        int fail = 0;
-        for (Long id : ids) {
-            try {
-                switch (action) {
-                    case "approve" -> changeStatus(id, "approved");
-                    case "reject" -> changeStatus(id, "rejected");
-                    case "delete" -> delete(id);
-                    default -> throw BusinessException.badRequest("非法批量操作: " + action);
-                }
-                success++;
-            } catch (BusinessException e) {
-                // 仅跳过业务性失败（如评论不存在）；DB 等系统异常继续抛出，
-                // 避免在 @Transactional 中吞异常导致 rollback-only
-                fail++;
+        List<Long> distinctIds = ids.stream().distinct().toList();
+        // 一次查询判定哪些 id 真实存在；顺带得到「不存在的条数」用于 failCount
+        List<Long> existingIds = commentMapper.selectBatchIds(distinctIds).stream()
+                .map(Comment::getId)
+                .toList();
+        if (!existingIds.isEmpty()) {
+            switch (action) {
+                case "approve" -> commentMapper.update(null, new LambdaUpdateWrapper<Comment>()
+                        .set(Comment::getStatus, "approved")
+                        .in(Comment::getId, existingIds));
+                case "reject" -> commentMapper.update(null, new LambdaUpdateWrapper<Comment>()
+                        .set(Comment::getStatus, "rejected")
+                        .in(Comment::getId, existingIds));
+                case "delete" -> deleteWithReplies(existingIds);
+                default -> throw BusinessException.badRequest("非法批量操作: " + action);
             }
         }
-        return Map.of("successCount", success, "failCount", fail);
+        int success = existingIds.size();
+        return Map.of("successCount", success, "failCount", distinctIds.size() - success);
     }
 
+    /**
+     * 批量删除评论及其全部子回复。
+     * <p>
+     * 一次 {@code findByParentIdIn} 取到所有子回复 id，再一次 {@code deleteBatchIds} 删掉，
+     * 最后批量删主评论 —— 3 条语句，而不是「每条评论各查一次、各删若干次」。
+     */
+    private void deleteWithReplies(List<Long> commentIds) {
+        List<Long> childIds = commentMapper.findByParentIdIn(commentIds).stream()
+                .map(Comment::getId)
+                .toList();
+        if (!childIds.isEmpty()) {
+            commentMapper.deleteBatchIds(childIds);
+        }
+        commentMapper.deleteBatchIds(commentIds);
+    }
+
+    /**
+     * 删除评论并级联清理其子回复（B-11）。
+     * <p>
+     * 原来是 {@code findByParentIdIn(...).forEach(c -> deleteById(c.getId()))}——
+     * N 条子回复就是 N 次 DELETE 往返。这里直接复用 {@link #deleteWithReplies}，
+     * 与批量删除走同一条路径（一次查子回复 + 一次批量删 + 一次批量删主评论）。
+     */
     @Transactional
     public void delete(Long id) {
         getOrThrow(id);
-        // 同时清理该评论下的子回复
-        commentMapper.findByParentIdIn(List.of(id))
-                .forEach(c -> commentMapper.deleteById(c.getId()));
-        commentMapper.deleteById(id);
+        deleteWithReplies(List.of(id));
     }
 
     private Map<Long, String> nicknamesOf(List<Comment> comments) {

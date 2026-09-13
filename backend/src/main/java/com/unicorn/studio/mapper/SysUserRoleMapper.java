@@ -31,6 +31,16 @@ public interface SysUserRoleMapper {
     @Insert("INSERT INTO sys_user_role(user_id, role_id) VALUES(#{userId}, #{roleId})")
     int insert(SysUserRole row);
 
+    /**
+     * 批量插入关联（B-11）：一条语句写完 N 条，替代循环内逐条 {@code insert}。
+     * ⚠️ 调用方须保证非空（空列表会生成语法非法的 SQL）。
+     */
+    @Insert({"<script>",
+            "INSERT INTO sys_user_role(user_id, role_id) VALUES",
+            "<foreach collection='rows' item='r' separator=','>(#{r.userId}, #{r.roleId})</foreach>",
+            "</script>"})
+    int insertBatch(@org.apache.ibatis.annotations.Param("rows") List<SysUserRole> rows);
+
     @Delete("DELETE FROM sys_user_role WHERE user_id = #{userId}")
     int deleteByIdUserId(Long userId);
 }

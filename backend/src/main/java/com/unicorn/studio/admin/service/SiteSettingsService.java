@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -88,13 +89,23 @@ public class SiteSettingsService {
         });
     }
 
-    /** 后台批量更新。 */
+    /**
+     * 后台批量更新。
+     * <p>
+     * <b>单条语句完成（B-11）</b>：原实现是循环内「逐条查 + 逐条写」——
+     * 页脚 11 个 key 要 22 条语句、关于页 6 个要 12 条，而事务持有时长与入参长度线性相关。
+     * 这里先用一次遍历完成校验与装配，再交给 {@code batchUpsert} 一条语句写完。
+     * <p>
+     * 之所以能这样做：{@code setting_key} 上有唯一约束，冲突判定交给 MySQL 即可，
+     * 不必先查一遍「存在与否」。语义与原先逐条实现一致（详见 {@code SiteSettingsMapper.batchUpsert}）。
+     */
     @Transactional
     public void updateAll(List<KeyValueRequest> items) {
-        if (items == null) {
+        if (items == null || items.isEmpty()) {
             return;
         }
         boolean sensitiveChanged = false;
+        List<SiteSettings> toUpsert = new ArrayList<>(items.size());
         for (KeyValueRequest item : items) {
             if (item.key() == null || item.key().isBlank()) {
                 throw BusinessException.badRequest("设置项 key 不能为空");
@@ -102,18 +113,14 @@ public class SiteSettingsService {
             if (SensitiveWordService.KEY.equals(item.key())) {
                 sensitiveChanged = true;
             }
-            Optional<SiteSettings> existing = settingsMapper.findBySettingKey(item.key());
-            SiteSettings setting = existing.orElseGet(() -> SiteSettings.builder()
+            toUpsert.add(SiteSettings.builder()
                     .groupName(item.group())
                     .settingKey(item.key())
+                    .settingValue(item.value())
                     .build());
-            setting.setSettingValue(item.value());
-            if (existing.isPresent()) {
-                settingsMapper.updateById(setting);
-            } else {
-                settingsMapper.insert(setting);
-            }
         }
+        // 校验全部通过后再落库：避免「前几条已写、中途抛异常」依赖事务回滚来兜底
+        settingsMapper.batchUpsert(toUpsert);
         // Redis 缓存：事务提交后失效（§5.3 陷阱 1，避免「清完缓存又回滚/回填旧值」竞态）
         cache.evictAfterCommit(PUBLIC_CACHE_KEY);
         // 组级快照：组名是动态的，只能按前缀失效

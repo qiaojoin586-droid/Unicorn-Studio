@@ -27,6 +27,20 @@ public interface SysRolePermissionMapper {
     @Insert("INSERT INTO sys_role_permission(role_id, permission_id) VALUES(#{roleId}, #{permissionId})")
     int insert(SysRolePermission row);
 
+    /**
+     * 批量插入关联（B-11）：一条语句写完 N 条关联。
+     * <p>
+     * 原先 {@code replacePermissions} 是循环内逐条 {@code insert} —— 勾 40 个权限就是
+     * 40 次往返，且整段在事务里，事务持有时长与勾选数量线性相关。
+     * <p>
+     * ⚠️ 调用方须保证非空（空列表会生成语法非法的 SQL）。
+     */
+    @Insert({"<script>",
+            "INSERT INTO sys_role_permission(role_id, permission_id) VALUES",
+            "<foreach collection='rows' item='r' separator=','>(#{r.roleId}, #{r.permissionId})</foreach>",
+            "</script>"})
+    int insertBatch(@org.apache.ibatis.annotations.Param("rows") List<SysRolePermission> rows);
+
     @Delete("DELETE FROM sys_role_permission WHERE role_id = #{roleId}")
     int deleteByIdRoleId(Long roleId);
 }

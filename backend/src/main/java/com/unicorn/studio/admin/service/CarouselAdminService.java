@@ -1,6 +1,7 @@
 package com.unicorn.studio.admin.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
@@ -170,14 +171,15 @@ public class CarouselAdminService {
                 || saved.getStatus() == null || saved.getStatus() != 1) {
             return;
         }
-        List<Carousel> siblings = carouselMapper
-                .findByPageKeyAndStatusOrderBySortOrderAscIdAsc(saved.getPageKey(), 1);
-        for (Carousel sibling : siblings) {
-            if (!sibling.getId().equals(saved.getId())) {
-                sibling.setStatus(0);
-                carouselMapper.updateById(sibling);
-            }
-        }
+        // B-11：原是「查出同页启用项 → 逐条 updateById」，现在条件直接下推到 WHERE，
+        // 一条语句完成。语义不变（同页、启用中、排除刚保存的这条）。
+        // update(null, wrapper) 不触发 MP 的 updateFill，故 updatedAt 显式 set。
+        carouselMapper.update(null, new LambdaUpdateWrapper<Carousel>()
+                .set(Carousel::getStatus, 0)
+                .set(Carousel::getUpdatedAt, java.time.LocalDateTime.now())
+                .eq(Carousel::getPageKey, saved.getPageKey())
+                .eq(Carousel::getStatus, 1)
+                .ne(Carousel::getId, saved.getId()));
     }
 
     private static String normalizePageKey(String pageKey) {

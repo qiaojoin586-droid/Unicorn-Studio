@@ -29,4 +29,7 @@ public interface AiConfigMapper {
 
     /** 按主键更新。 */
     int updateById(SiteSettings setting);
+
+    /** 批量 upsert（B-11）：一条语句完成 N 个键的写入，语义见 {@code SiteSettingsMapper.batchUpsert}。 */
+    int batchUpsert(List<SiteSettings> items);
 }
