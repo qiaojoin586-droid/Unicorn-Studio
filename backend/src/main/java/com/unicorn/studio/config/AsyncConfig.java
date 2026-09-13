@@ -1,5 +1,6 @@
 package com.unicorn.studio.config;
 
+import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.annotation.EnableAsync;
@@ -65,6 +66,20 @@ public class AsyncConfig {
     @Bean("warmupExecutor")
     public Executor warmupExecutor() {
         return buildPool("warmup-", 1, 1, 10, new ThreadPoolExecutor.CallerRunsPolicy(), 30);
+    }
+
+    /**
+     * 邮件通知（SMTP，外部网络 IO，数百毫秒到数秒）。
+     * <p>
+     * 独立成池且用<b>丢弃并告警</b>策略：邮件是「锦上添花」的通知，
+     * 队列满时绝不能像埋点那样用 CallerRuns 兜底 —— 那会把请求线程卡在一次 SMTP 投递上，
+     * 正是本项要消除的问题。丢弃时记 WARN 保证可观测，而不是静默消失。
+     */
+    @Bean("mailExecutor")
+    public Executor mailExecutor() {
+        return buildPool("mail-", 1, 1, 100, (task, executor) ->
+                LoggerFactory.getLogger(AsyncConfig.class)
+                        .warn("邮件队列已满，本次通知被丢弃（不影响留言回复本身的成功）"), 10);
     }
 
     /**

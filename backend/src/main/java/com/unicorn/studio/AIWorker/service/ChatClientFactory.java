@@ -7,8 +7,11 @@ import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.RestClient;
 
+import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -37,9 +40,20 @@ public class ChatClientFactory {
      */
     private static final int MAX_CACHE = 8;
 
-    /** 连接超时与读超时：对话场景要能容忍首字慢的推理模型 */
-    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(15);
-    private static final Duration READ_TIMEOUT = Duration.ofSeconds(120);
+    /** 对话：连接 15s / 读 120s —— 要能容忍首字慢的推理模型 */
+    private static final Duration CHAT_CONNECT_TIMEOUT = Duration.ofSeconds(15);
+    private static final Duration CHAT_READ_TIMEOUT = Duration.ofSeconds(120);
+
+    /**
+     * 连通性探测：连接 5s / 读 <b>20s</b>（B-29）。
+     * <p>
+     * 探测是同步阻塞调用，跑在 <b>Tomcat 请求线程</b>上（「测试连通性」按钮），
+     * 且「先测再存」的设计让它可以被反复点击。用对话的 120s 读超时意味着
+     * 一次填错地址就能占住一个请求线程两分钟，连点几次即可占满线程池。
+     * 连通性探测不需要等那么久 —— 20s 足够覆盖首字慢的推理模型。
+     */
+    private static final Duration PROBE_CONNECT_TIMEOUT = Duration.ofSeconds(5);
+    private static final Duration PROBE_READ_TIMEOUT = Duration.ofSeconds(20);
 
     private final Map<String, ChatClient> cache = new ConcurrentHashMap<>();
     private final ToolCallingManager toolCallingManager;
@@ -55,8 +69,21 @@ public class ChatClientFactory {
      * @param tools  需要装配的工具回调（当前阶段为空数组）
      */
     public ChatClient client(AiRuntimeConfig config, Object... tools) {
-        String fingerprint = fingerprint(config);
+        return cached(fingerprint(config) + "|chat", config, CHAT_CONNECT_TIMEOUT, CHAT_READ_TIMEOUT);
+    }
 
+    /**
+     * 连通性探测专用客户端：读超时收紧到 20s（B-29）。
+     * <p>
+     * 与 {@link #client} 共用缓存但指纹带 {@code |probe} 后缀，因此两者互不覆盖 ——
+     * 否则管理员点一次「测试连通性」就会把对话用的 120s 客户端挤掉（或反之）。
+     */
+    public ChatClient probeClient(AiRuntimeConfig config) {
+        return cached(fingerprint(config) + "|probe", config, PROBE_CONNECT_TIMEOUT, PROBE_READ_TIMEOUT);
+    }
+
+    private ChatClient cached(String fingerprint, AiRuntimeConfig config,
+                              Duration connectTimeout, Duration readTimeout) {
         ChatClient cached = cache.get(fingerprint);
         if (cached != null) {
             return cached;
@@ -69,7 +96,7 @@ public class ChatClientFactory {
         // 触发条件是「缓存达到上限 + 又来一个新指纹」，即管理员改过几轮 AI 配置后必然踩到。
         evictIfOversized();
 
-        return cache.computeIfAbsent(fingerprint, key -> build(config));
+        return cache.computeIfAbsent(fingerprint, key -> build(config, connectTimeout, readTimeout));
     }
 
     /** 构建并缓存 AI 配置指纹，用于判断是否需要重建模型实例。 */
@@ -79,13 +106,19 @@ public class ChatClientFactory {
                 + Integer.toHexString(config.apiKey() == null ? 0 : config.apiKey().hashCode());
     }
 
-    private ChatClient build(AiRuntimeConfig config) {
+    private ChatClient build(AiRuntimeConfig config, Duration connectTimeout, Duration readTimeout) {
         // 注意 completionsPath：Spring AI 默认拼 /v1/chat/completions，
         // 而智谱等厂商 base 自带 /v4 版本段，必须覆盖该路径，否则 404（详见 AiRuntimeConfig）。
+        //
+        // 超时必须显式配置（B-29）：OpenAiApi.Builder 没有任何超时入口，只能通过
+        // RestClient 的请求工厂设置。此前本类声明了 CONNECT_TIMEOUT / READ_TIMEOUT 两个常量
+        // 但【从未传给 builder】—— 死代码，实际行为是 JDK HttpClient 的默认值，即【不超时】。
+        // 那比「最长阻塞 120 秒」更糟：填错地址时请求会一直挂着不返回。
         OpenAiApi api = OpenAiApi.builder()
                 .baseUrl(config.normalizedBaseUrl())
                 .apiKey(config.apiKey())
                 .completionsPath(config.completionsPath())
+                .restClientBuilder(restClientBuilder(connectTimeout, readTimeout))
                 .build();
 
         OpenAiChatOptions options = OpenAiChatOptions.builder()
@@ -103,6 +136,21 @@ public class ChatClientFactory {
         return ChatClient.builder(model)
                 .defaultSystem(config.systemPromptOrDefault())
                 .build();
+    }
+
+    /**
+     * 构造带超时的 RestClient：连接超时给 JDK HttpClient，读超时给请求工厂。
+     * <p>
+     * 注意这里不能复用 Spring 容器的全局 RestClient.Builder —— 那上面没有超时设置，
+     * 会退回「不超时」的默认行为，正是本项要修的问题。
+     */
+    private static RestClient.Builder restClientBuilder(Duration connectTimeout, Duration readTimeout) {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(connectTimeout)
+                .build();
+        JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(readTimeout);
+        return RestClient.builder().requestFactory(requestFactory);
     }
 
     /**

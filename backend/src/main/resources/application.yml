@@ -61,9 +61,18 @@ spring:
     type: com.alibaba.druid.pool.DruidDataSource
     druid:
       initial-size: 2
-      min-idle: 1
-      max-active: 10
-      max-wait: 10000
+      min-idle: 5
+      # 连接数 10 → 20（B-06）：此前 200 个 Tomcat 工作线程抢 10 个连接，
+      # 一旦并发超过 10，请求延迟就不再是「查询时间」而是「排队时间」，
+      # 且 max-wait 超时后抛 GetConnectionTimeoutException → 500。
+      # 整个应用的吞吐上限 ≈ max-active / 平均查询耗时。
+      # 注意 @Async 线程也吃连接：一个带 @AuditLog 的写请求会同时占用 2 条
+      # （业务事务 1 条 + 异步审计落库 1 条），备份任务运行期间同样额外占用。
+      # 经验公式：连接数 ≈ (核心数 × 2) + 有效磁盘数，本站规模 20 足够。
+      max-active: 20
+      # 等待时间 10000 → 3000：快速失败优于长时间挂起 ——
+      # 让请求在 3 秒内明确失败，而不是让 190 个线程在 10 秒的等待里堆积。
+      max-wait: 3000
       filter:
         stat:
           enabled: true
@@ -81,6 +90,12 @@ spring:
     properties:
       mail.smtp.auth: true
       mail.smtp.ssl.enable: true
+      # 超时必须显式配置（B-07）：JavaMail 默认【无限等待】——SMTP 服务器接受 TCP 连接后
+      # 不响应（网络黑洞 / 防火墙丢包 / 对端假死）时，发信线程会永久挂起，
+      # 占死线程并让「回复留言」这个接口永远不返回。单位毫秒。
+      mail.smtp.connectiontimeout: 5000    # 建连
+      mail.smtp.timeout: 10000             # 读响应
+      mail.smtp.writetimeout: 10000        # 写数据
   data:
     redis:
       # ---- 拓扑：单机 与 哨兵 通过环境变量切换，应用代码零改动（Redis 方案 §4.3 A7）----
@@ -166,8 +181,11 @@ app:
     # 可信代理跳数（X-Forwarded-For 采信层数），从右往左取第 N 跳：
     #   0（默认，安全值）= 完全不信任 XFF，只用 remoteAddr
     #   N>0              = 信任最右 N 跳，必须等于实际代理层数
-    # 本应用 server.address=127.0.0.1 只监听回环、必然经代理，部署时须配成实际层数。
-    # ⚠️ 配小会让全站共用一个限流桶（取到代理自身 IP）；配大等于采信攻击者提供的值。
+    # 【本项目已确认的拓扑】生产 = nginx → 后端（无 Node 生产服务），即 1 层代理 →
+    # 生产环境把它设为 1（TRUSTED_PROXY_COUNT=1）。本地经 Vite(5173) 或 Node 生产服务(3000)
+    # 代理访问，同样是 1 层，已配在 application-local.yml。
+    # 本应用 server.address=127.0.0.1 只监听回环、必然经代理，故这个值不能留 0（留 0 取到的是
+    # 代理自身 IP，全站共用一个限流桶）；配大则等于采信攻击者伪造的 XFF。
     trusted-proxy-count: ${TRUSTED_PROXY_COUNT:0}
   admin:
     # 后台管理 JWT/账号配置；jwt-secret 为空时 JwtService 拒绝启动

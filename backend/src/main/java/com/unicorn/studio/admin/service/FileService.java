@@ -8,7 +8,6 @@ import com.unicorn.studio.mapper.UploadFileMapper;
 import com.unicorn.studio.model.UploadFile;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.imageio.ImageIO;
@@ -60,7 +59,17 @@ public class FileService {
         this.videoMaxSize = videoMaxSize;
     }
 
-    @Transactional
+    /**
+     * 上传文件。
+     * <p>
+     * <b>刻意不加 {@code @Transactional}（B-30④）</b>：本方法的主体是慢 IO ——
+     * 图片整体解码（{@code ImageIO.read}）+ 文件落盘（{@code Files.copy}，视频上限 50MB），
+     * 而事务只包住最后那一条 INSERT。开着事务意味着整个 IO 过程都占着一条 Druid 连接。
+     * <p>
+     * 而且事务在这里<b>提供不了任何保护</b>：文件落盘不参与数据库回滚 ——
+     * INSERT 失败时磁盘上的文件照样留着（成为孤儿文件），无论有没有事务都一样。
+     * 单条 INSERT 本身即原子，故直接去掉事务边界。
+     */
     public UploadFile upload(MultipartFile file, Long operatorId) {
         if (file == null || file.isEmpty()) {
             throw BusinessException.badRequest("文件不能为空");

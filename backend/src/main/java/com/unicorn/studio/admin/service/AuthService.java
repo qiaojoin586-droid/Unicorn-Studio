@@ -11,7 +11,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -51,7 +50,19 @@ public class AuthService {
         this.refreshExpireDays = refreshExpireDays;
     }
 
-    @Transactional
+    /**
+     * 后台登录。
+     * <p>
+     * <b>刻意不加 {@code @Transactional}（B-30④）</b>：本方法中段的
+     * {@code passwordEncoder.matches} 是 BCrypt 校验（CPU 约 100ms，强度越高越慢），
+     * 外层事务会让这段时间一直占着一条 Druid 连接。去掉外层事务后，连接只在
+     * 真正的读写语句上短暂持有。
+     * <p>
+     * 原子性不受影响：失败计数与锁定写在 {@code LoginLockService.onFailure} 内，
+     * 它自带 {@code @Transactional}（跨 Bean 调用，代理生效），自增→回读→加锁三步仍是一个事务；
+     * {@code onSuccess} 是单条 UPDATE。而原先「外层事务把 BCrypt 也包进来」并没有带来
+     * 额外的一致性 —— 反而会在 {@code tokenPair} 失败时把「已认证成功」的解锁操作一起回滚。
+     */
     public Map<String, Object> login(String username, String password) {
         SysUser user = userMapper.findByUsername(username)
                 .orElseThrow(() -> new BusinessException(HttpStatus.UNAUTHORIZED, "用户名或密码错误"));
@@ -76,7 +87,6 @@ public class AuthService {
      * 旧 token 命中 → 按 userId 加载用户 → 校验状态 → 生成新令牌（写入 Redis）→ 删除旧令牌立即失效。
      * Redis 令牌 TTL 即过期时间，无需再比对 refresh_token_expires_at。
      */
-    @Transactional
     public Map<String, Object> refresh(String refreshToken) {
         Long userId = refreshTokenStore.find(refreshToken)
                 .orElseThrow(() -> new BusinessException(HttpStatus.UNAUTHORIZED, "登录已过期，请重新登录"));
@@ -91,7 +101,13 @@ public class AuthService {
         return result;
     }
 
-    @Transactional
+    /**
+     * 登出：清掉该用户所有刷新令牌（多端同时下线）。
+     * <p>
+     * <b>刻意不加 {@code @Transactional}（B-30④）</b>：本方法<b>没有任何数据库操作</b>，
+     * 全部是 Redis。原事务的唯一效果是「为一次 Redis DEL 申请并占住一条数据库连接」——
+     * 纯属浪费，且在连接池紧张时直接参与吞吐上限。
+     */
     public void logout(SysUser user) {
         // Redis 为唯一权威：清掉该用户所有刷新令牌（多端同时下线）
         refreshTokenStore.deleteAllForUser(user.getId());

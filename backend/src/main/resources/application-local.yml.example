@@ -50,12 +50,15 @@ app:
 
   security:
     # 可信代理跳数：从右往左取 X-Forwarded-For 的第 N 跳作为客户端 IP。
-    #   0 = 完全不信任 XFF，只用 remoteAddr（安全默认值）
-    #   1 = 前面有 1 层代理（如 nginx 直连后端；或本机 Node 生产服务 frontend/server/index.js）
-    #   2 = 前面有 2 层代理（如 nginx → Node 生产服务 → 后端）
+    #   0 = 完全不信任 XFF，只用 remoteAddr（安全默认值，但本应用必须经代理，不能留 0）
+    #   1 = 前面有 1 层代理
+    #   2 = 前面有 2 层代理
     # ⚠️ 必须等于实际代理层数：
     #     配【小】→ 取到代理自身 IP，全站共用一个限流桶（限流基本失效）
     #     配【大】→ 等于采信攻击者伪造的 X-Forwarded-For
-    # 本应用 server.address=127.0.0.1 只监听回环，本地经 Node(3000) 或 Vite(5173) 代理访问，
-    # 故本地开发用 1。
+    #
+    # 【已确认】生产 = nginx → 后端（无 Node 生产服务）= 1 层，生产环境设 TRUSTED_PROXY_COUNT=1。
+    # 本地经 Vite(5173) 或 Node 生产服务 frontend/server/index.js(3000) 代理 = 1 层，故本地也用 1。
+    # 两条代理路径都已改为「追加」语义（nginx 用 $proxy_add_x_forwarded_for，
+    # Node 见 frontend/server/index.js 的 proxyToBackend），与「取最右 N 跳」配套。
     trusted-proxy-count: 1

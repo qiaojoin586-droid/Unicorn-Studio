@@ -76,13 +76,18 @@ public class AiChatService {
 
     /**
      * 非流式对话（供「测试连通性」等需要一次性完整回答的场景使用）。
+     * <p>
+     * 用 {@code probeClient} 而非 {@code client}（B-29）：本方法跑在 <b>Tomcat 请求线程</b>上
+     * 且完全同步，而「测试连通性」是「先测再存」的按钮、可被反复点击 ——
+     * 用对话的 120s 读超时意味着一处填错的地址就能占住一个请求线程两分钟。
+     * 探测路径改用 5s/20s 的短超时。
      *
      * @param config    显式指定的配置（连通性测试用表单值），为 null 时用库中配置
      * @param userMessage 探测消息
      * @return 模型完整回复
      */
     public String callOnce(AiRuntimeConfig config, String userMessage) {
-        ChatClient client = clientFactory.client(config);
+        ChatClient client = clientFactory.probeClient(config);
         return client.prompt().user(userMessage).call().content();
     }
 

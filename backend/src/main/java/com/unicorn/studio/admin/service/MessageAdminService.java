@@ -49,7 +49,14 @@ public class MessageAdminService {
         return getOrThrow(id);
     }
 
-    /** 回复：状态转 replied，触发邮件通知（若留了联系邮箱）。 */
+    /**
+     * 回复：状态转 replied，触发邮件通知（若留了联系邮箱）。
+     * <p>
+     * <b>发信必须走 {@code sendAfterCommit}</b>（B-07）：SMTP 是外部网络 IO，
+     * 在事务内同步发送会占着 Druid 连接与请求线程数百毫秒到数秒，
+     * 且 SMTP 失败会连带回滚留言的 replied 状态 —— 管理员看到「回复失败」，
+     * 但邮件可能已经发出去了。延后到提交后 + 独立线程池，两者彻底解耦。
+     */
     @Transactional
     public void reply(Long id, String content, Long operatorId) {
         Message message = getOrThrow(id);
@@ -60,7 +67,7 @@ public class MessageAdminService {
         messageMapper.updateById(message);
 
         if (message.getContact() != null && message.getContact().contains("@")) {
-            emailService.send(message.getContact().trim(),
+            emailService.sendAfterCommit(message.getContact().trim(),
                     "独角兽工作室：您的留言已回复",
                     "您提交的留言「" + truncate(message.getContent(), 50) + "」已收到回复：\n\n"
                             + content + "\n\n—— 独角兽工作室");
