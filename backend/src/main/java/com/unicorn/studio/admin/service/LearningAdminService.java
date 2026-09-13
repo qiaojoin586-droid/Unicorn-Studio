@@ -1,6 +1,7 @@
 package com.unicorn.studio.admin.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.HtmlSanitizer;
@@ -12,6 +13,7 @@ import com.unicorn.studio.model.LearningResource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -107,15 +109,30 @@ public class LearningAdminService {
         cache.evictAfterCommit(CacheKeys.nullLearning(id));
     }
 
-    /** 上下架：1 上架 / 0 下架。 */
+    /**
+     * 上下架：1 上架 / 0 下架。
+     * <p>
+     * <b>局部列更新 + 投影读（B-12）</b>：{@code learning_resources.content} 是 MEDIUMTEXT，
+     * 原实现读整列再写整列 —— 一次上下架产生「读 N MB + 写 N MB」的无意义 IO。
+     * 上下架在语义上只涉及 status 一列，任何正文都不该被碰到。
+     * <p>
+     * 注意 {@code update(null, wrapper)} 不触发 MP 的 updateFill，故显式 set updatedAt。
+     */
     @Transactional
     public void changeStatus(Long id, Integer status) {
         if (status == null || (status != 0 && status != 1)) {
             throw BusinessException.badRequest("非法状态: " + status);
         }
-        LearningResource resource = getOrThrow(id);
-        resource.setStatus(status);
-        resourceMapper.updateById(resource);
+        LearningResource existing = resourceMapper.selectOne(new LambdaQueryWrapper<LearningResource>()
+                .select(LearningResource::getId)
+                .eq(LearningResource::getId, id));
+        if (existing == null) {
+            throw BusinessException.notFound("学习资料不存在");
+        }
+        resourceMapper.update(null, new LambdaUpdateWrapper<LearningResource>()
+                .set(LearningResource::getStatus, status)
+                .set(LearningResource::getUpdatedAt, LocalDateTime.now())
+                .eq(LearningResource::getId, id));
         evictListCache();
         cache.evictAfterCommit(CacheKeys.nullLearning(id));
     }

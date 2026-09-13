@@ -1,7 +1,7 @@
 package com.unicorn.studio.admin.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.common.cache.CacheObjectMapper;
 import com.unicorn.studio.common.BusinessException;
@@ -159,21 +159,45 @@ public class WorkAdminService {
         cache.evictAfterCommit(CacheKeys.nullWork(work.getSlug()));
     }
 
-    /** 状态机：draft/published/offline；发布时补 publishedAt。 */
+    /**
+     * 状态机：draft/published/offline；发布时补 publishedAt。
+     * <p>
+     * <b>局部列更新 + 投影读（B-12）</b>：原实现是
+     * {@code getOrThrow(id)}（把 MEDIUMTEXT 的 {@code content} 整列读出来）
+     * 再 {@code updateById}（把整列<b>再写回去</b>）。一次上下架本该只碰 status/publishedAt，
+     * 却产生了一次「读 16MB + 写 16MB」的无意义 IO，binlog / redo / 从库同步全部跟着翻倍。
+     * 根因是全局 {@code update-strategy: ignored} 让 {@code updateById} 生成包含所有列的 UPDATE
+     * （该配置本身是刻意保留的，见 application.yml，故只在明确不涉及 null 语义的路径上改写法）。
+     * <p>
+     * ⚠️ {@code update(null, wrapper)} <b>不会</b>触发 {@code AuditMetaObjectHandler.updateFill}
+     * —— 填充只作用于传入的实体对象，这里实体为 null。所以 {@code updatedAt} 必须显式 set，
+     * 否则时间戳会静默停更（该列没有 ON UPDATE CURRENT_TIMESTAMP）。
+     */
     @Transactional
     public void changeStatus(Long id, String status) {
-        Work work = getOrThrow(id);
+        Work work = loadStatusSnapshot(id);
         changeStatus(work, status);
-        workMapper.updateById(work);
+        workMapper.update(null, new LambdaUpdateWrapper<Work>()
+                .set(Work::getStatus, work.getStatus())
+                .set(Work::getPublishedAt, work.getPublishedAt())
+                .set(Work::getUpdatedAt, LocalDateTime.now())
+                .eq(Work::getId, id));
     }
 
-    /** 拖拽排序：ids 为全量 id 按新顺序排列；缺省的 id 追加到末尾（保持原相对顺序）。 */
+    /**
+     * 拖拽排序：ids 为全量 id 按新顺序排列；缺省的 id 追加到末尾（保持原相对顺序）。
+     * <p>
+     * <b>只读 id/sortOrder、只写 sortOrder（B-12）</b>：原实现 {@code selectList} 全表
+     * （含正文）只为算排序值，再逐行 {@code updateById} 把正文写回去 —— 一次拖拽排序
+     * 就能把整张表的富文本重写一遍。排序在语义上只涉及一列，任何一列正文都不该被碰到。
+     */
     @Transactional
     public void sort(List<Long> ids) {
         if (ids == null || ids.isEmpty()) {
             return;
         }
-        List<Work> all = workMapper.selectList(new LambdaQueryWrapper<>());
+        List<Work> all = workMapper.selectList(new LambdaQueryWrapper<Work>()
+                .select(Work::getId, Work::getSortOrder));
         Map<Long, Work> byId = new LinkedHashMap<>();
         Map<Long, Integer> oldOrders = new LinkedHashMap<>();
         for (Work w : all) {
@@ -191,11 +215,26 @@ public class WorkAdminService {
             w.setSortOrder(order++);
         }
         // 仅更新 sortOrder 实际变化的行，避免全表无条件 UPDATE
+        LocalDateTime now = LocalDateTime.now();
         for (Work w : all) {
             if (!java.util.Objects.equals(oldOrders.get(w.getId()), w.getSortOrder())) {
-                workMapper.updateById(w);
+                workMapper.update(null, new LambdaUpdateWrapper<Work>()
+                        .set(Work::getSortOrder, w.getSortOrder())
+                        .set(Work::getUpdatedAt, now)
+                        .eq(Work::getId, w.getId()));
             }
         }
+    }
+
+    /** 状态变更只需要 status/publishedAt，不必把 MEDIUMTEXT 正文读出来（B-12）。 */
+    private Work loadStatusSnapshot(Long id) {
+        Work work = workMapper.selectOne(new LambdaQueryWrapper<Work>()
+                .select(Work::getId, Work::getStatus, Work::getPublishedAt)
+                .eq(Work::getId, id));
+        if (work == null) {
+            throw BusinessException.notFound("作品不存在");
+        }
+        return work;
     }
 
     /** 删除作品 + 同步清理关联评论（多态关联无外键，实施方案 §3.4）。 */

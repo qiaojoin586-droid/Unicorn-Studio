@@ -4,12 +4,15 @@ import com.unicorn.studio.mapper.NewsMapper;
 import com.unicorn.studio.mapper.WorkMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
-import java.util.Set;
+import java.util.List;
 
 /**
  * 浏览量计数（Redis 方案 §4.4，写热点剥离）。
@@ -51,51 +54,75 @@ public class ViewCountService {
     }
 
     /**
-     * 定时增量回写（默认每 2 min）：SMEMBERS 脏索引 → 逐 key GETDEL → 增量 UPDATE；
+     * 「取走增量 + 移出脏索引」合并为一次往返（B-16）。
+     * <p>
+     * 原实现是 {@code GETDEL} 再 {@code SREM} 两次独立往返，N 个 key 就是 2N 次 RTT。
+     * 两者合并为 Lua 后降为 N 次，且「取值」与「移出索引」真正原子 ——
+     * 分开执行时若中间失败，会出现「索引里还有、但计数已被取走」的状态，
+     * 下一轮取到 nil 才自然清理掉。
+     * <p>
+     * 无论 key 是否存在都 SREM：GETDEL 返回 nil 说明该计数 key 已过期/被删，
+     * 脏索引里的条目已是陈旧项，正该清掉。
+     */
+    private static final DefaultRedisScript<String> DRAIN_AND_UNMARK = new DefaultRedisScript<>(
+            "local v = redis.call('GETDEL', KEYS[2]) " +
+            "redis.call('SREM', KEYS[1], KEYS[2]) " +
+            "return v", String.class);
+
+    /** SSCAN 每批返回的成员数（B-16）：只影响往返次数，不影响单批内存上界 */
+    private static final int SCAN_BATCH = 500;
+
+    /**
+     * 定时增量回写（默认每 2 min）：SSCAN 脏索引 → 逐 key 取增量 → 增量 UPDATE；
      * 回写失败重入脏索引下轮重试。弱一致指标，单条失败仅记日志不重抛。
+     * <p>
+     * <b>SSCAN 取代 SMEMBERS（B-16）</b>：脏索引的成员数 = 本轮被浏览过的不同作品/新闻数，
+     * 且每个被浏览过的 id 会常驻 7 天（每次 increment 都续期）。被爬虫批量扫详情页时
+     * 这个 Set 能涨到数万条 —— SMEMBERS 会把它们一次性全拉进堆。
+     * SSCAN 用游标分批（每批 500），把「无界读」变成「有界流式处理」：
+     * 总工作量不变，但内存占用与集合大小脱钩。
      */
     @Scheduled(fixedDelayString = "${app.cache.view-flush-ms:120000}")
     public void flush() {
-        Set<String> keys;
-        try {
-            keys = redis.opsForSet().members(CacheKeys.VIEW_DIRTY);
+        ScanOptions options = ScanOptions.scanOptions().count(SCAN_BATCH).build();
+        try (Cursor<String> cursor = redis.opsForSet().scan(CacheKeys.VIEW_DIRTY, options)) {
+            while (cursor.hasNext()) {
+                flushOne(cursor.next());
+            }
         } catch (Exception e) {
-            log.warn("浏览量回写读取脏索引失败: {}", e.getMessage());
+            // 游标迭代中途失败：已处理的部分已回写，剩余的下轮再扫（脏索引未被清空）
+            log.warn("浏览量回写扫描脏索引失败: {}", e.getMessage());
+        }
+    }
+
+    private void flushOne(String key) {
+        if (key == null || !key.startsWith(CacheKeys.VIEW_PREFIX)) {
             return;
         }
-        if (keys == null || keys.isEmpty()) {
+        String raw;
+        try {
+            raw = redis.execute(DRAIN_AND_UNMARK, List.of(CacheKeys.VIEW_DIRTY, key));
+        } catch (Exception e) {
+            log.warn("浏览量回写取增量失败 {}: {}", key, e.getMessage());
             return;
         }
-        for (String key : keys) {
-            if (!key.startsWith(CacheKeys.VIEW_PREFIX)) {
-                continue;
-            }
-            String raw;
-            try {
-                raw = redis.opsForValue().getAndDelete(key);
-                redis.opsForSet().remove(CacheKeys.VIEW_DIRTY, key);
-            } catch (Exception e) {
-                log.warn("浏览量回写 GETDEL 失败 {}: {}", key, e.getMessage());
-                continue;
-            }
-            if (raw == null) {
-                continue;
-            }
-            long delta;
-            try {
-                delta = Long.parseLong(raw);
-            } catch (NumberFormatException e) {
-                continue;
-            }
-            if (delta <= 0) {
-                continue;
-            }
-            try {
-                apply(key, delta);
-            } catch (Exception e) {
-                log.warn("浏览量回写失败 {}: {}", key, e.getMessage());
-                reMarkDirty(key);
-            }
+        if (raw == null) {
+            return;
+        }
+        long delta;
+        try {
+            delta = Long.parseLong(raw);
+        } catch (NumberFormatException e) {
+            return;
+        }
+        if (delta <= 0) {
+            return;
+        }
+        try {
+            apply(key, delta);
+        } catch (Exception e) {
+            log.warn("浏览量回写失败 {}: {}", key, e.getMessage());
+            reMarkDirty(key);
         }
     }
 

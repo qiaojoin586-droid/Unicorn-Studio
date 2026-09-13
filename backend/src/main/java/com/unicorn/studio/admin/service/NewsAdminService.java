@@ -1,7 +1,7 @@
 package com.unicorn.studio.admin.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.common.cache.CacheObjectMapper;
 import com.unicorn.studio.common.BusinessException;
@@ -144,19 +144,26 @@ public class NewsAdminService {
         cache.evictAfterCommit(CacheKeys.nullNews(news.getSlug()));
     }
 
+    /** 局部列更新 + 投影读，理由同 {@link WorkAdminService#changeStatus}（B-12）。 */
     @Transactional
     public void changeStatus(Long id, String status) {
-        News news = getOrThrow(id);
+        News news = loadStatusSnapshot(id);
         changeStatus(news, status);
-        newsMapper.updateById(news);
+        newsMapper.update(null, new LambdaUpdateWrapper<News>()
+                .set(News::getStatus, news.getStatus())
+                .set(News::getPublishedAt, news.getPublishedAt())
+                .set(News::getUpdatedAt, LocalDateTime.now())
+                .eq(News::getId, id));
     }
 
+    /** 只读 id/sortOrder、只写 sortOrder，理由同 {@link WorkAdminService#sort}（B-12）。 */
     @Transactional
     public void sort(List<Long> ids) {
         if (ids == null || ids.isEmpty()) {
             return;
         }
-        List<News> all = newsMapper.selectList(new LambdaQueryWrapper<>());
+        List<News> all = newsMapper.selectList(new LambdaQueryWrapper<News>()
+                .select(News::getId, News::getSortOrder));
         Map<Long, News> byId = new LinkedHashMap<>();
         Map<Long, Integer> oldOrders = new LinkedHashMap<>();
         for (News n : all) {
@@ -174,11 +181,26 @@ public class NewsAdminService {
             n.setSortOrder(order++);
         }
         // 仅更新 sortOrder 实际变化的行，避免全表无条件 UPDATE
+        LocalDateTime now = LocalDateTime.now();
         for (News n : all) {
             if (!java.util.Objects.equals(oldOrders.get(n.getId()), n.getSortOrder())) {
-                newsMapper.updateById(n);
+                newsMapper.update(null, new LambdaUpdateWrapper<News>()
+                        .set(News::getSortOrder, n.getSortOrder())
+                        .set(News::getUpdatedAt, now)
+                        .eq(News::getId, n.getId()));
             }
         }
+    }
+
+    /** 状态变更只需要 status/publishedAt，不必把 MEDIUMTEXT 正文读出来（B-12）。 */
+    private News loadStatusSnapshot(Long id) {
+        News news = newsMapper.selectOne(new LambdaQueryWrapper<News>()
+                .select(News::getId, News::getStatus, News::getPublishedAt)
+                .eq(News::getId, id));
+        if (news == null) {
+            throw BusinessException.notFound("新闻不存在");
+        }
+        return news;
     }
 
     @Transactional
