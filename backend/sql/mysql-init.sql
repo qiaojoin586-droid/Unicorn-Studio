@@ -168,6 +168,13 @@ CREATE TABLE `comment` (
 );
 CREATE INDEX idx_comment_target ON `comment` (target_type, target_id, status);
 CREATE INDEX idx_comment_user ON `comment` (user_id);
+-- 评论树子评论查询（CommentMapper.findByParentIdIn）
+-- 注：该索引由 v15 迁移引入，init 脚本当时漏了同步，导致全新初始化的库缺它；
+--     v18 迁移已补幂等补齐，此处一并补上以保持 init 与迁移结果一致
+CREATE INDEX idx_comment_parent ON `comment` (parent_id);
+-- 前台评论列表真分页（CommentService.listApproved，B-08）：
+-- parent_id IS NULL 按等值走索引，created_at 在末位使 ORDER BY 不再 filesort
+CREATE INDEX idx_comment_root_order ON `comment` (target_type, target_id, status, parent_id, created_at);
 
 CREATE TABLE message (
   id            BIGINT PRIMARY KEY AUTO_INCREMENT,

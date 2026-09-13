@@ -2,6 +2,9 @@ package com.unicorn.studio.service;
 
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.IpUtils;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.unicorn.studio.common.PageResult;
 import com.unicorn.studio.mapper.CommentMapper;
 import com.unicorn.studio.model.Comment;
 import com.unicorn.studio.model.PublicUser;
@@ -77,19 +80,42 @@ public class CommentService {
         return comment;
     }
 
-    /** 公开列表：仅 approved；楼中楼树形（一级评论 + 其下子评论）。 */
+    /**
+     * 公开列表：仅 approved；楼中楼树形（一级评论 + 其下子评论）。
+     * <p>
+     * <b>真分页（B-08）</b>：原实现是先把某作品下<b>全部</b> approved 评论
+     * {@code selectList} 拉进 JVM，再 filter 出根评论、再 {@code subList} 切页 ——
+     * {@code size} 完全不影响 DB 侧开销：5000 条评论的热门作品，翻任何一页都要把
+     * 5000 行（每行含最多 1000 字 content）全量拉回。这是本项目里唯一
+     * 「随数据增长而单调恶化」的读路径。
+     * <p>
+     * 现在：一级评论走 MP 分页（LIMIT + COUNT，总数由 count 查询得出），
+     * 子评论按<b>当页</b>的 rootIds 一次 IN 查询 —— 与原先一样是 2 条查询，
+     * 但数据量与「作品的总评论数」脱钩，只与「页大小」相关。
+     * <p>
+     * 依赖索引 {@code idx_comment_root_order (target_type, target_id, status, parent_id, created_at)}，
+     * 见 {@code mysql-migration-v18-comment-pagination-index.sql}。缺它的话 COUNT 仍会扫全表，
+     * <b>可能比原来的假分页更慢</b> —— 这是本项的前置条件，不是可选优化。
+     */
     public Map<String, Object> listApproved(String targetType, Long targetId, int page, int size) {
-        List<Comment> approved = commentMapper
-                .findByTargetTypeAndTargetIdAndStatusOrderByCreatedAtAsc(targetType, targetId, "approved");
-        // 一级评论分页
-        List<Comment> roots = approved.stream().filter(c -> c.getParentId() == null).toList();
-        int from = Math.min(page * size, roots.size());
-        int to = Math.min(from + size, roots.size());
-        List<Comment> pageRoots = roots.subList(from, to);
+        // controller 已做 page-1（0-based），MP Page 为 1-based；safePage 顺带钳制非法 size
+        Page<Comment> rootPage = commentMapper.selectPage(
+                PageResult.safePage(page + 1, size),
+                new LambdaQueryWrapper<Comment>()
+                        .eq(Comment::getTargetType, targetType)
+                        .eq(Comment::getTargetId, targetId)
+                        .eq(Comment::getStatus, "approved")
+                        .isNull(Comment::getParentId)
+                        .orderByAsc(Comment::getCreatedAt));
 
-        // 子评论按 parentId 分组（子评论不再嵌套，树深 2）
+        List<Comment> pageRoots = rootPage.getRecords();
+        // 子评论按 parentId 分组（子评论不再嵌套，树深 2）。
+        // 用 findApprovedByParentIdIn 而非 findByParentIdIn：后者不过滤状态，
+        // 会把 pending/rejected 的回复照常显示出来（审核边界，见 CommentMapper 的说明）。
         Set<Long> rootIds = pageRoots.stream().map(Comment::getId).collect(Collectors.toSet());
-        List<Comment> children = commentMapper.findByParentIdIn(List.copyOf(rootIds));
+        List<Comment> children = rootIds.isEmpty()
+                ? List.of()
+                : commentMapper.findApprovedByParentIdIn(List.copyOf(rootIds));
         Map<Long, List<Comment>> childrenByParent = children.stream()
                 .collect(Collectors.groupingBy(Comment::getParentId, LinkedHashMap::new, Collectors.toList()));
 
@@ -100,7 +126,7 @@ public class CommentService {
             return node;
         }).toList();
 
-        return Map.of("list", tree, "total", roots.size());
+        return Map.of("list", tree, "total", rootPage.getTotal());
     }
 
     /** 游客昵称显示名。 */
