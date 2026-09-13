@@ -42,6 +42,19 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+        <!--
+          运维可观测性（B-19）：/actuator/metrics 暴露 JVM 堆/GC/线程与连接池指标，
+          /actuator/threaddump 用于排查线程池问题。
+          这是本次优化的【前置条件】—— 没有它，B-17（堆峰值）、B-04（线程池）、
+          B-06（连接池）的改动收益无法量化，只能靠感觉，回归时也发现不了劣化。
+          ⚠️ 暴露面必须按 application.yml 的 management 段与 ActuatorSecurityConfig 落实：
+          独立端口 + 仅回环 + 默认不暴露 heapdump（堆里驻留着已解密的明文 API Key）。
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+
         <!-- Security -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

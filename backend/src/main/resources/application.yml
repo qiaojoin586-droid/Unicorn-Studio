@@ -257,6 +257,48 @@ app:
       failure-threshold: 10
       open-duration: 30s
 
+# ==================== 运维可观测性（B-19 / S-6）====================
+# 为什么需要：改动前后没有量化基线，收益无法证明、回归无法发现。
+# 为什么配置得这么「紧」：/actuator/heapdump 会导出【整个堆】，其中驻留着
+# AiRuntimeConfig 里已解密的明文 API Key、Redis/DB 口令等一切运行时明文 ——
+# 一次未授权下载 = 全部密钥泄漏。故采取三层收敛：
+#   ① 独立管理端口且只绑回环（网络层，本项目 server.address 同理）；
+#   ② ActuatorSecurityConfig 里一条独立的、默认拒绝的过滤器链（代码层，见该类注释：
+#      「端口绑定」是部署级的、改一行配置就失效，而过滤链是代码级的安全边界）；
+#   ③ 默认不暴露 heapdump/env/configprops/beans。
+management:
+  server:
+    # 不复用 8080：管理端点与业务流量的暴露面必须分开
+    port: ${MANAGEMENT_PORT:8081}
+    address: 127.0.0.1
+  endpoints:
+    web:
+      exposure:
+        # 只开这四个。刻意【不含】：
+        #   heapdump —— 整个堆含明文密钥；需要堆转储时用 jcmd <pid> GC.heap_dump 离线获取
+        #   env / configprops / beans —— 会回显 application.yml 解析后的实际取值（含口令）
+        #   shutdown —— 远程关停能力，没有任何场景需要它
+        include: health,metrics,threaddump,loggers
+  health:
+    # 关掉邮件健康指示器：本项目的 SMTP 是【明确可选】的
+    # （application.yml 的 spring.mail 段自述「不配置 SMTP_* 则留言回复不发送邮件」），
+    # 但 Boot 的 MailHealthIndicator 在 host 为空时会判定为 DOWN，
+    # 从而把一个可选功能的缺失渲染成「整个应用不健康」——实测就是这样：
+    # DB 与 Redis 全绿，聚合状态却是 DOWN，该端点因此失去监控价值。
+    mail:
+      enabled: false
+  endpoint:
+    health:
+      # 不对外暴露依赖细节（哪个库连不上、版本号等），只给聚合状态
+      show-details: never
+    # 指标端点默认关闭全部「写」能力
+    loggers:
+      enabled: true
+  metrics:
+    # 给 HTTP 指标打上 URI 标签，便于按接口看 P95/P99
+    tags:
+      application: unicorn-studio
+
 logging:
   # 日志文件目录（相对运行目录）：logback-spring.xml 按级别/日期分目录写入
   # info/yyyy-MM-dd/app-info.log（全量）、warn/.../app-warn.log（仅警告）、
