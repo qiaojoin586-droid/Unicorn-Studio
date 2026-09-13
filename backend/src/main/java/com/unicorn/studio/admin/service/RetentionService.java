@@ -103,7 +103,7 @@ public class RetentionService {
         this.settingsService = settingsService;
         this.cron = cron;
         this.maxDeletePerRun = Math.max(BATCH_SIZE, maxDeletePerRun);
-        // 审计文件目录：${logging.file.path}/admin/yyyy-MM-dd/app-admin.log（见 logback-spring.xml）
+        // 审计文件目录：${logging.file.path}/admin/yyyy-MM-dd/app-admin.log.N（%i 文件名索引，见 logback-spring.xml）
         this.logRoot = Path.of(logPath).resolve("admin").toAbsolutePath().normalize();
     }
 

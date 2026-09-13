@@ -1,66 +1,72 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  日志配置（2026-09-02 重构：按级别/日期分目录）：
-  - 控制台：开发调试用
-  - logs/info/yyyy-MM-dd/app-info.log    全量日志（INFO 及以上，含接口访问日志）
-  - logs/warn/yyyy-MM-dd/app-warn.log    仅 WARN 级
-  - logs/error/yyyy-MM-dd/app-error.log  仅 ERROR 级，排查线上问题优先看它
-  - logs/admin/yyyy-MM-dd/app-admin.log  管理端操作审计（@AuditLog 切面专用，与常规日志分离）
+  日志配置（2026-09-02 重构：按级别/日期分目录；2026-09-13 B-25：异步落盘 + 单文件上限 + 生产关控制台）：
+  - 控制台：开发调试用（仅 dev profile，见文末 springProfile 处说明）
+  - logs/info/yyyy-MM-dd/app-info.log.%i    全量日志（INFO 及以上，含接口访问日志）
+  - logs/warn/yyyy-MM-dd/app-warn.log.%i    仅 WARN 级
+  - logs/error/yyyy-MM-dd/app-error.log.%i  仅 ERROR 级，排查线上问题优先看它
+  - logs/admin/yyyy-MM-dd/app-admin.log.%i  管理端操作审计（@AuditLog 切面专用，与常规日志分离）
   目录由 application.yml 的 logging.file.path 控制（默认 ./logs，即运行目录下）。
-  按天滚动进各自日期目录，保留 30 天；当天的文件即目录下的 app-*.log 本身。
+  按天滚动进各自日期目录，保留 30 天；单个文件 50MB 上限（maxFileSize），
+  每个 appender 的归档总量 2GB 上限（totalSizeCap，跨日期目录统计，且必须与 maxHistory 同时设置才生效）。
+  「按天」只保证一天一个目录，不保证一天写多少 —— 异常循环打日志时单文件能涨到 GB 级；
+  有了这两个上限，日志风暴只会多产生几个 %i 序号文件并自动淘汰最旧的，而不是撑爆磁盘。
   注意：<file> 选项不支持 %d 日期模式（会生成字面量"%d{...}"目录，2026-09-02 实测），
-  故统一采用「无 <file> + TimeBasedRollingPolicy 纯模式」写法；代价是无单文件大小上限
-  （本站日志量级下无影响，历史文件由 maxHistory 滚动清理）。
+  故统一采用「无 <file> + 滚动策略纯模式」写法：文件名、日期目录、%i 序号全部由 fileNamePattern 决定。
+  落盘一律经 AsyncAppender（见 ASYNC_* 处）：格式化与磁盘 IO 都在 logback 自己的工作线程上完成，
+  请求线程只做一次入队，不再为每行日志等磁盘。
 -->
 <configuration>
     <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
-    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+    <!--
+      注意：console-appender.xml 的 include 放在文末的 <springProfile name="dev"> 里，不在这里。
+      它是 Spring Boot 内置的 CONSOLE appender 定义。若无条件 include，非 dev 环境下这个 appender
+      就处于「已定义但无人引用」状态，logback 每次启动都会报一条
+        WARN ... Appender named [CONSOLE] not referenced. Skipping further processing.
+      而 Spring Boot 的日志系统一旦见到 WARN，就会把整份 logback 内部状态（约 23KB）dump 到 stdout ——
+      在「生产本就不要控制台输出」的前提下，这等于把刚省下的控制台开销又还回去了一部分。
+      移进 dev 块后，非 dev 环境根本不存在这个 appender，启动输出干净。
+    -->
 
     <property name="LOG_PATH" value="${LOG_PATH:-${user.dir}/logs}"/>
 
-    <!-- 全量业务日志：INFO 及以上 -->
+    <!-- 全量业务日志：INFO 及以上。
+         级别过滤挂在 ASYNC_INFO（异步外壳）上而非此处，理由见 ASYNC_INFO 的注释。 -->
     <appender name="INFO_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/info/%d{yyyy-MM-dd}/app-info.log</fileNamePattern>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/info/%d{yyyy-MM-dd}/app-info.log.%i</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
             <maxHistory>30</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
         </rollingPolicy>
-        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
-            <level>INFO</level>
-        </filter>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{40} - %msg%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
     </appender>
 
-    <!-- 仅警告日志 -->
+    <!-- 仅警告日志：级别过滤在 ASYNC_WARN 上 -->
     <appender name="WARN_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/warn/%d{yyyy-MM-dd}/app-warn.log</fileNamePattern>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/warn/%d{yyyy-MM-dd}/app-warn.log.%i</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
             <maxHistory>30</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
         </rollingPolicy>
-        <filter class="ch.qos.logback.classic.filter.LevelFilter">
-            <level>WARN</level>
-            <onMatch>ACCEPT</onMatch>
-            <onMismatch>DENY</onMismatch>
-        </filter>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{40} - %msg%n</pattern>
             <charset>UTF-8</charset>
         </encoder>
     </appender>
 
-    <!-- 仅错误日志：排查线上问题优先看它 -->
+    <!-- 仅错误日志：排查线上问题优先看它；级别过滤在 ASYNC_ERROR 上 -->
     <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/error/%d{yyyy-MM-dd}/app-error.log</fileNamePattern>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/error/%d{yyyy-MM-dd}/app-error.log.%i</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
             <maxHistory>30</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
         </rollingPolicy>
-        <filter class="ch.qos.logback.classic.filter.LevelFilter">
-            <level>ERROR</level>
-            <onMatch>ACCEPT</onMatch>
-            <onMismatch>DENY</onMismatch>
-        </filter>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{40} - %msg%n</pattern>
             <charset>UTF-8</charset>
@@ -69,9 +75,11 @@
 
     <!-- 管理端操作审计：AuditLogAspect 专用，独立于常规三级文件 -->
     <appender name="ADMIN_AUDIT_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <rollingPolicy class="ch.qos.logback.core.rolling.TimeBasedRollingPolicy">
-            <fileNamePattern>${LOG_PATH}/admin/%d{yyyy-MM-dd}/app-admin.log</fileNamePattern>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>${LOG_PATH}/admin/%d{yyyy-MM-dd}/app-admin.log.%i</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
             <maxHistory>30</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
         </rollingPolicy>
         <encoder>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{40} - %msg%n</pattern>
@@ -79,18 +87,108 @@
         </encoder>
     </appender>
 
-    <!-- 审计专用 logger：additivity=false 避免重复进入 info/error 常规文件；控制台保留便于开发观察 -->
-    <logger name="ADMIN_AUDIT" level="INFO" additivity="false">
-        <appender-ref ref="CONSOLE"/>
+    <!-- ==================== 异步外壳：把落盘 IO 移出业务线程 ====================
+         每个文件 appender 配一个 AsyncAppender：事件先入内存队列，由各自的工作线程格式化并写盘。
+         请求线程上的日志成本从「格式化 + 逐 appender 判定 + 写磁盘」降到「一次入队」。
+
+         discardingThreshold 是 AsyncAppender 唯一会「静默丢日志」的开关：当队列剩余容量低于它时，
+         TRACE/DEBUG/INFO 级事件被直接丢弃（WARN/ERROR 天生不受该阈值影响）。
+         所以下面的取值按「丢了会不会出问题」分成三类，不要图省事统一成一个值：
+           · ASYNC_ADMIN_AUDIT：0 —— 审计日志一条都不能丢。队列满时宁可阻塞业务线程（neverBlock=false）。
+           · ASYNC_WARN / ASYNC_ERROR：同样 0 —— 级别过滤在队列外，队列里只会有 WARN / ERROR，
+             阈值本来也命中不到它们，写 0 是把「不丢」的意图固化下来。
+           · ASYNC_INFO：留 20% 阈值（1024 的 204）—— 队列里跑的是每请求一条的 [ACCESS] 日志，
+             量大且只是「看请求是否正常」的现场记录；队列将满时丢弃新到的 INFO（已排队的那批
+             仍会照常落盘），好过把请求线程一起拖下水。WARN/ERROR 照旧不受影响，
+             全量文件里也不会缺它们 —— 这个阈值丢的只可能是 INFO。
+
+         注意 neverBlock=false（默认）才是「不丢」：队列真满时它会阻塞业务线程而不是丢事件；
+         与 discardingThreshold=0 搭配才构成完整的「绝不丢」，任缺其一都会悄悄丢日志。
+     -->
+    <appender name="ASYNC_INFO" class="ch.qos.logback.classic.AsyncAppender">
+        <!-- 级别过滤放在异步外壳上：非 INFO 事件不进队列，省掉「入队再被工作线程丢掉」的空转 -->
+        <filter class="ch.qos.logback.classic.filter.ThresholdFilter">
+            <level>INFO</level>
+        </filter>
+        <queueSize>1024</queueSize>
+        <!-- 剩余容量低于 20% 时丢弃 INFO（含 [ACCESS]）；见上方取舍说明 -->
+        <discardingThreshold>204</discardingThreshold>
+        <neverBlock>false</neverBlock>
+        <appender-ref ref="INFO_FILE"/>
+    </appender>
+
+    <appender name="ASYNC_WARN" class="ch.qos.logback.classic.AsyncAppender">
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>WARN</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <queueSize>512</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>false</neverBlock>
+        <appender-ref ref="WARN_FILE"/>
+    </appender>
+
+    <appender name="ASYNC_ERROR" class="ch.qos.logback.classic.AsyncAppender">
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>ERROR</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <queueSize>512</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>false</neverBlock>
+        <appender-ref ref="ERROR_FILE"/>
+    </appender>
+
+    <!-- 审计：独立队列、独立工作线程。与 INFO 共用队列的话，日志风暴会先把这个队列里的
+         审计记录挤掉/堵住，而审计是事后追责的唯一依据。 -->
+    <appender name="ASYNC_ADMIN_AUDIT" class="ch.qos.logback.classic.AsyncAppender">
+        <queueSize>512</queueSize>
+        <discardingThreshold>0</discardingThreshold>
+        <neverBlock>false</neverBlock>
         <appender-ref ref="ADMIN_AUDIT_FILE"/>
+    </appender>
+
+    <!-- 审计专用 logger：additivity=false 避免重复进入 info/error 常规文件 -->
+    <logger name="ADMIN_AUDIT" level="INFO" additivity="false">
+        <appender-ref ref="ASYNC_ADMIN_AUDIT"/>
     </logger>
 
     <root level="INFO">
-        <appender-ref ref="CONSOLE"/>
-        <appender-ref ref="INFO_FILE"/>
-        <appender-ref ref="WARN_FILE"/>
-        <appender-ref ref="ERROR_FILE"/>
+        <appender-ref ref="ASYNC_INFO"/>
+        <appender-ref ref="ASYNC_WARN"/>
+        <appender-ref ref="ASYNC_ERROR"/>
     </root>
+
+    <!--
+      仅 dev 追加 CONSOLE。控制台生产常开是纯开销：application.yml 的 logging.charset.console=GBK
+      让每次写入都多一次字符集转换，而生产环境（systemd / 重定向到文件）并不看控制台。
+      本地联调请激活 dev profile（IDEA 运行配置里勾选 dev，或加启动参数 spring.profiles.active=dev），
+      否则控制台没有任何输出 —— 文件日志不受影响，照常写。
+
+      写法说明：Spring Boot 不允许 <springProfile> 嵌在 <root> / <logger> / <appender> 内部
+      （实测会报 "<springProfile> elements cannot be nested within ..." 并整块丢弃），
+      所以只能另起一个 <root> / <logger> 元素来追加 appender：logback 对同一个 logger 的多次声明
+      是「继续挂 appender」，不是覆盖，故上面的 INFO/WARN/ERROR 三级文件在 dev 下同样生效。
+
+      两点预期内的现象，不必当成故障：
+      ① 非 dev 下 CONSOLE 只是「定义了但没人引用」，以 Boot 的 debug 模式启动时 logback 会提示
+         "Appender named [CONSOLE] not referenced"，属正常；
+      ② CONSOLE 仍保持同步（没再包一层 AsyncAppender）：它只在 dev 挂载，控制台输出本身
+         就是阻塞式写入，套队列既没有收益，还会让终端上的报错延迟出现。
+    -->
+    <springProfile name="dev">
+        <!-- CONSOLE appender 的定义也放在这里（理由见文件头部 include 处的说明）：
+             仅在 dev 下存在，非 dev 下不定义、自然也不会报「未引用」 -->
+        <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+        <logger name="ADMIN_AUDIT" level="INFO" additivity="false">
+            <appender-ref ref="CONSOLE"/>
+        </logger>
+        <root level="INFO">
+            <appender-ref ref="CONSOLE"/>
+        </root>
+    </springProfile>
 
     <!-- dev 环境业务包 DEBUG，便于联调；生产（默认）保持 INFO -->
     <springProfile name="dev">

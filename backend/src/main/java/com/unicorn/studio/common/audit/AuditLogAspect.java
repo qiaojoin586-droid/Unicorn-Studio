@@ -39,7 +39,7 @@ import java.util.Set;
 public class AuditLogAspect {
 
     private static final Logger log = LoggerFactory.getLogger(AuditLogAspect.class);
-    /** 管理端操作审计专用 logger：写入 logs/admin/yyyy-MM-dd/app-admin.log（additivity=false，见 logback-spring.xml） */
+    /** 管理端操作审计专用 logger：写入 logs/admin/yyyy-MM-dd/app-admin.log.N（additivity=false，见 logback-spring.xml） */
     private static final Logger AUDIT_FILE_LOGGER = LoggerFactory.getLogger("ADMIN_AUDIT");
     /**
      * 需要脱敏的字段名（精确匹配，不区分大小写）。
@@ -106,7 +106,7 @@ public class AuditLogAspect {
 
     /**
      * 同步写审计文件（与异步落库解耦，任一失败互不影响；内部自捕获保证不影响业务主流程）。
-     * 一行一条、含脱敏参数，随 logback 按天归档到 logs/admin/yyyy-MM-dd/app-admin.log。
+     * 一行一条、含脱敏参数，随 logback 按天归档到 logs/admin/yyyy-MM-dd/app-admin.log.N。
      */
     private void writeAuditFile(SysOperationLog entry) {
         try {
