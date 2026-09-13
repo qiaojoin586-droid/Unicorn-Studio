@@ -1,5 +1,6 @@
 package com.unicorn.studio.AIWorker.service;
 
+import com.unicorn.studio.AIWorker.config.AiApiUrlValidator;
 import com.unicorn.studio.AIWorker.config.AiConfigProvider;
 import com.unicorn.studio.AIWorker.config.AiRuntimeConfig;
 import com.unicorn.studio.AIWorker.dto.AiConfigUpdateRequest;
@@ -7,6 +8,7 @@ import com.unicorn.studio.AIWorker.dto.AiTestRequest;
 import com.unicorn.studio.AIWorker.mapper.AiConfigMapper;
 import com.unicorn.studio.AIWorker.vo.AiConfigVO;
 import com.unicorn.studio.AIWorker.vo.AiTestResultVO;
+import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.cache.CacheHelper;
 import com.unicorn.studio.common.crypto.CryptoService;
 import com.unicorn.studio.model.SiteSettings;
@@ -54,17 +56,20 @@ public class AiConfigService {
     private final CryptoService crypto;
     private final AiChatService chatService;
     private final CacheHelper cache;
+    private final AiApiUrlValidator apiUrlValidator;
 
     public AiConfigService(AiConfigMapper configMapper,
                            AiConfigProvider configProvider,
                            CryptoService crypto,
                            AiChatService chatService,
-                           CacheHelper cache) {
+                           CacheHelper cache,
+                           AiApiUrlValidator apiUrlValidator) {
         this.configMapper = configMapper;
         this.configProvider = configProvider;
         this.crypto = crypto;
         this.chatService = chatService;
         this.cache = cache;
+        this.apiUrlValidator = apiUrlValidator;
     }
 
     /** 读取配置（脱敏回显）。 */
@@ -91,6 +96,8 @@ public class AiConfigService {
             return;
         }
         Map<String, String> values = new LinkedHashMap<>();
+        // S-3：保存路径同样必须校验 —— 否则可以「先存一个内网/攻击者地址，再触发对话」绕开探测路径的检查
+        apiUrlValidator.validate(form.apiUrl());
         if (!form.apiKeyUnchanged()) {
             String plainKey = form.apiKey().trim();
             if (!plainKey.isEmpty()) {
@@ -141,6 +148,14 @@ public class AiConfigService {
         }
         if (probe.model() == null || probe.model().isBlank()) {
             return AiTestResultVO.fail("-", probe.normalizedBaseUrl(), 0, "请填写模型名");
+        }
+        // S-3：SSRF 防护。探测会把【库中明文 apiKey】作为 Bearer 头发往该地址，
+        // 因此地址必须受限于白名单且不得指向内网。按本方法契约返回失败结果而非抛异常。
+        try {
+            apiUrlValidator.validate(probe.apiUrl());
+        } catch (BusinessException e) {
+            log.warn("AI 连通性测试被拒绝：url={}, 原因={}", probe.apiUrl(), e.getMessage());
+            return AiTestResultVO.fail(probe.model(), probe.normalizedBaseUrl(), 0, e.getMessage());
         }
 
         long start = System.currentTimeMillis();

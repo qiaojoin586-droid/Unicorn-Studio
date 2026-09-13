@@ -124,6 +124,12 @@ app:
     # true=把已注册的 AiTool 实现装配给模型，启用前请确认工具实现已就绪。
     tools:
       enabled: ${AI_TOOLS_ENABLED:false}
+    # AI 接口地址（apiUrl）域名白名单，逗号分隔（S-3）。
+    # 为什么必须有：apiUrl 由管理员填写，服务端会带着【库中明文 API Key】请求该地址 ——
+    # 只拦内网地址挡不住「指向攻击者自己的公网服务器」，白名单才是防 Key 外带的关键。
+    # 留空 = 不限制域名（仍有内网/环回/链路本地地址拦截），但存在 Key 外带风险。
+    # 更换/新增供应商时把域名加进来即可（匹配规则：精确相等或为其子域名）。
+    allowed-api-hosts: ${AI_ALLOWED_API_HOSTS:bigmodel.cn,openai.com,deepseek.com,moonshot.cn,aliyuncs.com,volces.com,baidubce.com,anthropic.com,openrouter.ai,siliconflow.cn}
   crypto:
     # 敏感配置加密密钥（AI API Key 等）：AES-256-GCM。
     # 必须设置环境变量 APP_CRYPTO_SECRET：≥32 字符的【随机串，不是人类可记口令】
