@@ -1,0 +1,61 @@
+# ============================================================================
+# 本地开发配置模板（application-local.yml.example）
+# ============================================================================
+# 用法：复制为同目录下的 application-local.yml 并填入真实值。
+#   application-local.yml 已加入 .gitignore，【不会入库】—— 真实凭据只留在本机。
+#
+# 为什么要有这个文件：
+#   V16 安全修复（S-1/S-2/S-4）把所有真实凭据从 application.yml 里移除了。此前
+#   Redis 口令/主机、MySQL 弱口令、JWT 密钥都以「默认值」的形式随仓库公开，任何读过
+#   仓库的人都能用它们伪造身份或直连你的 Redis。现在 application.yml 只保留 ${VAR:}
+#   空占位，缺失即【拒绝启动】；本地值放这里，生产值走环境变量。
+#
+# 优先级提醒：
+#   【环境变量 > application-local.yml】。若你在 IDEA Run Configuration 里设了同名环境
+#   变量（如 ADMIN_JWT_SECRET），它会覆盖本文件的值。
+# ============================================================================
+
+spring:
+  datasource:
+    # 本地 MySQL（默认库 unicorn_studio，表结构见 backend/sql/mysql-init.sql）
+    password: your-mysql-password
+
+  data:
+    redis:
+      # 单机 Redis。若使用哨兵，请改设 spring.data.redis.sentinel.nodes（且此处 host/password 可为空）
+      host: 127.0.0.1
+      password: your-redis-password
+
+app:
+  crypto:
+    # 敏感配置加密密钥（AI API Key 的 AES-256-GCM），≥32 字符的【随机串，不是人类可记口令】。
+    # 生成方式（任选）：
+    #   PowerShell: $b=New-Object byte[] 36; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b) -replace '[+/=]',''
+    #   Linux/macOS: head -c 36 /dev/urandom | base64 | tr -d '/+=\n'
+    # ⚠️ 更换该值后，数据库里已存的密文将无法解密 —— 需先在后台「AI 配置」重新填写 API Key。
+    secret: your-32-plus-char-random-crypto-secret
+
+    # 仅当确实需要「无密钥时明文存储」时才置 true（本地临时调试）。生产必须保持 false。
+    allow-plaintext: false
+
+  admin:
+    # 后台管理 token 签名密钥，≥32 字符。未配置时 JwtService 拒绝启动。
+    jwt-secret: your-32-plus-char-admin-jwt-secret
+
+  public:
+    # 前台用户 token 签名密钥，≥32 字符，必须与 admin.jwt-secret 不同。
+    # 未配置时 PublicAuthService 拒绝启动。
+    # ⚠️ 轮换该值会使所有已签发的前台 token 立即失效（用户需重新登录）。
+    jwt-secret: your-32-plus-char-public-jwt-secret
+
+  security:
+    # 可信代理跳数：从右往左取 X-Forwarded-For 的第 N 跳作为客户端 IP。
+    #   0 = 完全不信任 XFF，只用 remoteAddr（安全默认值）
+    #   1 = 前面有 1 层代理（如 nginx 直连后端；或本机 Node 生产服务 frontend/server/index.js）
+    #   2 = 前面有 2 层代理（如 nginx → Node 生产服务 → 后端）
+    # ⚠️ 必须等于实际代理层数：
+    #     配【小】→ 取到代理自身 IP，全站共用一个限流桶（限流基本失效）
+    #     配【大】→ 等于采信攻击者伪造的 X-Forwarded-For
+    # 本应用 server.address=127.0.0.1 只监听回环，本地经 Node(3000) 或 Vite(5173) 代理访问，
+    # 故本地开发用 1。
+    trusted-proxy-count: 1

@@ -22,7 +22,6 @@ import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -41,8 +40,25 @@ public class AuditLogAspect {
     private static final Logger log = LoggerFactory.getLogger(AuditLogAspect.class);
     /** 管理端操作审计专用 logger：写入 logs/admin/yyyy-MM-dd/app-admin.log（additivity=false，见 logback-spring.xml） */
     private static final Logger AUDIT_FILE_LOGGER = LoggerFactory.getLogger("ADMIN_AUDIT");
-    private static final Set<String> SENSITIVE_KEYS = Set.of("password", "token", "refreshToken", "oldPassword", "newPassword");
+    /**
+     * 需要脱敏的字段名（精确匹配，不区分大小写）。
+     * <p>
+     * <b>为什么必须显式列出 apiKey/secret？</b>审计参数是「原样序列化请求体」，
+     * 而 AI 配置接口（{@code PUT /api/admin/ai-config}）的请求体里携带<b>明文 API Key</b>
+     * （加密发生在 Service 层，切面拿到的是 Controller 入参）。若此处漏配，
+     * 明文密钥会同时落到 {@code sys_operation_log.params} 与管理端审计文件，属于严重安全问题。
+     */
+    private static final Set<String> SENSITIVE_KEYS = Set.of(
+            "password", "token", "refreshToken", "oldPassword", "newPassword",
+            "apikey", "api_key", "secret", "cryptosecret", "accesskey", "access_key", "authorization");
     private static final String MASKED = "***";
+
+    /**
+     * 需要脱敏的字段名<b>后缀</b>：覆盖 {@code apiKey / secretKey / accessToken} 这类驼峰组合，
+     * 避免以后新增「xxxKey」字段时再次漏配。
+     */
+    private static final List<String> SENSITIVE_SUFFIXES = List.of(
+            "password", "token", "secret", "secretkey", "apikey", "apisecret", "accesskey", "privatekey");
 
     private final SysOperationLogMapper logMapper;
     private final ObjectProvider<AuditLogAspect> selfProvider;
@@ -182,7 +198,18 @@ public class AuditLogAspect {
     }
 
     private boolean isSensitiveKey(String name) {
+        if (name == null || name.isEmpty()) {
+            return false;
+        }
         String lower = name.toLowerCase();
-        return SENSITIVE_KEYS.contains(lower) || lower.endsWith("password") || lower.endsWith("token");
+        if (SENSITIVE_KEYS.contains(lower)) {
+            return true;
+        }
+        for (String suffix : SENSITIVE_SUFFIXES) {
+            if (lower.endsWith(suffix)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

@@ -630,3 +630,67 @@ INSERT INTO sys_permission (code, name, module, type, sort_order) VALUES
 ('retention:run',  '立即执行清理', '数据保留', 'BUTTON', 110);
 
 -- 数据保留属系统级破坏性操作（物理删除），仅 SUPER_ADMIN（代码内加载全部权限）可用，不下发给 EDITOR。
+
+-- ==== V16: AI 助手模块（Spring AI） ====
+-- AI 配置统一存 ai 组，后台「AI 配置」页（/admin/ai-config）维护，改后即时生效（无需重启）。
+-- 代码位于 com.unicorn.studio.AIWorker（Controller/Service/Mapper/VO/DTO/tool 分层）。
+-- API Key 以 AES-256-GCM 加密后落库（密钥取环境变量 APP_CRYPTO_SECRET），禁止明文保存；
+-- 因此 ai.api_key 初值留空 —— 切勿把真实密钥写进 SQL 或提交到版本库。
+INSERT INTO site_settings (group_name, setting_key, setting_value, description, updated_at) VALUES
+('ai', 'ai.api_key', '',
+ 'AI 助手 · API Key（AES-256-GCM 加密存储，后台填写，勿手工明文写入）', CURRENT_TIMESTAMP),
+('ai', 'ai.api_url', 'https://open.bigmodel.cn/api/paas/v4',
+ 'AI 助手 · API 地址（兼容 OpenAI 协议的 base URL，如 https://api.openai.com/v1）', CURRENT_TIMESTAMP),
+('ai', 'ai.model', 'GLM-4.5-Air',
+ 'AI 助手 · 模型名称（需与所填 API 地址的供应商一致）', CURRENT_TIMESTAMP),
+('ai', 'ai.system_prompt',
+ '你是独角兽工作室的AI助手，名叫小独角兽。你友好、专业，擅长回答关于工作室、技术学习和编程的问题。请用中文回答。',
+ 'AI 助手 · 系统提示词（人设与回答风格）', CURRENT_TIMESTAMP),
+('ai', 'ai.max_tokens', '1024', 'AI 助手 · 单次回复最大 token 数', CURRENT_TIMESTAMP),
+('ai', 'ai.temperature', '0.7', 'AI 助手 · 采样温度（0~2，越大越随机）', CURRENT_TIMESTAMP),
+('ai', 'ai.enabled', 'true',    'AI 助手 · 功能总开关（false 则前台对话不可用）', CURRENT_TIMESTAMP);
+
+-- AI 配置权限码（页面 /admin/ai-config）；ai:test 独立成码（消耗真实 API 额度，需与编辑分权）
+INSERT INTO sys_permission (code, name, module, type, sort_order) VALUES
+('ai:view', 'AI 配置',       'AI 配置', 'MENU',   111),
+('ai:edit', '编辑 AI 配置',   'AI 配置', 'BUTTON', 112),
+('ai:test', '测试 AI 连通性', 'AI 配置', 'BUTTON', 113);
+
+-- 内容小编（EDITOR）获得 AI 配置查看与编辑权限；不下发 ai:test（仅 SUPER_ADMIN 可用）
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'EDITOR' AND p.code IN ('ai:view','ai:edit');
+
+-- ==== V17: 加入我们页面管理 ====
+-- 「加入我们」页面文案与社群二维码改由后台「加入我们」页（/admin/join）维护，
+-- 存储复用 site_settings 的 join 组（单例页面配置，不新建表）；前台读取 GET /api/join。
+-- join.paragraphs 为纯文本，段落间用空行分隔（\n\n 为 MySQL 字符串转义，落库为真实换行 0x0A），
+-- 读取时切分为段落数组；切勿写成 \\n\\n（会变成字面量反斜杠导致前台只渲染一段）。
+INSERT INTO site_settings (group_name, setting_key, setting_value, description, updated_at) VALUES
+('join', 'join.eyebrow',    '',
+ '加入我们 · 顶部小标题（留空则不显示）', CURRENT_TIMESTAMP),
+('join', 'join.title',      '加入我们',
+ '加入我们 · 主标题', CURRENT_TIMESTAMP),
+('join', 'join.subtitle',   '欢迎加入独角兽工作室交流社群',
+ '加入我们 · 副标题', CURRENT_TIMESTAMP),
+('join', 'join.paragraphs', '在这里我们分享前沿技术、实战项目与设计创意，共同成长、一起探索数字世界的更多可能。\n\n扫描下方二维码，即可加入社群与我们直接交流。',
+ '加入我们 · 正文段落，段落间用空行分隔', CURRENT_TIMESTAMP),
+('join', 'join.qr_image',   '',
+ '加入我们 · 社群二维码图片（留空则使用站点默认二维码）', CURRENT_TIMESTAMP),
+('join', 'join.qr_caption', 'QQ扫码加入社群',
+ '加入我们 · 二维码下方说明文字', CURRENT_TIMESTAMP);
+
+-- 加入我们管理权限码（页面 /admin/join）
+INSERT INTO sys_permission (code, name, module, type, sort_order) VALUES
+('join:view', '加入我们',     '加入我们', 'MENU',   114),
+('join:edit', '编辑加入我们', '加入我们', 'BUTTON', 115);
+
+-- 内容小编（EDITOR）同步获得加入我们管理权限
+INSERT INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'EDITOR' AND p.code IN ('join:view','join:edit');
+
+-- 内置角色说明同步
+UPDATE sys_role
+SET description = '仪表盘 + 作品/新闻/轮播/招收方向/培养能力/关于我们/页脚/加入我们管理'
+WHERE code = 'EDITOR' AND builtin = 1;

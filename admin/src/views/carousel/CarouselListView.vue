@@ -119,6 +119,7 @@
             <el-select v-model="form.pageKey" style="width: 100%">
               <el-option label="关于我们" value="about" />
               <el-option label="作品详情" value="work-detail" />
+              <el-option label="作品列表" value="works" />
             </el-select>
           </el-form-item>
           <el-form-item label="类型" required>

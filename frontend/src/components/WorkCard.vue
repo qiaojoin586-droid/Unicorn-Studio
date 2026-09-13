@@ -6,7 +6,17 @@
   >
     <!-- Cover image area -->
     <div class="relative h-48 overflow-hidden" :class="coverClass">
-      <div class="absolute inset-0 flex items-center justify-center text-6xl">
+      <!-- 有封面图且未加载失败：渲染图片 -->
+      <img
+        v-if="coverUrl && !imgFailed"
+        :src="coverUrl"
+        :alt="title"
+        class="w-full h-full object-cover"
+        loading="lazy"
+        @error="imgFailed = true"
+      />
+      <!-- 无封面图或加载失败：渐变 + emoji 图标兜底 -->
+      <div v-else class="absolute inset-0 flex items-center justify-center text-6xl">
         {{ icon }}
       </div>
       <!-- Tag -->
@@ -49,16 +59,22 @@
 </template>
 
 <script setup>
-const props = defineProps({
+import { ref } from 'vue'
+
+defineProps({
   slug: { type: String, required: true },
   title: { type: String, required: true },
   description: { type: String, required: true },
+  coverUrl: { type: String, default: '' },
   icon: { type: String, default: '🏆' },
   tagType: { type: String, default: 'award' }, // 'award' | 'paper'
   authors: { type: String, default: '' },
   date: { type: String, default: '' },
   coverClass: { type: String, default: 'bg-gradient-to-br from-indigo-100 to-purple-100' },
 })
+
+// 封面图加载失败（404/网络错误）时回退到渐变 + emoji 图标兜底
+const imgFailed = ref(false)
 </script>
 
 <!-- line-clamp 使用 Tailwind 3.4 内置工具类，无需手写（优化方案 F-21） -->

@@ -17,6 +17,9 @@ public final class CacheKeys {
     /** 关于我们页面 VO（A2，{@code cache:about:page}） */
     public static final String ABOUT_PAGE = "cache:about:page";
 
+    /** 加入我们页面 VO（A2，{@code cache:join:page}） */
+    public static final String JOIN_PAGE = "cache:join:page";
+
     /** 首页轮播列表（A7，{@code cache:carousel:home}） */
     public static final String CAROUSEL_HOME = "cache:carousel:home";
 

@@ -18,3 +18,219 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/* 富文本正文排版（后台 wangeditor 产出的 HTML，经后端 HtmlSanitizer 消毒后 v-html 注入）。
+   作品详情、学习资料详情共用，故收敛到全局样式，避免依赖路由懒加载顺序。 */
+.rich-content {
+  color: #d1d5db;
+  line-height: 1.75;
+}
+.rich-content h2 {
+  margin: 1.5em 0 0.75em;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #fff;
+}
+.rich-content h3 {
+  margin: 1.25em 0 0.5em;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+.rich-content h4 {
+  margin: 1em 0 0.5em;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e5e7eb;
+}
+.rich-content p {
+  margin: 0.75em 0;
+}
+.rich-content ul {
+  margin: 0.75em 0;
+  padding-left: 1.5em;
+  list-style: disc;
+}
+.rich-content ol {
+  margin: 0.75em 0;
+  padding-left: 1.5em;
+  list-style: decimal;
+}
+.rich-content li {
+  margin: 0.25em 0;
+}
+.rich-content blockquote {
+  margin: 1em 0;
+  padding: 0.5em 1em;
+  border-left: 3px solid #6366f1;
+  color: #9ca3af;
+}
+.rich-content pre {
+  margin: 1em 0;
+  padding: 1em;
+  border-radius: 0.75rem;
+  background: #0f172a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow-x: auto;
+}
+.rich-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9em;
+}
+.rich-content pre code {
+  background: none;
+  padding: 0;
+}
+.rich-content a {
+  color: #818cf8;
+  text-decoration: underline;
+}
+.rich-content img {
+  max-width: 100%;
+  border-radius: 0.5rem;
+}
+
+/* ============================================================
+   AI 助手对话框的 Markdown 渲染排版
+   ------------------------------------------------------------
+   与 .rich-content 的区别：对话气泡空间窄（最大约 80% 宽、
+   可拖拽拉伸），因此所有块级元素的外边距整体收紧，
+   列表/表格/代码块按气泡宽度自适应，保证「短回复不空旷、
+   长回复不溢出」。
+   ============================================================ */
+.md-body {
+  font-size: 0.875rem; /* 14px = text-sm */
+  line-height: 1.7;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+/* 首尾元素去掉外边距，避免气泡出现「上/下留白」 */
+.md-body > :first-child { margin-top: 0; }
+.md-body > :last-child { margin-bottom: 0; }
+
+.md-body h1,
+.md-body h2,
+.md-body h3,
+.md-body h4,
+.md-body h5,
+.md-body h6 {
+  color: #fff;
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 1em 0 0.5em;
+}
+.md-body h1 { font-size: 1.15rem; }
+.md-body h2 { font-size: 1.05rem; }
+.md-body h3 { font-size: 1rem; }
+.md-body h4,
+.md-body h5,
+.md-body h6 { font-size: 0.9375rem; }
+
+/* 标题前加一条渐变竖线，视觉上区分层级 */
+.md-body h1,
+.md-body h2,
+.md-body h3 {
+  padding-left: 0.5rem;
+  border-left: 3px solid #6366f1;
+}
+
+.md-body p { margin: 0.5em 0; }
+
+.md-body ul,
+.md-body ol {
+  margin: 0.5em 0;
+  padding-left: 1.35em;
+}
+.md-body ul { list-style: disc; }
+.md-body ol { list-style: decimal; }
+.md-body li { margin: 0.2em 0; }
+.md-body li > ul,
+.md-body li > ol { margin: 0.2em 0; }
+/* 任务列表（- [ ] / - [x]）去掉圆点，交由复选框呈现 */
+.md-body li:has(> input[type='checkbox']) { list-style: none; margin-left: -1.1em; }
+.md-body input[type='checkbox'] { margin-right: 0.4em; accent-color: #6366f1; }
+
+.md-body blockquote {
+  margin: 0.6em 0;
+  padding: 0.35em 0.85em;
+  border-left: 3px solid #6366f1;
+  color: #9ca3af;
+}
+
+.md-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85em;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 0.25rem;
+  padding: 0.1em 0.35em;
+}
+.md-body pre {
+  margin: 0.6em 0;
+  padding: 0.75em 0.9em;
+  border-radius: 0.6rem;
+  background: #0b1220;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow-x: auto;
+}
+/* pre 内的 code 继承块样式，不再叠加行内底色/内边距 */
+.md-body pre code {
+  background: none;
+  padding: 0;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+}
+
+/* 表格：外层不额外加滚动容器（v-html 无法包裹），
+   靠 bubble 的 overflow 与 max-width 约束；表头吸顶色块区分 */
+.md-body table {
+  width: 100%;
+  margin: 0.6em 0;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  display: block;
+  overflow-x: auto;
+}
+.md-body th,
+.md-body td {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.35em 0.6em;
+  text-align: left;
+}
+.md-body th { background: rgba(255, 255, 255, 0.07); color: #e5e7eb; font-weight: 600; }
+
+.md-body a {
+  color: #818cf8;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.md-body a:hover { color: #a5b4fc; }
+
+.md-body hr {
+  margin: 0.85em 0;
+  border: none;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.md-body img {
+  max-width: 100%;
+  border-radius: 0.5rem;
+}
+
+/* 用户气泡（紫底）内的 Markdown 反色适配：
+   代码/表格/引用需在白底语义下依然可读 */
+.md-body.is-user code { background: rgba(0, 0, 0, 0.25); }
+.md-body.is-user pre {
+  background: rgba(0, 0, 0, 0.3);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+.md-body.is-user th { background: rgba(0, 0, 0, 0.2); color: #fff; }
+.md-body.is-user th,
+.md-body.is-user td { border-color: rgba(255, 255, 255, 0.25); }
+.md-body.is-user h1,
+.md-body.is-user h2,
+.md-body.is-user h3,
+.md-body.is-user h4,
+.md-body.is-user h5,
+.md-body.is-user h6 { color: #fff; border-left-color: rgba(255, 255, 255, 0.6); }
+.md-body.is-user blockquote { color: rgba(255, 255, 255, 0.85); border-left-color: rgba(255, 255, 255, 0.6); }
+.md-body.is-user a { color: #e0e7ff; }

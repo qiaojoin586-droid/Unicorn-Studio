@@ -12,18 +12,29 @@
 
     <!-- Bubble -->
     <div
-      class="rounded-2xl px-4 py-3 max-w-[80%]"
+      class="rounded-2xl px-4 py-3 max-w-[85%] min-w-0"
       :class="isUser
         ? 'bg-indigo-600 text-white rounded-tr-sm'
         : 'bg-white/5 border border-white/10 text-gray-200 rounded-tl-sm'"
     >
-      <p class="text-sm leading-relaxed whitespace-pre-wrap">{{ content }}</p>
+      <!--
+        Markdown 渲染：html 来自 useMarkdown（marked 解析 + DOMPurify 消毒），
+        是页面内唯一允许 v-html 的对话内容入口。
+        用户消息同样走 Markdown（保留其换行/代码块），视觉上以 is-user 反色区分。
+      -->
+      <div
+        ref="bubbleBody"
+        class="md-body"
+        :class="isUser ? 'is-user' : ''"
+        v-html="renderedHtml"
+      />
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch, onMounted, nextTick } from 'vue'
+import { renderMarkdown, hardenLinks } from '@/composables/useMarkdown'
 
 const props = defineProps({
   role: {
@@ -38,4 +49,14 @@ const props = defineProps({
 })
 
 const isUser = computed(() => props.role === 'user')
+const bubbleBody = ref(null)
+const renderedHtml = computed(() => renderMarkdown(props.content))
+
+// v-html 注入后 a 标签的 target/rel 需要后置补写（模板无法触及内部节点）
+function applyLinkHardening() {
+  hardenLinks(bubbleBody.value)
+}
+
+watch(renderedHtml, () => nextTick(applyLinkHardening))
+onMounted(applyLinkHardening)
 </script>

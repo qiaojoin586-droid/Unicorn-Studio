@@ -10,7 +10,7 @@ import { useApi } from '@/composables/useApi'
  * 降级约定：无配置、接口失败、字段不完整时 background 保持 null，
  * 调用方据此不渲染任何背景层，从而保持页面原有默认样式（零配置零回归）。
  *
- * @param {'about'|'work-detail'} pageKey 页面标识，与后端白名单一致
+ * @param {'about'|'work-detail'|'works'} pageKey 页面标识，与后端白名单一致
  */
 export function usePageBackground(pageKey) {
   const { get } = useApi()

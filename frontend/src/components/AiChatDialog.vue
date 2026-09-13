@@ -1,7 +1,8 @@
 <template>
   <div
     v-if="store.isOpen"
-    class="fixed bottom-28 right-8 z-50 w-96 max-w-[calc(100vw-4rem)]"
+    class="fixed bottom-28 right-8 z-50 max-w-[calc(100vw-4rem)]"
+    :style="style"
   >
     <transition
       enter-active-class="transition duration-300 ease-out"
@@ -15,11 +16,10 @@
         ref="dialogPanel"
         role="dialog"
         aria-label="AI 助手对话"
-        class="bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col"
-        style="height: 500px; max-height: calc(100vh - 10rem);"
+        class="relative bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col w-full h-full"
       >
         <!-- Header -->
-        <div class="flex items-center justify-between px-5 py-4 border-b border-white/10">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-white/10 flex-shrink-0">
           <div class="flex items-center gap-3">
             <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm">
               🦄
@@ -57,7 +57,7 @@
         <!-- Messages area -->
         <div
           ref="messagesContainer"
-          class="flex-1 overflow-y-auto px-5 py-4 space-y-4 scroll-smooth"
+          class="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4 scroll-smooth"
           @scroll="onMessagesScroll"
         >
           <!-- Welcome message -->
@@ -77,13 +77,13 @@
             :content="msg.content"
           />
 
-          <!-- Streaming message -->
+          <!-- Streaming message（同样走 Markdown 渲染，边流边排版） -->
           <div v-if="store.streamingText" class="flex gap-3">
             <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
               🦄
             </div>
-            <div class="bg-white/5 border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[80%]">
-              <p class="text-gray-200 text-sm leading-relaxed whitespace-pre-wrap">{{ store.streamingText }}</p>
+            <div class="bg-white/5 border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%] min-w-0">
+              <div ref="streamingBody" class="md-body" v-html="streamingHtml" />
               <span class="inline-block w-1.5 h-4 bg-indigo-400 animate-pulse ml-0.5 align-middle" />
             </div>
           </div>
@@ -104,7 +104,7 @@
         </div>
 
         <!-- 停止生成（优化方案 F-11）：流式响应期间可中断，保留已生成部分 -->
-        <div v-if="store.isLoading" class="px-4 pt-2.5 flex justify-center">
+        <div v-if="store.isLoading" class="px-4 pt-2.5 flex justify-center flex-shrink-0">
           <button
             type="button"
             @click="stopStream"
@@ -117,23 +117,66 @@
 
         <!-- Input area -->
         <ChatInput @send="handleSend" :disabled="store.isLoading" />
+
+        <!-- 拖拽拉伸手柄（左下角）：向左拖变宽 / 向下拖变高。
+             双击可在「默认尺寸」与「放大尺寸」间切换。 -->
+        <div
+          class="absolute bottom-0 left-0 w-5 h-5 cursor-sw-resize group z-10"
+          :class="resizing ? 'opacity-100' : 'opacity-60 hover:opacity-100'"
+          @pointerdown="startResize"
+          @dblclick="toggleDefaultSize"
+          title="拖拽调整大小（双击切换默认/放大）"
+          role="separator"
+          aria-label="拖拽调整对话框大小"
+        >
+          <!-- 手柄视觉：两条斜线，暗示可沿对角线拖拽 -->
+          <svg
+            class="w-full h-full text-gray-500 group-hover:text-indigo-400 transition"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+          >
+            <path d="M2 12L12 2" />
+            <path d="M2 17L17 2" />
+          </svg>
+        </div>
       </div>
     </transition>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useAiChatStore } from '@/stores/aiChat'
 import { useAiChat } from '@/composables/useAiChat'
+import { renderMarkdown, hardenLinks } from '@/composables/useMarkdown'
+import { useResizablePanel } from '@/composables/useResizablePanel'
 import ChatMessage from './ChatMessage.vue'
 import ChatInput from './ChatInput.vue'
 
 const store = useAiChatStore()
 const { streamChat, stopStream } = useAiChat()
 const messagesContainer = ref(null)
+const streamingBody = ref(null)
 const dialogPanel = ref(null)
 const stickToBottom = ref(true)
+
+// 可拖拽拉伸：尺寸持久化到 localStorage，刷新后保持
+const { style, resizing, startResize, toggleDefaultSize, attach } = useResizablePanel({
+  storageKey: 'unicorn.aiChat.panelSize',
+  defaultWidth: 384, // 与改造前的 w-96 保持一致
+  defaultHeight: 500,
+  minWidth: 320,
+  minHeight: 320,
+  maxWidth: 900,
+  maxHeight: 900,
+  viewportMargin: 24,
+})
+
+// 流式文本同样走 Markdown 渲染，避免「流式阶段是纯文本、结束后才变格式」的跳变
+const streamingHtml = computed(() => renderMarkdown(store.streamingText))
 
 function handleSend(message) {
   streamChat(message)
@@ -155,6 +198,9 @@ watch(
   },
 )
 
+// v-html 注入后补外链安全属性（流式气泡同样需要）
+watch(streamingHtml, () => nextTick(() => hardenLinks(streamingBody.value)))
+
 // ESC 关闭 + 打开时焦点移入输入框（优化方案 F-16）
 function onKeydown(e) {
   if (e.key === 'Escape' && store.isOpen) store.closeChat()
@@ -173,6 +219,11 @@ watch(
     }
   },
 )
+
+onMounted(() => {
+  attach()
+  hardenLinks(streamingBody.value)
+})
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)

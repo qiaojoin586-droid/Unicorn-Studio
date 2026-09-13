@@ -129,8 +129,10 @@
             </div>
           </div>
 
-          <!-- Content -->
-          <div class="text-gray-300 leading-relaxed space-y-4 whitespace-pre-wrap">{{ work.content }}</div>
+          <!-- 正文：兼容富文本 HTML（后台 wangeditor）与早期纯文本两种历史格式 -->
+          <div v-if="work.content && isHtmlContent" class="rich-content" v-html="work.content"></div>
+          <div v-else-if="work.content" class="text-gray-300 leading-relaxed space-y-4 whitespace-pre-wrap">{{ work.content }}</div>
+          <p v-else class="text-gray-500 leading-relaxed">正文正在整理中，敬请期待～</p>
 
           <a
             v-if="work.externalLink"
@@ -151,7 +153,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useApi } from '@/composables/useApi'
 import { usePageMeta } from '@/composables/usePageMeta'
@@ -167,6 +169,13 @@ const { background } = usePageBackground('work-detail')
 const loading = ref(true)
 const error = ref('')
 const work = ref(null)
+
+// 判断正文是否为富文本 HTML：后台 wangeditor 保存的是 HTML（含块级标签），
+// 早期 textarea 录入的历史数据是纯文本（仅 \n 换行）。据此选择 v-html 或纯文本渲染。
+const isHtmlContent = computed(() => {
+  const c = work.value?.content || ''
+  return /<(p|div|h[1-6]|ul|ol|li|strong|em|b|i|a|img|br|pre|code|blockquote|table|span|section)[\s/>]/i.test(c)
+})
 
 usePageMeta(() => ({
   title: work.value?.title || '作品详情',

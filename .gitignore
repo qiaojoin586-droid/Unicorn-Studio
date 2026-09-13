@@ -17,6 +17,10 @@ backend/data/
 data/
 **/.env
 
+# 本地开发配置（含真实凭据：DB/Redis 口令、各 JWT/crypto 密钥）—— 绝不入库
+# 模板见 backend/src/main/resources/application-local.yml.example
+**/application-local.yml
+
 # 系统
 .DS_Store
 Thumbs.db

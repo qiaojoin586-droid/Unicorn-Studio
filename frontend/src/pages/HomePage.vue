@@ -164,6 +164,7 @@
               :slug="work.slug"
               :title="work.title"
               :description="work.summary"
+              :cover-url="work.coverUrl"
               :icon="work.icon"
               :tag-type="work.tagType"
               :authors="work.authors"

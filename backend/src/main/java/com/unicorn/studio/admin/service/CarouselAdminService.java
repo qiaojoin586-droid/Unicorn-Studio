@@ -25,9 +25,9 @@ import java.util.Set;
 @Service
 public class CarouselAdminService {
 
-    private static final Set<String> PAGE_KEYS = Set.of("home", "about", "work-detail");
+    private static final Set<String> PAGE_KEYS = Set.of("home", "about", "work-detail", "works");
     /** 单背景页面：每页只应有一条启用背景 */
-    private static final Set<String> BACKGROUND_PAGES = Set.of("about", "work-detail");
+    private static final Set<String> BACKGROUND_PAGES = Set.of("about", "work-detail", "works");
     private static final Set<String> MEDIA_TYPES = Set.of("image", "video");
 
     private final CarouselMapper carouselMapper;
@@ -39,7 +39,7 @@ public class CarouselAdminService {
     }
 
     /**
-     * @param group 可选分组过滤：{@code home}=首页轮播，{@code background}=页面背景（about+work-detail）；
+     * @param group 可选分组过滤：{@code home}=首页轮播，{@code background}=页面背景（about+work-detail+works）；
      *              为 null 时不加过滤，保持原有全量列表行为。
      */
     public PageResult<Carousel> list(int page, int size, String group) {
@@ -154,7 +154,7 @@ public class CarouselAdminService {
     }
 
     /**
-     * 单背景页面（about/work-detail）每页只应有一条生效背景。
+     * 单背景页面（about/work-detail/works）每页只应有一条生效背景。
      * 保存一条「启用」的背景后，自动停用同页其余启用项，避免出现"改了却不生效"的困惑。
      */
     private void disableSiblingBackgrounds(Carousel saved) {

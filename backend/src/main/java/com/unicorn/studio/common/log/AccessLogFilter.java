@@ -1,5 +1,6 @@
 package com.unicorn.studio.common.log;
 
+import com.unicorn.studio.common.IpUtils;
 import jakarta.servlet.AsyncContext;
 import jakarta.servlet.AsyncEvent;
 import jakarta.servlet.AsyncListener;
@@ -78,21 +79,12 @@ public class AccessLogFilter extends OncePerRequestFilter {
                 request.getRequestURI(),
                 queryStringOf(request),
                 response.getStatus(),
-                resolveIp(request),
+                IpUtils.getClientIp(request),
                 duration);
     }
 
     private String queryStringOf(HttpServletRequest request) {
         String query = request.getQueryString();
         return query == null ? "" : "?" + query;
-    }
-
-    /** 经代理部署时取 X-Forwarded-For 首个地址，否则取直连地址。 */
-    private String resolveIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
     }
 }

@@ -3,6 +3,26 @@ server:
   address: 127.0.0.1
 
 spring:
+  # ==================== 本地开发配置（不入库）====================
+  # 真实凭据（DB/Redis 口令、各项 SECRET）一律不进仓库：application.yml 只保留 ${VAR:} 空占位，
+  # 本地值放 application-local.yml —— 该文件已加入 .gitignore，模板见 application-local.yml.example。
+  # optional: 前缀保证生产环境（无此文件）不受影响，由环境变量注入。
+  config:
+    import: optional:classpath:application-local.yml
+  # ==================== Spring AI（AI 助手模块）====================
+  # 模型实例在运行时由 AIWorker.ChatClientFactory 按数据库配置手动构建，
+  # 不使用 starter 的自动装配，故在此排除全部自动配置的模型 Bean。
+  # 必须排除的原因：这些自动配置会强制校验 spring.ai.openai.api-key，
+  # 而本项目的 key 存在数据库（禁止在配置文件里放第二份明文），会导致启动失败。
+  # 已同时在 UnicornStudioApplication 的 exclude 属性中声明（双保险）。
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
   # 上传体积上限（V11 支持动态壁纸时补齐）：
   # 此前未配置 spring.servlet.multipart，Spring Boot 默认 max-file-size=1MB，
   # 导致超过 1MB 的图片/文档在进入 FileService 之前就被 Servlet 层拒绝
@@ -17,9 +37,10 @@ spring:
     url: jdbc:mysql://127.0.0.1:3306/unicorn_studio?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
     driver-class-name: com.mysql.cj.jdbc.Driver
     username: ${DB_USERNAME:root}
-    # 密码走环境变量注入（生产必须设置 DB_PASSWORD）；默认值仅为本地开发便利，
-    # 开源/公开仓库前请移除默认值
-    password: ${DB_PASSWORD:123456}
+    # 密码必须显式配置（环境变量 DB_PASSWORD，或本地 application-local.yml）。
+    # 这里【没有默认值】：曾出现过的 ${DB_PASSWORD:123456} 属弱口令且已随仓库公开，
+    # 启动时由 SecretsStartupValidator 校验非空，缺失即拒绝启动。
+    password: ${DB_PASSWORD:}
     # Druid 连接池（stat filter 提供 SQL 监控统计，见 /api/admin/sql-monitor）
     type: com.alibaba.druid.pool.DruidDataSource
     druid:
@@ -48,14 +69,16 @@ spring:
     redis:
       # ---- 拓扑：单机 与 哨兵 通过环境变量切换，应用代码零改动（Redis 方案 §4.3 A7）----
       # 单机（开发/小站）：默认走 host+port
-      host: ${REDIS_HOST:39.106.191.149}
+      # 无默认值：此前的默认值是【真实公网 IP + 真实口令】且已进入 git 历史（S-4），
+      # 必须显式配置 REDIS_HOST / REDIS_PASSWORD（或本地 application-local.yml）。
+      host: ${REDIS_HOST:}
       port: ${REDIS_PORT:6379}
       # 哨兵（生产推荐）：设置 REDIS_SENTINEL_NODES 后启用，需把上面的 host/port 留空
       # sentinel:
       #   master: ${REDIS_SENTINEL_MASTER:mymaster}
       #   nodes: ${REDIS_SENTINEL_NODES:}
       #   password: ${REDIS_SENTINEL_PASSWORD:}
-      password: ${REDIS_PASSWORD:hanxi0918}
+      password: ${REDIS_PASSWORD:}
       # 本应用独占 db 0（Redis Cluster 只支持 db 0，将来上 Cluster 改按 key 前缀隔离）
       database: ${REDIS_DATABASE:0}
       # 必须显式设置超时与连接池（Redis 方案 §4.3 A5）：避免 Redis 不可达时线程长时间挂起
@@ -84,12 +107,46 @@ mybatis-plus:
 
 app:
   cors:
-    # 前台 5173 + 后台 5174
-    allowed-origins: ${APP_CORS_ORIGINS:http://localhost:5173,http://localhost:5174}
+    # 前台 dev 5173 / 后台 dev 5174 / 前台 Node 生产服务 3000（含 localhost 与 127.0.0.1 两种写法，
+    # 二者在浏览器中属不同 Origin，缺一即返回 403 Invalid CORS request）
+    allowed-origins: ${APP_CORS_ORIGINS:http://localhost:5173,http://localhost:5174,http://localhost:3000,http://127.0.0.1:3000}
+    # 通配模式（容忍端口变动，如 Vite 自动换端口 / Node 改端口）；仅放开本机任意端口，不涉公网域名。
+    # 生产环境请用 APP_CORS_ORIGIN_PATTERNS 显式收窄，设为空串则仅按 allowed-origins 精确匹配。
+    allowed-origin-patterns: ${APP_CORS_ORIGIN_PATTERNS:http://localhost:[*],http://127.0.0.1:[*]}
   ai:
-    api-key: ${AI_API_KEY:35c207cdcda74081914adb4630fa3648.aUzWrY3hadJxEtnf}
-    api-url: https://open.bigmodel.cn/api/paas/v4/chat/completions
-    model: GLM-4.5-Air
+    # ==================== AI 助手（com.unicorn.studio.AIWorker，基于 Spring AI）====================
+    # 运行时配置（API Key / API 地址 / 模型 / 提示词 / 采样参数）自 V16 起统一存
+    # site_settings 的 ai 组，由后台「AI 配置」页（/admin/ai-config）维护，
+    # 保存后即时生效、无需重启；此处仅保留部署级开关。
+    #
+    # 工具层（Function Calling 扩展位，见 AIWorker/tool）：
+    # false=只做基础问答（当前默认，符合「现阶段先实现最基础的问答功能」）；
+    # true=把已注册的 AiTool 实现装配给模型，启用前请确认工具实现已就绪。
+    tools:
+      enabled: ${AI_TOOLS_ENABLED:false}
+  crypto:
+    # 敏感配置加密密钥（AI API Key 等）：AES-256-GCM。
+    # 必须设置环境变量 APP_CRYPTO_SECRET：≥32 字符的【随机串，不是人类可记口令】
+    # （派生算法是单轮 SHA-256，无盐无迭代，见 CryptoService.deriveKey 的说明）。
+    # 未配置或长度不足 32 时【拒绝启动】；不再回退 app.admin.jwt-secret（机密性与完整性密钥必须分离）。
+    # 注意：更换该值会导致已存储的密文无法解密，需在后台重新填写 API Key。
+    secret: ${APP_CRYPTO_SECRET:}
+    # 仅本地开发：无密钥时允许明文存储。生产必须保持 false。
+    allow-plaintext: ${APP_CRYPTO_ALLOW_PLAINTEXT:false}
+  public:
+    # 前台用户 token（评论等前台操作的身份识别）签名密钥，独立于后台 admin.jwt-secret。
+    # 【必须显式配置】：此项此前在 yml 中完全缺失，而 PublicAuthService 的 @Value 带一个
+    # 随源码提交进 git 的硬编码默认值 —— 按默认配置部署时任何人都能用该公开密钥
+    # 伪造任意前台用户 token。未配置或长度不足 32 时拒绝启动。
+    # ⚠️ 轮换该值会使所有已签发的前台 token 立即失效（预期行为）。
+    jwt-secret: ${PUBLIC_JWT_SECRET:}
+  security:
+    # 可信代理跳数（X-Forwarded-For 采信层数），从右往左取第 N 跳：
+    #   0（默认，安全值）= 完全不信任 XFF，只用 remoteAddr
+    #   N>0              = 信任最右 N 跳，必须等于实际代理层数
+    # 本应用 server.address=127.0.0.1 只监听回环、必然经代理，部署时须配成实际层数。
+    # ⚠️ 配小会让全站共用一个限流桶（取到代理自身 IP）；配大等于采信攻击者提供的值。
+    trusted-proxy-count: ${TRUSTED_PROXY_COUNT:0}
   admin:
     # 后台管理 JWT/账号配置；jwt-secret 为空时 JwtService 拒绝启动
     jwt-secret: ${ADMIN_JWT_SECRET:}

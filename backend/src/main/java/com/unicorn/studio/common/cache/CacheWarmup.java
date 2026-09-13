@@ -101,6 +101,7 @@ public class CacheWarmup {
         warmQuietly("carousel-home", this::warmCarouselHome);
         warmQuietly("bg-about", () -> warmBackground("about"));
         warmQuietly("bg-work-detail", () -> warmBackground("work-detail"));
+        warmQuietly("bg-works", () -> warmBackground("works"));
         log.info("缓存预热完成");
     }
 

@@ -6,17 +6,20 @@
       <div class="absolute inset-0 bg-gray-950/50"></div>
     </div>
 
-    <!-- Loading state：内容区骨架屏（优化方案 F-13），不再全屏遮罩 -->
+    <!-- Loading state：内容区骨架屏（优化方案 F-13），不再全屏遮罩；与新网格布局对齐 -->
     <div
       v-if="loading"
-      class="relative z-10 max-w-4xl mx-auto px-4 pt-40 pb-20 space-y-6"
+      class="relative z-10 max-w-6xl mx-auto px-4 pt-40 pb-20"
       aria-busy="true"
       aria-label="正在加载学习资料"
     >
-      <div v-for="i in 3" :key="i" class="bg-white/5 border border-white/10 rounded-xl p-6 animate-pulse">
-        <div class="h-6 w-1/3 bg-white/10 rounded mb-3"></div>
-        <div class="h-4 w-3/4 bg-white/10 rounded mb-2"></div>
-        <div class="h-4 w-1/2 bg-white/10 rounded"></div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div v-for="i in 4" :key="i" class="aspect-square rounded-2xl border border-white/10 bg-white/5 p-6 animate-pulse">
+          <div class="h-5 w-20 bg-white/10 rounded-full mb-5"></div>
+          <div class="h-6 w-3/4 bg-white/10 rounded mb-3"></div>
+          <div class="h-4 w-full bg-white/10 rounded mb-2"></div>
+          <div class="h-4 w-2/3 bg-white/10 rounded"></div>
+        </div>
       </div>
     </div>
 
@@ -55,19 +58,46 @@
         </div>
       </section>
 
-      <!-- Learning cards -->
-      <section class="relative z-10 max-w-4xl mx-auto px-4 pb-20">
-        <div class="space-y-6">
+      <!-- Learning cards：透明正方形卡片网格（每行最多 4 个，居中响应式） -->
+      <section class="relative z-10 max-w-6xl mx-auto px-4 pb-20">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
           <router-link
             v-for="item in resources"
             :key="item.id"
             :to="`/learning/${item.id}`"
-            class="block bg-white/5 border border-white/10 rounded-xl p-6 backdrop-blur-sm hover:bg-white/10 hover:border-indigo-500/30 transition-all duration-300 hover:-translate-y-1"
+            class="group relative flex flex-col aspect-square rounded-2xl border border-white/10 bg-white/10 backdrop-blur-md p-6 shadow-lg shadow-black/20 transition-all duration-300 hover:-translate-y-2 hover:bg-white/15 hover:border-indigo-400/40 hover:shadow-xl hover:shadow-indigo-500/10"
           >
-            <h3 class="text-xl font-bold text-white mb-2">{{ item.title }}</h3>
-            <p class="text-gray-400 mb-4 leading-relaxed">{{ item.description }}</p>
+            <!-- 顶部：分类标签 + 外链图标 -->
+            <div class="flex items-start justify-between gap-3">
+              <span
+                v-if="item.category"
+                class="inline-flex items-center rounded-full border border-indigo-400/20 bg-indigo-500/10 px-3 py-1 text-xs font-semibold text-indigo-300"
+              >
+                {{ item.category }}
+              </span>
+              <svg
+                class="w-5 h-5 shrink-0 text-gray-400 group-hover:text-indigo-400 transition-colors"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17L17 7M7 7h10v10" />
+              </svg>
+            </div>
+
+            <!-- 标题 -->
+            <h3 class="mt-5 text-xl font-bold text-white line-clamp-2 group-hover:text-indigo-300 transition-colors">
+              {{ item.title }}
+            </h3>
+
+            <!-- 描述 -->
+            <p class="mt-3 text-sm text-gray-300 leading-relaxed line-clamp-3">
+              {{ item.description }}
+            </p>
+
+            <!-- 底部：查看详情 -->
             <span
-              class="inline-flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 font-semibold text-sm transition"
+              class="mt-auto pt-4 inline-flex items-center gap-1.5 text-indigo-400 font-semibold text-sm transition-all group-hover:gap-2.5 group-hover:text-indigo-300"
             >
               查看详情
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

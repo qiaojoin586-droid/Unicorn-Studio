@@ -129,7 +129,7 @@ class CacheSerializationTest {
         PageBackgroundVO bg = new PageBackgroundVO(true, "video", "poster.jpg", "video.mp4");
         assertEquals(bg, mapper.readValue(mapper.writeValueAsString(bg), PageBackgroundVO.class));
 
-        WorkCardVO workCard = new WorkCardVO(1L, "slug", "标题", "摘要", "\uD83C\uDFC6", "bg", "paper", "张三", "2026");
+        WorkCardVO workCard = new WorkCardVO(1L, "slug", "标题", "摘要", "\uD83C\uDFC6", "bg", "paper", "张三", "2026", null);
         assertEquals(workCard, mapper.readValue(mapper.writeValueAsString(workCard), WorkCardVO.class));
 
         ServiceItemVO service = new ServiceItemVO(1L, "AI 开发", "描述", "icon");

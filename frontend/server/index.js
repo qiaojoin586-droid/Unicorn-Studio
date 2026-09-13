@@ -114,6 +114,25 @@ function proxyToBackend(req, res, pathnameWithSearch) {
     delete headers['content-length']
   }
 
+  // X-Forwarded-For 安全（S-7）：必须【追加】本机看到的对端地址，而不是原样透传。
+  //
+  // 此前 headers 直接展开 req.headers，客户端自带的 X-Forwarded-For 会原封不动到达后端 ——
+  // 而后端当时取的是该头的【第一个】值，即完全由客户端控制，可据此绕过全部 IP 维度限流
+  // （登录/注册/评论/留言/PV/AI 对话），审计日志里的客户端 IP 同样可被伪造。
+  //
+  // 这里与 nginx 的 $proxy_add_x_forwarded_for 保持【同一语义】（追加），后端配套地
+  // 「从右往左取第 N 跳」（N = app.security.trusted-proxy-count，见 IpUtils）：
+  //   只有本代理一层时   → "<客户端伪造值>, <真实客户端IP>"，取最右 = 真实 IP ✅
+  //   nginx → 本代理两层 → "<...>, <真实客户端IP>, <nginx IP>"，取最右 2 跳 = 真实 IP ✅
+  // 若此处改为覆写（= remoteAddress），两层代理的拓扑下会把 nginx 的 IP 当成客户端，故用追加。
+  const peerAddress = req.socket?.remoteAddress
+  if (peerAddress) {
+    const priorXff = req.headers['x-forwarded-for']
+    headers['x-forwarded-for'] = priorXff ? priorXff + ', ' + peerAddress : peerAddress
+  } else {
+    delete headers['x-forwarded-for']
+  }
+
   const upstream = http.request(targetUrl.origin + pathnameWithSearch, {
     method: req.method,
     headers,

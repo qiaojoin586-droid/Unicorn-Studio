@@ -97,6 +97,12 @@ export const permissionRoutes: RouteRecordRaw[] = [
         meta: { title: '关于我们', icon: 'InfoFilled', permission: 'about:view' },
       },
       {
+        path: 'join',
+        name: 'Join',
+        component: () => import('@/views/join/JoinView.vue'),
+        meta: { title: '加入我们', icon: 'Promotion', permission: 'join:view' },
+      },
+      {
         path: 'footer',
         name: 'Footer',
         component: () => import('@/views/footer/FooterView.vue'),
@@ -167,6 +173,12 @@ export const permissionRoutes: RouteRecordRaw[] = [
         name: 'Retention',
         component: () => import('@/views/settings/RetentionView.vue'),
         meta: { title: '数据保留', icon: 'Delete', permission: 'retention:view' },
+      },
+      {
+        path: 'ai-config',
+        name: 'AiConfig',
+        component: () => import('@/views/settings/AiConfigView.vue'),
+        meta: { title: 'AI 配置', icon: 'ChatDotSquare', permission: 'ai:view' },
       },
       {
         path: 'logs',

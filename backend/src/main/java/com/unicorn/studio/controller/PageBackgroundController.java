@@ -26,7 +26,7 @@ import java.util.Set;
 public class PageBackgroundController {
 
     /** 允许绑定单背景的页面白名单 */
-    private static final Set<String> SUPPORTED_PAGES = Set.of("about", "work-detail");
+    private static final Set<String> SUPPORTED_PAGES = Set.of("about", "work-detail", "works");
 
     private static final Duration CACHE_TTL = Duration.ofMinutes(30);
 
