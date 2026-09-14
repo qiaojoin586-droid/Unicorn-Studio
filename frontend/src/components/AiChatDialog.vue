@@ -57,7 +57,7 @@
         <!-- Messages area -->
         <div
           ref="messagesContainer"
-          class="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4 scroll-smooth"
+          class="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4"
           @scroll="onMessagesScroll"
         >
           <!-- Welcome message -->
@@ -82,7 +82,9 @@
             <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
               🦄
             </div>
-            <div class="bg-white/5 border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%] min-w-0">
+            <!-- 气泡样式必须与 ChatMessage 的 assistant 分支保持一致（含 text-gray-200），
+                 否则流式阶段文字会继承默认黑色，在深色气泡上变成「一片黑框」。 -->
+            <div class="bg-white/5 border border-white/10 text-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%] min-w-0">
               <div ref="streamingBody" class="md-body" v-html="streamingHtml" />
               <span class="inline-block w-1.5 h-4 bg-indigo-400 animate-pulse ml-0.5 align-middle" />
             </div>
@@ -148,7 +150,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useAiChatStore } from '@/stores/aiChat'
 import { useAiChat } from '@/composables/useAiChat'
 import { renderMarkdown, hardenLinks } from '@/composables/useMarkdown'
@@ -175,8 +177,38 @@ const { style, resizing, startResize, toggleDefaultSize, attach } = useResizable
   viewportMargin: 24,
 })
 
-// 流式文本同样走 Markdown 渲染，避免「流式阶段是纯文本、结束后才变格式」的跳变
-const streamingHtml = computed(() => renderMarkdown(store.streamingText))
+// 流式文本同样走 Markdown 渲染，避免「流式阶段是纯文本、结束后才变格式」的跳变。
+//
+// W-07 方案 B（rAF 尾沿节流）：原先用 computed，每个 SSE 分片都会把【累积全文】重跑一遍
+// marked.parse + DOMPurify.sanitize 并整块替换 v-html 的 DOM，一段 2000 字回答 = 几百次
+// 全量解析 + DOM 重建，越到后面越卡（O(n²)）。节流后：
+//   - 距上次渲染已超过 THROTTLE_MS → 立即渲染（首片、以及稀疏分片无额外延迟）；
+//   - 窗口内 → 合并到下一个动画帧，只在最后一帧真正渲染（尾沿）。
+// 回调里实时读 store.streamingText 而不是闭包捕获，因此永远不会写入过期内容。
+const streamingHtml = ref('')
+const THROTTLE_MS = 100
+let streamRafId = 0
+let lastRenderAt = 0
+
+function flushStreamingHtml() {
+  streamRafId = 0
+  lastRenderAt = performance.now()
+  streamingHtml.value = renderMarkdown(store.streamingText)
+}
+
+watch(
+  () => store.streamingText,
+  () => {
+    if (performance.now() - lastRenderAt >= THROTTLE_MS) {
+      cancelAnimationFrame(streamRafId)
+      flushStreamingHtml()
+      return
+    }
+    cancelAnimationFrame(streamRafId)
+    streamRafId = requestAnimationFrame(flushStreamingHtml)
+  },
+  { immediate: true },
+)
 
 function handleSend(message) {
   streamChat(message)
@@ -194,7 +226,13 @@ watch(
   async () => {
     await nextTick()
     const el = messagesContainer.value
-    if (el && stickToBottom.value) el.scrollTop = el.scrollHeight
+    // W-07：改用 scrollTo + behavior:'auto'。原先裸赋 scrollTop，而消息容器的
+    // scroll-behavior 是 smooth，于是每个分片都会重新触发一次平滑滚动动画并立刻被
+    // 下一片打断，表现为「追着滚但一卡一卡」。模板里的平滑滚动类已一并移除；
+    // 这里仍显式写 behavior:'auto'，避免将来有人把它加回来时再次踩坑。
+    // （注意：注释里不要再出现那个样式类名 —— Tailwind 的提取器会把注释里的字符串
+    //   也当作候选类名，凭空生成一段用不到的死 CSS。）
+    if (el && stickToBottom.value) el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
   },
 )
 
@@ -227,5 +265,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  // 取消挂起的节流帧，避免卸载后仍触发一次渲染
+  cancelAnimationFrame(streamRafId)
 })
 </script>

@@ -19,7 +19,9 @@ const port = readIntegerEnv('PORT', 3000, 1, 65535)
 validateConfiguration()
 
 const contentTypes = {
+  '.avif': 'image/avif',
   '.css': 'text/css; charset=utf-8',
+  '.gif': 'image/gif',
   '.html': 'text/html; charset=utf-8',
   '.ico': 'image/x-icon',
   '.jpg': 'image/jpeg',
@@ -31,7 +33,13 @@ const contentTypes = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
   '.txt': 'text/plain; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
   '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  // W-03：原先无 .xml，/sitemap.xml 落到兜底的 application/octet-stream，
+  // 搜索引擎抓取时可能判为格式不支持——等于白恢复（F-01 修复后才暴露的断点）。
+  '.xml': 'application/xml; charset=utf-8',
 }
 
 function readIntegerEnv(name, fallback, min, max = Number.MAX_SAFE_INTEGER) {

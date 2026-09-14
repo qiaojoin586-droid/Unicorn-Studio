@@ -99,6 +99,11 @@ body {
    长回复不溢出」。
    ============================================================ */
 .md-body {
+  /* 自身携带文字色，不依赖父级 Tailwind 的 text-* 类。
+     流式气泡（AiChatDialog）与最终气泡（ChatMessage）是两条独立渲染路径，
+     若只给最终气泡加 text-gray-200，流式阶段正文会继承浏览器默认黑色，
+     在深色气泡上表现为「一整个黑框」，直到消息落定才「变色」可读。 */
+  color: #e5e7eb; /* = text-gray-200 */
   font-size: 0.875rem; /* 14px = text-sm */
   line-height: 1.7;
   word-break: break-word;
@@ -172,6 +177,9 @@ body {
   border: 1px solid rgba(255, 255, 255, 0.1);
   overflow-x: auto;
 }
+/* 流式阶段刚吐出 ``` 开场围栏、正文还没到时会渲染出空的 <pre>，
+   在深色气泡上是一根「带边框的黑条」。等代码正文到了再显示，避免闪一下黑框。 */
+.md-body pre:has(> code:empty) { display: none; }
 /* pre 内的 code 继承块样式，不再叠加行内底色/内边距 */
 .md-body pre code {
   background: none;
@@ -218,6 +226,7 @@ body {
 
 /* 用户气泡（紫底）内的 Markdown 反色适配：
    代码/表格/引用需在白底语义下依然可读 */
+.md-body.is-user { color: #fff; }
 .md-body.is-user code { background: rgba(0, 0, 0, 0.25); }
 .md-body.is-user pre {
   background: rgba(0, 0, 0, 0.3);

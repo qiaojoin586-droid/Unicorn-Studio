@@ -16,6 +16,101 @@ marked.setOptions({
   breaks: true, // 单个 \n 即换行 —— 对话场景更符合直觉（模型常不用空行分段）
 })
 
+/* ============================================================
+   宽松 Markdown 规范化（LLM 输出兼容层）
+   ------------------------------------------------------------
+   问题：CommonMark 要求块级标记后**必须跟一个空格**（`# 标题` / `1. 内容` /
+   `- 内容`）。而模型（尤其中文场景）高频输出 `#泛型解释` / `##主要作用` /
+   `1.类型安全` / `-要点` —— marked 认不出来，会整段当普通段落处理，
+   于是 `#`、`1.` 这些**字面量直接暴露在气泡里**，整条回复退化成
+   「一坨 <p>」，看起来完全没走 Markdown 排版。
+
+   做法：在交给 marked 之前，逐行把缺失的空格补回去。
+
+   安全边界（重要）：**只在围栏代码块之外改写**，且只认「行首标记」。
+   因此代码块里的 `#include <stdio.h>`、`// 注释`、
+   `<? extends Number> - 表示…`、`3.14` 全部原样保留，不会被误伤。
+   ============================================================ */
+const FENCE_OPEN_RE = /^[ \t]{0,3}(`{3,}|~{3,})/
+const FENCE_CLOSE_RE = /^[ \t]{0,3}(`{3,}|~{3,})[ \t]*$/
+// C 预处理器指令：`#include` / `#define` … 不是标题，必须排除
+const C_DIRECTIVE_RE =
+  /^[ \t]{0,3}#{1,6}[ \t]*(?:include|define|if|ifdef|ifndef|elif|else|endif|pragma|error|undef|line|import)\b/
+
+/**
+ * 给 LLM 输出的「紧凑」Markdown 补回块级标记后缺失的空格（幂等）。
+ * @param {string} text 原始 Markdown
+ * @returns {string} 规范化后的 Markdown
+ */
+export function normalizeLooseMarkdown(text) {
+  // 先把 CRLF/CR 统一成 LF：`$` 锚点在 `\r` 之前不成立，
+  // 行尾带 `\r` 会让所有逐行正则（含围栏开合判断）静默失配。
+  const src = String(text ?? '').replace(/\r\n?/g, '\n')
+  // 快路径：行首没有可能被改写的标记，直接跳过逐行扫描
+  if (!/^[ \t]*[#\d\-+*•·▪‣]/m.test(src)) return src
+
+  const lines = src.split('\n')
+  const out = new Array(lines.length)
+  let fenceChar = ''
+  let fenceLen = 0
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (fenceChar) {
+      // 代码块内：原样透传，只负责识别闭合围栏
+      out[i] = line
+      const close = line.match(FENCE_CLOSE_RE)
+      if (close && close[1][0] === fenceChar && close[1].length >= fenceLen) {
+        fenceChar = ''
+        fenceLen = 0
+      }
+      continue
+    }
+    const open = line.match(FENCE_OPEN_RE)
+    if (open) {
+      fenceChar = open[1][0]
+      fenceLen = open[1].length
+      out[i] = line
+      continue
+    }
+    out[i] = fixLooseLine(line)
+  }
+  return out.join('\n')
+}
+
+/** 单行标记修补：标题 / 有序列表 / 无序列表 */
+function fixLooseLine(line) {
+  if (!line) return line
+
+  // ① ATX 标题：`#标题` → `# 标题`（`#` 后既不是空格也不是另一个 `#`）
+  const h = line.match(/^([ \t]{0,3})(#{1,6})(?![#\s])(.*)$/)
+  if (h && h[3].trim() && !C_DIRECTIVE_RE.test(line)) {
+    return `${h[1]}${h[2]} ${h[3]}`
+  }
+
+  // ② 有序列表：`1.内容` / `1、内容` / `1)内容` → `1. 内容`
+  //    跳过 `3.14`、`1.5倍` 这类「点号后仍是数字」的小数写法
+  const ol = line.match(/^([ \t]{0,3})(\d{1,9})[.、．)）](?=\S)(.*)$/)
+  if (ol && !/^\d/.test(ol[3])) {
+    return `${ol[1]}${ol[2]}. ${ol[3]}`
+  }
+
+  // ③ 无序列表：`-内容` / `+内容` / `•内容` → `- 内容`
+  //    排除 `---` 分隔线以及 `-1`、`+2` 这类正负数开头
+  const ul = line.match(/^([ \t]{0,3})([-+•·▪‣])(?=\S)(.*)$/)
+  if (ul && !/^[-+\d]/.test(ul[3])) {
+    return `${ul[1]}- ${ul[3]}`
+  }
+
+  // ④ `*内容` → `- 内容`；但 `*强调*` 这类行首强调语法保持不动
+  const star = line.match(/^([ \t]{0,3})\*(?=\S)(.*)$/)
+  if (star && !star[2].includes('*')) {
+    return `${star[1]}- ${star[2]}`
+  }
+
+  return line
+}
+
 /** DOMPurify 白名单：只放行 Markdown 可能产出的标签/属性 */
 const PURIFY_CONFIG = {
   ALLOWED_TAGS: [
@@ -47,18 +142,20 @@ const PURIFY_CONFIG = {
  */
 export function renderMarkdown(text) {
   if (!text) return ''
+  // 先补齐模型漏写的块级标记空格，否则整条回复会退化成「一坨段落」
+  const source = normalizeLooseMarkdown(text)
   let html
   try {
-    html = marked.parse(String(text))
+    html = marked.parse(source)
   } catch {
     // 解析失败（如流式过程中出现半个语法）时降级为纯文本，保证不白屏
-    return escapeHtml(text).replace(/\n/g, '<br>')
+    return escapeHtml(source).replace(/\n/g, '<br>')
   }
   try {
     return DOMPurify.sanitize(html, PURIFY_CONFIG)
   } catch {
     // 消毒器异常时宁可只显示纯文本，也不冒险注入未消毒 HTML
-    return escapeHtml(text).replace(/\n/g, '<br>')
+    return escapeHtml(source).replace(/\n/g, '<br>')
   }
 }
 

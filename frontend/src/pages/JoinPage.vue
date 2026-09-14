@@ -29,12 +29,15 @@
         <!-- Right: QR code area (40%) -->
         <div class="md:col-span-2 flex flex-col items-center">
           <div class="bg-white/10 border border-white/10 rounded-2xl p-6 backdrop-blur-sm shadow-lg">
+            <!-- W-20：原本写 w-82 h-82，但 82 不在 Tailwind 尺寸 scale 内（实测构建 CSS 中 .w-82 为 0 次），
+                 尺寸从未生效、图片被 preflight 的 img{max-width:100%} 撑满容器宽度。
+                 按设计稿意图恢复成 328px 见方（82 × 4px），并加 max-w-full 防窄屏溢出。 -->
             <img
               :src="qrSrc"
               alt="社群二维码"
               width="990"
               height="1258"
-              class="w-82 h-82 object-contain rounded-lg"
+              class="w-[328px] h-[328px] max-w-full object-contain rounded-lg"
             />
           </div>
           <p v-if="page.qrCaption" class="text-gray-300 text-sm mt-4">{{ page.qrCaption }}</p>
