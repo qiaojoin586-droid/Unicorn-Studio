@@ -54,7 +54,6 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { joinApi, type JoinPageForm } from '@/api/join'
 import ImageUpload from '@/components/ImageUpload.vue'
 

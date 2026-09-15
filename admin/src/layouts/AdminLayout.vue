@@ -72,7 +72,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { permissionRoutes } from '@/router'
 

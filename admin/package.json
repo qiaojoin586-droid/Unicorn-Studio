@@ -5,7 +5,11 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "build": "vue-tsc -b && vite build && node scripts/verify-dist.js && node scripts/verify-first-screen.mjs && node scripts/verify-icons.mjs && node scripts/verify-echarts.mjs",
+    "verify-dist": "node scripts/verify-dist.js",
+    "verify-icons": "node scripts/verify-icons.mjs",
+    "verify-echarts": "node scripts/verify-echarts.mjs",
+    "verify": "node scripts/verify-dist.js && node scripts/verify-first-screen.mjs && node scripts/verify-icons.mjs && node scripts/verify-echarts.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -24,6 +28,8 @@
     "@types/node": "^22.7.5",
     "@vitejs/plugin-vue": "^5.1.4",
     "typescript": "~5.6.3",
+    "unplugin-auto-import": "^19.3.0",
+    "unplugin-vue-components": "^28.8.0",
     "vite": "^5.4.9",
     "vue-tsc": "^2.1.6"
   }

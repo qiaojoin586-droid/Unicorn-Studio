@@ -130,7 +130,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { adminApi } from '@/api/admin'
 import { roleApi, type RoleItem } from '@/api/role'
 import { useTable } from '@/composables/useTable'

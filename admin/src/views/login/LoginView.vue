@@ -48,7 +48,6 @@
 <script setup lang="ts">
 import { reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -72,6 +71,9 @@ function getLoginError(e: unknown): string {
 }
 
 async function submit() {
+  // A-08：按钮上的 :loading 只能挡住鼠标点击，回车绑定在 el-form 的 @keyup.enter，
+  // 连按回车会并发发出多个登录请求（叠加后端登录失败计数，5 次即锁 30 分钟）。
+  if (loading.value) return
   await formRef.value?.validate()
   loginError.value = ''
   loading.value = true

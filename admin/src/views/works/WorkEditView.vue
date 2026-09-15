@@ -97,7 +97,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
 import { workApi } from '@/api/work'
 import Editor from '@/components/Editor.vue'
 import ImageUpload from '@/components/ImageUpload.vue'

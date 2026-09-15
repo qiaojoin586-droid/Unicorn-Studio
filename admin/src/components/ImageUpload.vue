@@ -24,7 +24,6 @@
 </template>
 
 <script setup lang="ts">
-import { ElMessage } from 'element-plus'
 import { fileApi } from '@/api/file'
 
 const props = defineProps<{ modelValue?: string; maxSize?: number }>()

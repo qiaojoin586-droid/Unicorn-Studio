@@ -92,7 +92,6 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { commentApi } from '@/api/comment'
 import { useTable } from '@/composables/useTable'
 import StatusTag from '@/components/StatusTag.vue'
@@ -132,6 +131,22 @@ async function changeStatus(row: any, status: string) {
 }
 
 async function batchAction(action: string) {
+  // A-06：全项目唯一一处没有二次确认的破坏性批量操作 —— 批量删除是物理删除，
+  // 无回收站、无 undo，误点一次即不可恢复。
+  // 注意顺序：先确认、后取 selection，避免「确认期间用户改动了勾选」导致删错范围；
+  // 用 try/catch 接住取消，顺带避免 ElMessageBox 取消时的 unhandled rejection（A-19）。
+  if (action === 'delete') {
+    const count = selection.value.length
+    try {
+      await ElMessageBox.confirm(
+        `确定删除选中的 ${count} 条评论吗？此操作不可撤销。`,
+        '提示',
+        { type: 'warning' },
+      )
+    } catch {
+      return
+    }
+  }
   const result = await commentApi.batch(selection.value.map((r) => r.id), action)
   ElMessage.success(`成功 ${result.successCount} 条，失败 ${result.failCount} 条`)
   load()

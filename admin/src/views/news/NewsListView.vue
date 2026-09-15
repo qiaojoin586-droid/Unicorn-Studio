@@ -60,7 +60,6 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { newsApi } from '@/api/news'
 import { useTable } from '@/composables/useTable'
 import StatusTag from '@/components/StatusTag.vue'

@@ -138,7 +138,6 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { Delete } from '@element-plus/icons-vue'
 import { retentionApi, type RetentionConfig, type RetentionPreview, type RetentionRunReport, type RetentionStatus } from '@/api/retention'
 import { formatDateTime, formatSize } from '@/utils/format'

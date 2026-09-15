@@ -28,13 +28,16 @@
           </template>
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
+          <!-- el-table-column 的作用域插槽行类型固定为 DefaultRow（Record<PropertyKey, any>），
+               不会从 el-table 的 :data 推断，故此处显式断言为具体行类型后才能交给
+               openDialog / remove（否则 TS2345）。 -->
           <template #default="{ row }">
             <el-button
               size="small"
               link
               type="primary"
               v-permission="'service:edit'"
-              @click="openDialog(row)"
+              @click="openDialog(row as RecruitmentDirection)"
             >
               编辑
             </el-button>
@@ -43,7 +46,7 @@
               link
               type="danger"
               v-permission="'service:delete'"
-              @click="remove(row)"
+              @click="remove(row as RecruitmentDirection)"
             >
               删除
             </el-button>
@@ -141,7 +144,6 @@
 <script setup lang="ts">
 import { nextTick, onMounted, reactive, ref } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   serviceApi,
   type RecruitmentDirection,

@@ -227,7 +227,6 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { footerApi, type FooterConfig, type FooterLink, type FooterSocial } from '@/api/footer'
 import { SOCIAL_ICONS, SOCIAL_ICON_MAP, FALLBACK_ICON_KEY } from '@/constants/socialIcons'
 import { useDragSort } from '@/composables/useDragSort'

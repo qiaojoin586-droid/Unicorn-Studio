@@ -15,7 +15,6 @@
 import { onBeforeUnmount, ref, shallowRef, watch } from 'vue'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
 import '@wangeditor/editor/dist/css/style.css'
-import { ElMessage } from 'element-plus'
 import { fileApi } from '@/api/file'
 
 const props = defineProps<{ modelValue?: string }>()

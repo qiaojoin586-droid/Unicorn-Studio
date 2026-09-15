@@ -6,8 +6,8 @@
 
     <el-card shadow="never">
       <div class="table-toolbar">
-        <el-input v-model="query.keyword" placeholder="昵称 / 邮箱" clearable style="width: 220px" @keyup.enter="search" />
-        <el-select v-model="query.status" placeholder="状态" clearable style="width: 130px" @change="search">
+        <el-input v-model="query.keyword" placeholder="昵称 / 邮箱" clearable style="width: 220px" @keyup.enter="searchWithRange" />
+        <el-select v-model="query.status" placeholder="状态" clearable style="width: 130px" @change="searchWithRange">
           <el-option label="正常" :value="1" />
           <el-option label="禁言" :value="0" />
           <el-option label="已注销" :value="2" />
@@ -21,7 +21,7 @@
           value-format="YYYY-MM-DD"
           style="width: 260px"
         />
-        <el-button type="primary" @click="search">查询</el-button>
+        <el-button type="primary" @click="searchWithRange">查询</el-button>
         <el-button @click="reset">重置</el-button>
       </div>
 
@@ -91,13 +91,12 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { userApi } from '@/api/user'
 import { useTable } from '@/composables/useTable'
 import { formatDateTime } from '@/utils/format'
 
 const table = useTable((params) => userApi.list(params))
-const { loading, list, total, query, load, search, reset } = table
+const { loading, list, total, query, load, search } = table
 
 const registerRange = ref<string[]>([])
 const banVisible = ref(false)
@@ -105,6 +104,9 @@ const banning = ref(false)
 const banTarget = ref<any>(null)
 const banForm = ref({ duration: '7d', reason: '' })
 
+// A-05：注册时间区间是页面本地状态，useTable 不认识它。
+// 因此所有触发查询的入口（关键词回车 / 状态下拉 / 查询按钮）都必须走这里，
+// 否则一旦先选了区间再改状态或按回车，区间条件会被静默丢弃。
 function searchWithRange() {
   if (registerRange.value?.length === 2) {
     query.registerFrom = registerRange.value[0]
@@ -114,6 +116,13 @@ function searchWithRange() {
     delete query.registerTo
   }
   search()
+}
+
+// A-05：useTable.reset() 只清理它自己管的 query 字段，不会清 registerRange。
+// 不在此处一并清掉的话，「重置」后区间控件仍显示旧值，而请求参数已清空，界面与结果不一致。
+function reset() {
+  registerRange.value = []
+  table.reset()
 }
 
 function openBan(row: any) {

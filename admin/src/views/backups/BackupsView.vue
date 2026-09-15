@@ -59,7 +59,6 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { backupApi } from '@/api/backup'
 import { useTable } from '@/composables/useTable'
 import StatusTag from '@/components/StatusTag.vue'

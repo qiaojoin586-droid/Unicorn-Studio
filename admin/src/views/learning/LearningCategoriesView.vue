@@ -30,9 +30,10 @@
           <template #default="{ row }">{{ formatDateTime(row.category.createdAt) }}</template>
         </el-table-column>
         <el-table-column label="操作" width="140" fixed="right">
+          <!-- el-table-column 插槽行类型固定为 DefaultRow，不会从 :data 推断 ⇒ 断言为具体行类型 -->
           <template #default="{ row }">
-            <el-button size="small" link type="primary" v-permission="'learning:category'" @click="openDialog(row)">编辑</el-button>
-            <el-button size="small" link type="danger" v-permission="'learning:category'" @click="remove(row)">删除</el-button>
+            <el-button size="small" link type="primary" v-permission="'learning:category'" @click="openDialog(row as LearningCategoryItem)">编辑</el-button>
+            <el-button size="small" link type="danger" v-permission="'learning:category'" @click="remove(row as LearningCategoryItem)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -63,7 +64,6 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { learningApi, type LearningCategoryItem } from '@/api/learning'
 import { formatDateTime } from '@/utils/format'
 

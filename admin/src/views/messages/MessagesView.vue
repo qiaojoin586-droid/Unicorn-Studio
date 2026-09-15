@@ -77,7 +77,6 @@
 
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { messageApi } from '@/api/message'
 import { useTable } from '@/composables/useTable'
 import StatusTag from '@/components/StatusTag.vue'

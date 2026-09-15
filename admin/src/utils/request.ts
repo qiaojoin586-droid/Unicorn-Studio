@@ -1,5 +1,4 @@
 import axios, { type AxiosRequestConfig, type InternalAxiosRequestConfig } from 'axios'
-import { ElMessage } from 'element-plus'
 
 declare module 'axios' {
   export interface AxiosRequestConfig {

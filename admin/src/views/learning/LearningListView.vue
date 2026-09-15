@@ -142,13 +142,16 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { defineAsyncComponent, onMounted, reactive, ref } from 'vue'
 import { learningApi, type LearningCategoryItem } from '@/api/learning'
 import { useTable } from '@/composables/useTable'
 import ImageUpload from '@/components/ImageUpload.vue'
 import FileUpload from '@/components/FileUpload.vue'
-import Editor from '@/components/Editor.vue'
+// A-04：<Editor> 只在编辑弹窗里用（该 el-dialog 带 destroy-on-close），而列表页绝大多数访问
+// 不会打开弹窗。原先静态引入会把 wangEditor 及其 CSS 顶进本路由的 __vite__mapDeps 预加载表，
+// 一进「学习资料」列表页就白下约 810 KB JS + 15 KB CSS。改为异步组件后，只有真正打开弹窗才拉取。
+// （对照：新闻模块是正确写法 —— Editor 只在 NewsEditView 里引入。）
+const Editor = defineAsyncComponent(() => import('@/components/Editor.vue'))
 
 const table = useTable((params) => learningApi.list(params))
 const { loading, list, total, query, selection, load, search, reset, onSelectionChange } = table

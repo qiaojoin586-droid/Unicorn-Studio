@@ -69,7 +69,6 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { aboutApi, type AboutPage } from '@/api/about'
 import ImageUpload from '@/components/ImageUpload.vue'
 

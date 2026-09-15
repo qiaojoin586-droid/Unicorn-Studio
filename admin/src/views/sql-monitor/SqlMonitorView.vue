@@ -88,7 +88,8 @@
           <template #default="{ row }">{{ row.totalTime }}</template>
         </el-table-column>
         <el-table-column label="平均耗时(ms)" width="100" align="right">
-          <template #default="{ row }">{{ avgTime(row) }}</template>
+          <!-- el-table-column 插槽行类型固定为 DefaultRow，不会从 :data 推断 ⇒ 断言为具体行类型 -->
+          <template #default="{ row }">{{ avgTime(row as SqlStatItem) }}</template>
         </el-table-column>
         <el-table-column label="最慢单次(ms)" width="110" align="right">
           <template #default="{ row }">
@@ -122,7 +123,6 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
 import { sqlMonitorApi, type DataSourceStat, type SqlStatItem } from '@/api/sqlMonitor'
 import StatCard from '@/components/StatCard.vue'
 import { useTable } from '@/composables/useTable'

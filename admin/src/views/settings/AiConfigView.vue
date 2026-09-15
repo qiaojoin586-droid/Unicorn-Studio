@@ -163,7 +163,6 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
-import { ElMessage } from 'element-plus'
 import { Connection } from '@element-plus/icons-vue'
 import { aiApi, type AiConfig, type AiConfigForm, type AiTestResult } from '@/api/ai'
 
