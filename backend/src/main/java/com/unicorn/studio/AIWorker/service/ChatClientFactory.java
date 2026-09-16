@@ -8,8 +8,10 @@ import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.http.client.reactive.JdkClientHttpConnector;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.reactive.function.client.WebClient;
 
 import java.net.http.HttpClient;
 import java.time.Duration;
@@ -57,6 +59,15 @@ public class ChatClientFactory {
 
     private final Map<String, ChatClient> cache = new ConcurrentHashMap<>();
     private final ToolCallingManager toolCallingManager;
+
+    /**
+     * 关闭智谱深度思考的策略（见 {@link ZhipuThinking}）。
+     * <p>
+     * 无状态、只服务本工厂构建的 HTTP 客户端，故直接 new 而非做成 Spring Bean ——
+     * 它是「本工厂如何发请求」的实现细节，不是需要被别处复用/替换的服务。
+     * 同一个实例同时挂给下面两个 HTTP 客户端，保证两条路径行为一致、日志也只打一次。
+     */
+    private final ZhipuThinking thinking = new ZhipuThinking();
 
     public ChatClientFactory(ToolCallingManager toolCallingManager) {
         this.toolCallingManager = toolCallingManager;
@@ -119,6 +130,8 @@ public class ChatClientFactory {
                 .apiKey(config.apiKey())
                 .completionsPath(config.completionsPath())
                 .restClientBuilder(restClientBuilder(connectTimeout, readTimeout))
+                // 流式对话走 WebClient，必须单独配置（见 webClientBuilder 的说明）
+                .webClientBuilder(webClientBuilder(connectTimeout))
                 .build();
 
         OpenAiChatOptions options = OpenAiChatOptions.builder()
@@ -143,14 +156,41 @@ public class ChatClientFactory {
      * <p>
      * 注意这里不能复用 Spring 容器的全局 RestClient.Builder —— 那上面没有超时设置，
      * 会退回「不超时」的默认行为，正是本项要修的问题。
+     * <p>
+     * 另外挂上 {@link ZhipuThinkingInterceptor}：Spring AI 1.0.9 没有任何透传自定义请求字段的入口
+     * （{@code OpenAiChatOptions} 只暴露标准 OpenAI 参数），而关闭智谱深度思考必须靠请求体里的
+     * {@code thinking} 字段，只能在这一层改写。该拦截器按域名收窄，非智谱端点原样放行。
+     * <p>
+     * ⚠️ 本方法覆盖的是<b>非流式</b>调用（连通性探测）。<b>流式对话不走 RestClient</b>，
+     * 必须同时配 {@link #webClientBuilder}，否则修复对前台问答完全无效。
      */
-    private static RestClient.Builder restClientBuilder(Duration connectTimeout, Duration readTimeout) {
+    private RestClient.Builder restClientBuilder(Duration connectTimeout, Duration readTimeout) {
         HttpClient httpClient = HttpClient.newBuilder()
                 .connectTimeout(connectTimeout)
                 .build();
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(readTimeout);
-        return RestClient.builder().requestFactory(requestFactory);
+        return RestClient.builder()
+                .requestFactory(requestFactory)
+                .requestInterceptor(new ZhipuThinkingInterceptor(thinking));
+    }
+
+    /**
+     * 构造流式对话用的 WebClient：挂上 {@link ZhipuThinkingConnector} 以关闭智谱深度思考。
+     * <p>
+     * <b>为什么必须单独配一个</b>：Spring AI 的 {@code OpenAiApi} 同时持有 RestClient 与 WebClient，
+     * 且 {@code chatCompletionStream} 走的是 WebClient（已反编译确认）。
+     * 只配 RestClient 是本项第一版修复失效的原因 —— 拦截器一次都没被调用，日志里没有任何痕迹。
+     * <p>
+     * 连接器显式用 JDK HttpClient（本工程不含 reactor-netty，WebClient 的默认连接器本来就是它），
+     * 这样连接超时与 RestClient 侧保持一致。
+     */
+    private WebClient.Builder webClientBuilder(Duration connectTimeout) {
+        HttpClient httpClient = HttpClient.newBuilder()
+                .connectTimeout(connectTimeout)
+                .build();
+        return WebClient.builder()
+                .clientConnector(new ZhipuThinkingConnector(new JdkClientHttpConnector(httpClient), thinking));
     }
 
     /**
