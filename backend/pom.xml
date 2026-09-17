@@ -14,7 +14,7 @@
 <!--    每次更新前要更新版本号   -->
     <groupId>com.unicorn</groupId>
     <artifactId>unicorn-studio</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <name>Unicorn Studio Backend</name>
     <description>Unicorn Studio backend service</description>
 
@@ -235,4 +235,35 @@
             </plugin>
         </plugins>
     </build>
+
+    <!--
+      打包专用 profile：保证 jar 内只有 src/main/resources/application.yml 这一个 yaml。
+
+      为什么需要：
+        · Spring Boot 只把 `application.yml` 当作主配置自动加载，所以服务器要「零外部配置」，
+          这个文件名不能改；
+        · 本地开发可能重新放一份 `application-local.yml`（已 gitignore）。它绝不能被带进 jar，
+          否则服务器上会出现「两份配置叠加」的隐式行为（profile 文件优先级高于主配置）。
+
+      用法：
+        mvn -Pjar clean package -DskipTests
+        java -jar target/unicorn-studio-1.0.0.jar
+    -->
+    <profiles>
+        <profile>
+            <id>jar</id>
+            <build>
+                <resources>
+                    <resource>
+                        <directory>src/main/resources</directory>
+                        <filtering>false</filtering>
+                        <excludes>
+                            <exclude>application-*.yml</exclude>
+                            <exclude>application-*.yaml</exclude>
+                        </excludes>
+                    </resource>
+                </resources>
+            </build>
+        </profile>
+    </profiles>
 </project>
