@@ -45,3 +45,6 @@ Thumbs.db
 # 忽略设计方案
 # 设计方案文件夹（本地个人，不入库）
 docs/
+
+# 忽略 Docker 相关文件夹
+backend/docker/
