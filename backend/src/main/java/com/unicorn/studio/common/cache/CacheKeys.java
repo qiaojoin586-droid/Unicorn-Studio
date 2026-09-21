@@ -49,6 +49,50 @@ public final class CacheKeys {
     /** 学习资料列表（B5，{@code cache:learning:list}） */
     public static final String LEARNING_LIST = "cache:learning:list";
 
+    // ---- 内容列表与详情（C1/C2）----
+    // 键里必须带「查询维度」：作品列表有 featured / category / 全量三种分支、评论列表有分页，
+    // 不带维度的共用键会让不同参数的请求互相串数据。
+
+    /** 作品列表前缀；完整键 = 前缀 + 维度（{@code featured} / {@code all} / {@code cat-xxx}） */
+    public static final String WORK_LIST_PREFIX = "cache:works:list:";
+
+    /** 作品详情前缀；完整键 = 前缀 + slug（后台改 slug 时必须同时清新旧两个键） */
+    public static final String WORK_DETAIL_PREFIX = "cache:works:detail:";
+
+    /** 新闻列表前缀；维度 = 分类 */
+    public static final String NEWS_LIST_PREFIX = "cache:news:list:";
+
+    /** 新闻详情前缀；完整键 = 前缀 + slug */
+    public static final String NEWS_DETAIL_PREFIX = "cache:news:detail:";
+
+    /** 评论列表前缀；完整键 = 前缀 + {targetType}:{targetId}:{page}:{size} */
+    public static final String COMMENT_LIST_PREFIX = "cache:comment:list:";
+
+    public static String workList(String dimension) {
+        return WORK_LIST_PREFIX + dimension;
+    }
+
+    public static String workDetail(String slug) {
+        return WORK_DETAIL_PREFIX + slug;
+    }
+
+    public static String newsList(String dimension) {
+        return NEWS_LIST_PREFIX + dimension;
+    }
+
+    public static String newsDetail(String slug) {
+        return NEWS_DETAIL_PREFIX + slug;
+    }
+
+    /** 某目标下全部评论列表键的前缀（审核/回复/删除后按前缀失效）。 */
+    public static String commentListPrefix(String targetType, Long targetId) {
+        return COMMENT_LIST_PREFIX + targetType + ":" + targetId + ":";
+    }
+
+    public static String commentList(String targetType, Long targetId, int page, int size) {
+        return commentListPrefix(targetType, targetId) + page + ":" + size;
+    }
+
     /**
      * 支持「单页背景」绑定的页面键。
      * <p>
