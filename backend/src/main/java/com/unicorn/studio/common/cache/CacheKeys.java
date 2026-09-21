@@ -22,6 +22,18 @@ public final class CacheKeys {
     /** 加入我们页面 VO（A2，{@code cache:join:page}） */
     public static final String JOIN_PAGE = "cache:join:page";
 
+    /**
+     * 由 {@code SiteSettingsService.updateAll} 写入通道驱动的**全部页面级 VO 缓存键**。
+     * <p>
+     * 与 {@link #ALL_BG_KEYS} 同一条教训：失效方一律**整体遍历本列表**，不要手写若干个 key。
+     * 手写的代价是「新增页面时静默漏配」，而漏配的表现恰恰是「**后台保存成功了、前台却不变**」，
+     * 排查成本极高。{@code cache:join:page} 就是这样漏掉的（V17）：保存时只清了组级缓存
+     * 与页脚/关于页 VO，加入我们的 VO 缓存照旧存活到 30 min TTL 到期。
+     * <p>
+     * ⚠️ 今后任何「由 site_settings 组装、且带独立 VO 缓存」的新页面，都必须加进本列表。
+     */
+    public static final List<String> PAGE_VO_KEYS = List.of(FOOTER_PAGE, ABOUT_PAGE, JOIN_PAGE);
+
     /** 首页轮播列表（A7，{@code cache:carousel:home}） */
     public static final String CAROUSEL_HOME = "cache:carousel:home";
 

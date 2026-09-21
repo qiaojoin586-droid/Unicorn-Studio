@@ -125,8 +125,10 @@ public class SiteSettingsService {
         cache.evictAfterCommit(PUBLIC_CACHE_KEY);
         // 组级快照：组名是动态的，只能按前缀失效
         cache.evictByPatternAfterCommit(GROUP_CACHE_PREFIX + "*");
-        // 页面级 VO 缓存（A2/A3）：页脚/关于我们正文由本通道写入，同步失效
-        cache.evictAfterCommit(CacheKeys.FOOTER_PAGE, CacheKeys.ABOUT_PAGE);
+        // 页面级 VO 缓存（A2/A3）：页脚 / 关于我们 / 加入我们正文都由本通道写入，必须同步失效。
+        // 走 CacheKeys.PAGE_VO_KEYS 整体遍历，不再手写 key —— 此前这里只写了 FOOTER/ABOUT 两个，
+        // 新增 join 页时静默漏配，于是「后台保存成功、前台最长 30 分钟不变」（V17 引入的缺陷）。
+        cache.evictAfterCommit(CacheKeys.PAGE_VO_KEYS.toArray(String[]::new));
         // 敏感词库字段级缓存：写后失效，下次评论/留言校验回源（§2.5 P-1）
         if (sensitiveChanged) {
             sensitiveWordService.invalidate();

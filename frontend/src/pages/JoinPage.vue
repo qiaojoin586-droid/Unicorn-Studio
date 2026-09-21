@@ -17,7 +17,7 @@
           <h1 class="text-4xl sm:text-5xl font-extrabold text-white mb-6">{{ page.title }}</h1>
           <p v-if="page.subtitle" class="text-xl font-semibold text-indigo-300 mb-4">{{ page.subtitle }}</p>
           <p
-            v-for="(paragraph, idx) in paragraphs"
+            v-for="(paragraph, idx) in page.paragraphs"
             :key="idx"
             class="leading-relaxed"
             :class="idx === 0 ? 'text-gray-300 text-lg mb-4' : 'text-gray-400 mb-4'"

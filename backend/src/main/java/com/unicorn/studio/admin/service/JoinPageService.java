@@ -82,7 +82,18 @@ public class JoinPageService {
                 valueOrDefault(kv.get(KEY_QR_CAPTION), DEFAULT_QR_CAPTION));
     }
 
-    /** 保存页面内容（写入 site_settings.join 组，走既有设置写入通道并失效前台缓存）。 */
+    /**
+     * 保存页面内容。
+     * <p>
+     * 写库走既有设置写入通道 {@link SiteSettingsService#updateAll}（它会统一清掉公开聚合、组级快照
+     * 与页面级 VO 三层缓存），**此外这里再显式失效本页自己的 {@code cache:join:page}**：
+     * 该键由本类的 {@link #load()} 独占写入，就该由本类负责失效，归属清晰，
+     * 不必依赖「远端某个共享失效列表恰好记得我」。
+     * <p>
+     * 历史教训（V17）：save() 原先只依赖 updateAll 的统一失效，而那份列表当时漏了 JOIN_PAGE，
+     * 于是「后台保存成功、前台最长 30 分钟不变」—— 专有接口 {@code GET /api/join} 一直吐旧 VO。
+     * 重复删同一个 key 是幂等的（DEL），代价可忽略，故两处都保留。
+     */
     @Transactional
     public void save(JoinPageVO form) {
         if (form == null) {
@@ -98,6 +109,8 @@ public class JoinPageService {
                 new SiteSettingsService.KeyValueRequest(GROUP, KEY_PARAGRAPHS, writeParagraphs(normalizeParagraphs(form.paragraphs()))),
                 new SiteSettingsService.KeyValueRequest(GROUP, KEY_QR_IMAGE, nullToEmpty(form.qrImage())),
                 new SiteSettingsService.KeyValueRequest(GROUP, KEY_QR_CAPTION, nullToEmpty(form.qrCaption()))));
+        // 本页自己的页面级 VO 缓存：事务提交后失效，避免「清完又回填旧值」的竞态
+        cache.evictAfterCommit(CacheKeys.JOIN_PAGE);
     }
 
     /**
