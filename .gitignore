@@ -21,6 +21,11 @@ data/
 # 模板见 backend/src/main/resources/application-local.yml.example
 **/application-local.yml
 
+# 数据库迁移产物：数据导出文件含 sys_user 口令散列、AES 加密的 AI Key、
+# 访客 IP 哈希等敏感数据 —— 绝不入库（结构脚本 01/03 可入库，数据脚本不可）
+backend/sql/server-migration/*-data.sql
+backend/sql/server-migration/_*.sql
+
 # 系统
 .DS_Store
 Thumbs.db

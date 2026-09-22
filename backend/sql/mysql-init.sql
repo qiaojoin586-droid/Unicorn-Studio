@@ -71,12 +71,15 @@ CREATE TABLE carousel (
   link_url   VARCHAR(255),
   sort_order INT NOT NULL DEFAULT 0,
   status     INTEGER NOT NULL DEFAULT 1 COMMENT '1启用 0停用',
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   -- V11：页面背景接入轮播图管理。image_url 兼具「静态壁纸」与「视频封面 poster」两种角色
+  --       ★ 这三列必须排在 updated_at 之后：V11 是 ALTER TABLE ADD COLUMN，
+  --         实录库的 ORDINAL_POSITION 即为「追加在末尾」。若在此处前置，
+  --         脚本建出的库与实录库列顺序不一致（列名集合相同、顺序不同）。
   page_key   VARCHAR(32) NOT NULL DEFAULT 'home'  COMMENT '绑定页面：home/about/work-detail',
   media_type VARCHAR(16) NOT NULL DEFAULT 'image' COMMENT 'image=静态壁纸 / video=动态壁纸',
-  video_url  VARCHAR(255) NULL                     COMMENT '动态壁纸视频地址，仅 media_type=video 时必填',
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  video_url  VARCHAR(255) NULL                     COMMENT '动态壁纸视频地址，仅 media_type=video 时必填'
 );
 CREATE INDEX idx_carousel_page_status_sort ON carousel (page_key, status, sort_order);
 
