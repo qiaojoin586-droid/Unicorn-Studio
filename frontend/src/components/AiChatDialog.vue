@@ -1,8 +1,16 @@
 <template>
+  <!--
+    定位改由 useResizablePanel 的共享布局状态给出（`panelStyle` 的 left/top）。
+    图标与对话框共用同一份坐标 ⇒ 拖任意一方，另一方同步位移。
+    原先的 `max-w-[calc(100vw-4rem)]` 已移除：宽度上限现在由 composable 的
+    `bounds.maxW` 统一按视口夹紧；两处同时约束会让「实际渲染宽度」与
+    「参与定位/拉伸计算的宽度」不一致，导致拖拽边缘时错位。
+  -->
   <div
     v-if="store.isOpen"
-    class="fixed bottom-28 right-8 z-50 max-w-[calc(100vw-4rem)]"
-    :style="style"
+    data-ai-panel
+    class="fixed z-50"
+    :style="[panelStyle, sizeStyle]"
   >
     <transition
       enter-active-class="transition duration-300 ease-out"
@@ -18,8 +26,15 @@
         aria-label="AI 助手对话"
         class="relative bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col w-full h-full"
       >
-        <!-- Header -->
-        <div class="flex items-center justify-between px-5 py-4 border-b border-white/10 flex-shrink-0">
+        <!-- Header：同时是「整体拖动」的抓手（光标变 move）。
+             `touch-none` 让触屏拖动不被页面滚动抢走；`select-none` 防止拖出选区。
+             ⚠️ 拖动不调用 preventDefault —— 那会抑制 click 等兼容鼠标事件，
+                而图标开合对话正是靠 click（见 useResizablePanel.startPairDrag 注释）。 -->
+        <div
+          class="flex items-center justify-between px-5 py-4 border-b border-white/10 flex-shrink-0 cursor-move select-none touch-none"
+          @pointerdown="startPairDrag"
+          title="按住拖动整个对话框"
+        >
           <div class="flex items-center gap-3">
             <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm">
               🦄
@@ -29,7 +44,8 @@
               <p class="text-gray-500 text-xs">独角兽工作室智能助手</p>
             </div>
           </div>
-          <div class="flex items-center gap-2">
+          <!-- 按钮区不参与拖动，否则点「清空/关闭」时轻微抖动会把面板挪走 -->
+          <div class="flex items-center gap-2" @pointerdown.stop>
             <button
               v-if="store.hasMessages"
               @click="store.clearMessages()"
@@ -120,29 +136,47 @@
         <!-- Input area -->
         <ChatInput @send="handleSend" :disabled="store.isLoading" />
 
-        <!-- 拖拽拉伸手柄（左下角）：向左拖变宽 / 向下拖变高。
-             双击可在「默认尺寸」与「放大尺寸」间切换。 -->
+        <!-- 拉伸把手（八向）：四条边 + 四个角。
+             边把手平时透明、hover 才显出一道浅色条；角把手常驻淡色斜纹（沿用改造前
+             左下角那枚视觉），hover 高亮。角把手 DOM 在后 ⇒ 叠在边把手之上。
+             双击角把手在「默认尺寸 / 放大尺寸」间切换。
+             注意：视觉层都是 `pointer-events-none`，hover 态只能靠父级 group 触发。 -->
         <div
-          class="absolute bottom-0 left-0 w-5 h-5 cursor-sw-resize group z-10"
-          :class="resizing ? 'opacity-100' : 'opacity-60 hover:opacity-100'"
-          @pointerdown="startResize"
-          @dblclick="toggleDefaultSize"
-          title="拖拽调整大小（双击切换默认/放大）"
-          role="separator"
-          aria-label="拖拽调整对话框大小"
+          v-for="handle in RESIZE_HANDLES"
+          :key="handle.dir"
+          class="group absolute z-10 touch-none"
+          :class="handle.cls"
+          :data-resize="handle.dir"
+          @pointerdown="startResize(handle.dir, $event)"
+          @dblclick="onHandleDblClick(handle)"
+          :role="handle.corner ? 'separator' : null"
+          :aria-label="handle.corner ? '拖拽调整对话框大小' : null"
+          :title="handle.corner ? '拖拽调整大小（双击切换默认/放大）' : null"
         >
-          <!-- 手柄视觉：两条斜线，暗示可沿对角线拖拽 -->
-          <svg
-            class="w-full h-full text-gray-500 group-hover:text-indigo-400 transition"
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.6"
-            stroke-linecap="round"
+          <span
+            v-if="handle.corner"
+            class="pointer-events-none absolute inset-0 opacity-50 transition group-hover:opacity-100"
           >
-            <path d="M2 12L12 2" />
-            <path d="M2 17L17 2" />
-          </svg>
+            <!-- 斜纹朝向固定为「贴合左下角」，其余角用 transform 镜像，
+                 省去手写四套 path。用内联 transform 而非 Tailwind 类，
+                 避免动态类名被提取器漏掉。 -->
+            <svg
+              class="w-full h-full text-gray-500 transition group-hover:text-indigo-400"
+              :style="handle.flip ? { transform: handle.flip } : null"
+              viewBox="0 0 20 20"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            >
+              <path d="M2 12L12 2" />
+              <path d="M2 17L17 2" />
+            </svg>
+          </span>
+          <span
+            v-else
+            class="pointer-events-none absolute inset-0 transition group-hover:bg-indigo-400/40"
+          />
         </div>
       </div>
     </transition>
@@ -165,8 +199,18 @@ const streamingBody = ref(null)
 const dialogPanel = ref(null)
 const stickToBottom = ref(true)
 
-// 可拖拽拉伸：尺寸持久化到 localStorage，刷新后保持
-const { style, resizing, startResize, toggleDefaultSize, attach } = useResizablePanel({
+// 布局（位置 + 尺寸）由 useResizablePanel 统一管理，并与对话图标共享**同一份单例状态**：
+//   · panelStyle —— 对话框定位（left/top）。拖动图标或拖动本面板的表头，两边一起位移；
+//   · sizeStyle  —— 对话框尺寸（width/height），由八向把手改变。
+// 位置与尺寸都持久化到 localStorage，刷新后保持。
+const {
+  style: sizeStyle,
+  panelStyle,
+  startPairDrag,
+  startResize,
+  toggleDefaultSize,
+  attach,
+} = useResizablePanel({
   storageKey: 'unicorn.aiChat.panelSize',
   defaultWidth: 384, // 与改造前的 w-96 保持一致
   defaultHeight: 500,
@@ -176,6 +220,22 @@ const { style, resizing, startResize, toggleDefaultSize, attach } = useResizable
   maxHeight: 900,
   viewportMargin: 24,
 })
+
+// 八向拉伸把手的静态清单：四条边（细条命中区，平时透明）+ 四个角（常驻斜纹抓手）。
+// 类名一律写成**字面量**，Tailwind 提取器才扫得到（拼字符串会生成不出 CSS）。
+// flip 把同一份 SVG path 镜像到各个角，省掉手写四套 path。
+const RESIZE_HANDLES = [
+  // —— 四条边 ——
+  { dir: 'n', cls: 'top-0 left-5 right-5 h-1.5 cursor-ns-resize' },
+  { dir: 's', cls: 'bottom-0 left-5 right-5 h-1.5 cursor-ns-resize' },
+  { dir: 'w', cls: 'left-0 top-5 bottom-5 w-1.5 cursor-ew-resize' },
+  { dir: 'e', cls: 'right-0 top-5 bottom-5 w-1.5 cursor-ew-resize' },
+  // —— 四个角（基样贴合左下角，其余角镜像）——
+  { dir: 'sw', cls: 'bottom-0 left-0 w-5 h-5 cursor-nesw-resize', corner: true, flip: '' },
+  { dir: 'se', cls: 'bottom-0 right-0 w-5 h-5 cursor-nwse-resize', corner: true, flip: 'scaleX(-1)' },
+  { dir: 'nw', cls: 'top-0 left-0 w-5 h-5 cursor-nwse-resize', corner: true, flip: 'scaleY(-1)' },
+  { dir: 'ne', cls: 'top-0 right-0 w-5 h-5 cursor-nesw-resize', corner: true, flip: 'scale(-1, -1)' },
+]
 
 // 流式文本同样走 Markdown 渲染，避免「流式阶段是纯文本、结束后才变格式」的跳变。
 //
@@ -212,6 +272,11 @@ watch(
 
 function handleSend(message) {
   streamChat(message)
+}
+
+/** 双击角把手 → 在默认/放大尺寸间切换；边把手不参与（避免误触） */
+function onHandleDblClick(handle) {
+  if (handle?.corner) toggleDefaultSize()
 }
 
 // 滚动跟随（优化方案 F-12）：仅当用户停留在底部附近时自动滚，上翻阅读不被拽回

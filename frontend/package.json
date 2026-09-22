@@ -11,6 +11,7 @@
     "start": "node server/index.js",
     "preview": "vite preview",
     "verify:sse": "node scripts/verify-sse-parse.mjs",
+    "verify:aichat": "node scripts/verify-aichat-interaction.mjs",
     "test": "npm run build && node scripts/smoke-test.js"
   },
   "dependencies": {

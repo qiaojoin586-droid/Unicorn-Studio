@@ -1,6 +1,14 @@
 <template>
+  <!--
+    位置由 useResizablePanel 的共享布局状态给出（`:style` 里的 left/top），
+    不再写死 `bottom-8 right-8` —— 因为图标与对话框是「刚性配对」，
+    拖动任意一方都要让另一方同步位移，必须由同一份坐标驱动。
+    默认值仍等于 bottom-8 right-8，视觉无变化。
+  -->
   <div
-    class="fixed bottom-8 right-8 z-50 select-none touch-none"
+    data-ai-icon
+    class="fixed z-50 select-none touch-none"
+    :style="iconStyle"
     @pointerdown="startDrag"
   >
     <div
@@ -57,12 +65,16 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useAiChatStore } from '@/stores/aiChat'
+import { useFloatingPanelState } from '@/composables/useResizablePanel'
 
 const store = useAiChatStore()
 
-const isDragging = ref(false)
 const showTooltip = ref(false)
 let tooltipTimer = null
+
+// 图标与对话框共享同一份坐标/尺寸状态：拖动图标 ⇒ 对话框同步位移。
+// attach() 负责视口变化时把两者一起拉回可视区（引用计数，对话框卸载不会摘掉这里的监听）。
+const { iconStyle, attach, startPairDrag, didDrag } = useFloatingPanelState()
 
 const avatarEmoji = computed(() => {
   if (store.isThinking) return '🤔'
@@ -88,60 +100,20 @@ const dotClass = computed(() => {
 })
 
 function handleClick() {
-  if (isDragging.value) return
+  // 刚拖动过（超过阈值）就不当成点击，否则拖完图标会把对话关掉 / 打开
+  if (didDrag.value) return
   store.toggleChat()
 }
 
-// Drag support
-let dragStartX = 0
-let dragStartY = 0
-let elStartX = 0
-let elStartY = 0
-let hasMoved = false
-
+// 拖动逻辑在 composable 里（图标和对话框共用同一套「成对位移」算法），
+// 这里只做转发。
 function startDrag(e) {
-  if (e.button !== 0) return
-  const target = e.currentTarget
-  const rect = target.getBoundingClientRect()
-
-  dragStartX = e.clientX
-  dragStartY = e.clientY
-  elStartX = rect.left
-  elStartY = rect.top
-  hasMoved = false
-
-  const onMove = (ev) => {
-    const dx = ev.clientX - dragStartX
-    const dy = ev.clientY - dragStartY
-    if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-      hasMoved = true
-      isDragging.value = true
-      // 边界钳制：始终留在视口内（优化方案 F-19），Pointer Events 统一鼠标/触屏
-      const width = target.offsetWidth
-      const height = target.offsetHeight
-      const left = Math.min(Math.max(8, elStartX + dx), window.innerWidth - width - 8)
-      const top = Math.min(Math.max(8, elStartY + dy), window.innerHeight - height - 8)
-      target.style.left = left + 'px'
-      target.style.top = top + 'px'
-      target.style.right = 'auto'
-      target.style.bottom = 'auto'
-    }
-  }
-
-  const onUp = () => {
-    document.removeEventListener('pointermove', onMove)
-    document.removeEventListener('pointerup', onUp)
-    setTimeout(() => {
-      isDragging.value = false
-    }, 0)
-  }
-
-  document.addEventListener('pointermove', onMove)
-  document.addEventListener('pointerup', onUp)
+  startPairDrag(e)
 }
 
 // Show tooltip after 3 seconds
 onMounted(() => {
+  attach()
   tooltipTimer = setTimeout(() => {
     if (!store.isOpen) {
       showTooltip.value = true
