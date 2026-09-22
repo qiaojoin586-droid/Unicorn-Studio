@@ -300,11 +300,19 @@ management:
       application: unicorn-studio
 
 logging:
-  # 日志文件目录（相对运行目录）：logback-spring.xml 按级别/日期分目录写入
-  # info/yyyy-MM-dd/app-info.log（全量）、warn/.../app-warn.log（仅警告）、
-  # error/.../app-error.log（仅错误）、admin/.../app-admin.log（管理端操作审计），各保留 30 天
+  # 日志文件目录。logback-spring.xml 按级别/日期分目录写入
+  # info/yyyy-MM-dd/app-info.log（全量，含接口访问日志）、warn/.../app-warn.log（仅警告）、
+  # error/.../app-error.log（仅错误）、admin/.../app-admin.log（管理端操作审计），各保留 30 天。
+  #
+  # ⚠️ 这个路径是【相对启动工作目录】解析的（默认 ./logs）：用 `java -jar xxx.jar` 直接起进程时，
+  # 工作目录取决于你在哪个目录敲的命令，未必是 jar 所在目录 —— 日志会落到别处；
+  # 若那个目录还不可写，logback 只会把错误打到自己内部状态里，表现就是
+  # 「控制台有日志、logs/ 里什么都没有」，看起来像「日志没保存」。
+  # 生产请显式给绝对路径：`LOG_DIR=/opt/unicorn-studio/logs`
+  # （backend/start.sh 已自动设为「脚本所在目录/logs」，用官方脚本启动就不必手配）。
+  # 同一个值也被 RetentionService 用来定位并清理 admin 审计文件，改这里即可。
   file:
-    path: ./logs
+    path: ${LOG_DIR:./logs}
   # 控制台编码（2026-09-11 修复中文乱码）：
   # Spring Boot 默认把控制台编码设为 UTF-8（LoggingSystemProperties.CONSOLE_CHARSET 默认值），
   # 而 IDEA Run 控制台 / Windows 中文控制台按系统代码页 CP936(GBK) 解码子进程输出流，
@@ -318,4 +326,8 @@ logging:
     file: UTF-8
   level:
     com.unicorn.studio: INFO
+    # 接口访问日志（[ACCESS] 行）走独立 logger，见 AccessLogFilter 类注释。
+    # 单列出来是为了让「收紧业务包日志级别」时不会顺手把接口日志一起关掉 ——
+    # prod 环境把 com.unicorn.studio 收到 WARN、接口日志照常保留，就靠这条分离。
+    ACCESS_LOG: INFO
     org.springframework.security: WARN

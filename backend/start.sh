@@ -19,6 +19,10 @@
 #   REDIS_HOST / REDIS_PASSWORD
 #   TRUSTED_PROXY_COUNT  可信代理层数（本部署为 nginx → 后端 = 1）
 #
+# 可选环境变量：
+#   LOG_DIR              日志目录。本脚本已自动设为 <应用目录>/logs（绝对路径），
+#                        要把日志放到别处（如 /var/log/unicorn-studio）时在调用前覆盖它即可。
+#
 set -euo pipefail
 
 APP_HOME="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -32,9 +36,31 @@ if [[ -z "$JAR" ]]; then
   exit 1
 fi
 
-# 堆转储目录随日志目录走（logs/ 已 gitignore）
-HEAP_DUMP_DIR="$APP_HOME/logs"
+# 日志与堆转储目录（logs/ 已 gitignore）。
+#
+# ⚠️ 这里【必须】把 LOG_DIR 钉成绝对路径，否则「日志不在 logs/ 里」这一类问题会反复出现：
+#   application.yml 的 logging.file.path 默认 ./logs，是相对【启动工作目录】解析的。
+#   只要不是在应用目录里敲命令（例如 `java -jar /opt/unicorn-studio/xxx.jar` 而 cwd=/root，
+#   或 systemd 的 WorkingDirectory 没设成应用目录），日志就会落到别处；
+#   若那个目录还不可写，logback 只会把错误写进自己的内部状态，结果就是
+#   「控制台有日志、logs/ 里什么都没有」。
+#   LOG_DIR 一旦是绝对路径，日志位置就与「在哪个目录启动」彻底无关。
+#
+# 同一个变量还决定两件事：heapdump 的落点（下面 -XX:HeapDumpPath）与
+# RetentionService 清理 admin 审计文件的目录（它读的就是 ${logging.file.path}）。
+#
+# 用 `: "${LOG_DIR:=默认}"`：外部（systemd 的 Environment=、手工 export）显式给了值就尊重它，
+# 没给才落到应用目录下 —— 不要写成无条件赋值，那会把运维侧的配置悄悄顶掉。
+: "${LOG_DIR:=$APP_HOME/logs}"
+HEAP_DUMP_DIR="$LOG_DIR"
 mkdir -p "$HEAP_DUMP_DIR"
+
+# ⚠️ 上传目录是同一类问题，但**更危险**：app.upload.dir（默认 data/uploads）同样相对启动工作目录，
+#    而且它同时决定 /uploads/** 静态映射【读哪个目录】。一旦与当初写入时不一致，就表现为
+#    「图片文件还在、数据库记录也没变，前端主站却拿到 {"code":404,"message":"资源不存在"}」。
+#    本脚本**不替它猜默认值**（各部署的 data/ 放哪儿不一样，猜错反而把上传写到新空目录），
+#    请在启动环境里显式给绝对路径，例如：FILE_UPLOAD_DIR="$APP_HOME/data/uploads"。
+#    服务启动时会打印一行「静态资源映射 /uploads/** -> file:...（目录存在=?）」，出问题先看它。
 
 exec java \
   -Xms512m -Xmx1g \
