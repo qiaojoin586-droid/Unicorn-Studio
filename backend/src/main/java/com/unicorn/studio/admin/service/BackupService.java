@@ -35,6 +35,8 @@ import java.util.zip.GZIPOutputStream;
 /**
  * 数据备份（实施方案 §5.6）：
  * - MySQL：mysqldump（--defaults-extra-file 临时凭据文件，用完即删）→ gzip 落盘；
+ *   <b>目标 host/port 必须从 JDBC URL 解析后显式传给 mysqldump</b>，否则它会默认连 localhost
+ *   （即运行后端的这台机器）——轻则 1045，重则把本机库当成远程库「备份成功」（见 {@link #parseHostPort}）；
  * - H2（本地开发）：H2 BACKUP TO 命令直接出压缩包；
  * - 触发写 backup_record(running) → @Async 执行（经代理调用，避免自调用退化为同步）→ 完成/失败回写；
  * - 定时每日 02:00；清理仅保留最近 retention-count 份。
@@ -147,15 +149,26 @@ public class BackupService {
      */
     private void runMysqldump(Path target) throws Exception {
         String dbName = extractDbName(jdbcUrl);
+        String[] hostPort = parseHostPort(jdbcUrl);
         Path credentials = Files.createTempFile("mysqldump-creds", ".cnf");
         Path errFile = Files.createTempFile("mysqldump-err", ".log");
         Process process = null;
         try {
             Files.writeString(credentials,
-                    "[client]\nuser=" + dbUsername + "\npassword=" + dbPassword + "\n",
+                    "[client]\nuser=" + quoteOptionValue(dbUsername)
+                            + "\npassword=" + quoteOptionValue(dbPassword) + "\n",
                     StandardCharsets.UTF_8);
             process = new ProcessBuilder(mysqldumpPath,
                     "--defaults-extra-file=" + credentials,
+                    // ★ 必须显式传 host/port：mysqldump 不传 --host 时默认连 localhost，
+                    //   即【运行后端的这台机器】，而不是 JDBC URL 指向的库（见 parseHostPort 说明）。
+                    "--host=" + hostPort[0],
+                    "--port=" + hostPort[1],
+                    // 显式走 TCP。host 为 localhost 时，Windows 客户端可能改走 named pipe，
+                    // 导致「URL 写着 TCP、实际走管道」的行为分叉。
+                    "--protocol=TCP",
+                    // 显式 utf8mb4：服务器默认字符集若不是 utf8mb4，不加会产出乱码备份。
+                    "--default-character-set=utf8mb4",
                     "--single-transaction", "--routines", dbName)
                     // stderr 落临时文件：避免缓冲区填满导致 waitFor 死锁，失败时也能取到错误详情
                     .redirectError(errFile.toFile())
@@ -198,6 +211,72 @@ public class BackupService {
         String clean = idx >= 0 ? url.substring(0, idx) : url;
         int slash = clean.lastIndexOf('/');
         return slash >= 0 && slash < clean.length() - 1 ? clean.substring(slash + 1) : clean;
+    }
+
+    /**
+     * 从 JDBC URL 解析 host / port，供 mysqldump 显式指定目标服务器。
+     * <p>
+     * <b>为什么必须显式传</b>：mysqldump 不传 {@code --host} 时默认连 {@code localhost}，
+     * 也就是**运行后端的这台机器上的 MySQL**，而不是 JDBC URL 指向的那台。后果有两种，
+     * 后者比报错更危险：
+     * <ol>
+     *   <li>两边口令不同 → {@code 1045 Access denied for user 'root'@'localhost'}（本次线上故障）；</li>
+     *   <li>两边口令恰好相同 → **备份的是本机库，却记为远程库的「成功」备份**，
+     *       界面显示成功、文件也在，等真要恢复时才发现内容不对，属静默错备。</li>
+     * </ol>
+     * 支持 {@code jdbc:mysql://host:port/db}、省略端口、多主机（取第一个，与驱动一致）、
+     * IPv6 字面量 {@code [::1]:3306}；{@code jdbc:mysql:///db} 语义即本机，回退 localhost。
+     *
+     * @return {@code [host, port]}
+     */
+    private static String[] parseHostPort(String url) {
+        String rest = url == null ? "" : url;
+        int scheme = rest.indexOf("//");
+        if (scheme >= 0) {
+            rest = rest.substring(scheme + 2);
+        }
+        int slash = rest.indexOf('/');
+        if (slash >= 0) {
+            rest = rest.substring(0, slash);
+        }
+        int comma = rest.indexOf(','); // 多主机（failover）：驱动取第一个，这里保持一致
+        if (comma >= 0) {
+            rest = rest.substring(0, comma);
+        }
+
+        String host = rest;
+        String port = "3306";
+        if (rest.startsWith("[")) { // IPv6 字面量
+            int end = rest.indexOf(']');
+            if (end > 0) {
+                host = rest.substring(1, end);
+                String tail = rest.substring(end + 1);
+                port = tail.startsWith(":") && tail.length() > 1 ? tail.substring(1) : port;
+            }
+        } else {
+            int colon = rest.lastIndexOf(':');
+            if (colon >= 0) {
+                host = rest.substring(0, colon);
+                port = colon + 1 < rest.length() ? rest.substring(colon + 1) : port;
+            }
+        }
+        if (host.isEmpty()) {
+            host = "localhost";
+        }
+        return new String[]{host, port};
+    }
+
+    /**
+     * option file 的值统一加双引号。
+     * <p>
+     * MySQL 的选项文件里，未加引号的值会在 {@code #} 处起注释、并裁掉首尾空白，
+     * 因此口令中含 {@code #} 或首尾空格时会被**静默截断**，症状同样是
+     * 「密码明明是对的却报 1045」——本函数把这一类问题提前消灭。
+     * 引号值内部仍需转义 {@code \} 与 {@code "}。
+     */
+    private static String quoteOptionValue(String value) {
+        String v = value == null ? "" : value;
+        return "\"" + v.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
     }
 
     /**
