@@ -11,7 +11,7 @@
       <div class="table-toolbar">
         <el-input v-model="query.keyword" placeholder="标题 / slug" clearable style="width: 220px" @keyup.enter="search" />
         <el-select v-model="query.category" placeholder="分类" clearable style="width: 140px" @change="search">
-          <el-option v-for="c in categories" :key="c" :label="c" :value="c" />
+          <el-option v-for="c in WORK_CATEGORIES" :key="c" :label="c" :value="c" />
         </el-select>
         <el-select v-model="query.status" placeholder="状态" clearable style="width: 130px" @change="search">
           <el-option label="草稿" value="draft" />
@@ -31,6 +31,9 @@
           </template>
         </el-table-column>
         <el-table-column prop="category" label="分类" width="100" />
+        <!-- 作者（= 前台卡片上的参赛人员）：后台原先没有这个字段的入口，列表里也看不到，
+             导致「卡片上显示的人」与「后台能改的东西」对不上。这里显性列出便于核对回环。 -->
+        <el-table-column prop="authors" label="作者" min-width="140" show-overflow-tooltip />
         <el-table-column label="状态" width="90">
           <template #default="{ row }"><StatusTag :status="row.status" /></template>
         </el-table-column>
@@ -84,11 +87,10 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import { workApi } from '@/api/work'
+import { WORK_CATEGORIES } from '@/constants/workOptions'
 import { useTable } from '@/composables/useTable'
 import StatusTag from '@/components/StatusTag.vue'
 import { formatDateTime } from '@/utils/format'
-
-const categories = ['竞赛', '论文', '项目', '其他']
 
 const table = useTable((params) => workApi.list(params))
 const { loading, list, total, query, selection, onSelectionChange, load, search, reset } = table

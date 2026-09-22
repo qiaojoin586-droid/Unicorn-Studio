@@ -72,13 +72,14 @@
           </router-link>
 
           <div class="flex items-center gap-3 mb-4">
+            <!-- 文案与配色来自 workTags 字典（深色档）；tagType 为空表示后台「分类」未设置，
+                 此时不渲染，避免退化成写死的「竞赛获奖」 -->
             <span
+              v-if="tag"
               class="text-xs font-semibold px-3 py-1 rounded-full"
-              :class="work.tagType === 'paper'
-                ? 'bg-emerald-500/20 text-emerald-300'
-                : 'bg-amber-500/20 text-amber-300'"
+              :class="tag.className"
             >
-              {{ work.tagType === 'paper' ? 'SCI 论文' : '竞赛获奖' }}
+              {{ tag.label }}
             </span>
             <span v-if="work.category" class="text-xs font-semibold px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-300">
               {{ work.category }}
@@ -158,6 +159,7 @@ import { useRoute } from 'vue-router'
 import { useApi } from '@/composables/useApi'
 import { usePageMeta } from '@/composables/usePageMeta'
 import { usePageBackground } from '@/composables/usePageBackground'
+import { resolveWorkTag } from '@/constants/workTags'
 import BackgroundVideo from '@/components/BackgroundVideo.vue'
 
 const route = useRoute()
@@ -176,6 +178,9 @@ const isHtmlContent = computed(() => {
   const c = work.value?.content || ''
   return /<(p|div|h[1-6]|ul|ol|li|strong|em|b|i|a|img|br|pre|code|blockquote|table|span|section)[\s/>]/i.test(c)
 })
+
+/** 徽章配置（深色档）；分类未设置时为 null ⇒ 模板不渲染徽章 */
+const tag = computed(() => resolveWorkTag(work.value?.tagType, 'dark'))
 
 usePageMeta(() => ({
   title: work.value?.title || '作品详情',

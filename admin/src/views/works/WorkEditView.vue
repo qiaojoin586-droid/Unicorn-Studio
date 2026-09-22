@@ -20,8 +20,8 @@
           </el-col>
           <el-col :span="8">
             <el-form-item label="分类">
-              <el-select v-model="form.category" clearable placeholder="选择分类" style="width: 100%">
-                <el-option v-for="c in categories" :key="c" :label="c" :value="c" />
+              <el-select v-model="form.category" clearable placeholder="决定前台卡片徽章" style="width: 100%">
+                <el-option v-for="c in WORK_CATEGORIES" :key="c" :label="c" :value="c" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -37,6 +37,19 @@
                 <el-option label="发布" value="published" />
                 <el-option label="下线" value="offline" />
               </el-select>
+            </el-form-item>
+          </el-col>
+          <!-- 卡片字段：直接决定前台作品卡片的展示（日期与作者）。
+               两者原先都没有入口，新建作品落库恒为 NULL，前台卡片上表现为
+               「日期不显示、作者一片空白」，故一并补齐。 -->
+          <el-col :span="12">
+            <el-form-item label="卡片日期">
+              <el-input v-model="form.dateLabel" placeholder="前台卡片上展示的日期，如 2026-03" maxlength="20" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="作者">
+              <el-input v-model="form.authors" placeholder="前台卡片上展示，如 张三、李四（竞赛填参赛人员）" maxlength="100" />
             </el-form-item>
           </el-col>
           <el-col :span="12">
@@ -98,14 +111,13 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { workApi } from '@/api/work'
+import { WORK_CATEGORIES } from '@/constants/workOptions'
 import Editor from '@/components/Editor.vue'
 import ImageUpload from '@/components/ImageUpload.vue'
 
 const route = useRoute()
 const router = useRouter()
 const isEdit = computed(() => !!route.params.id)
-
-const categories = ['竞赛', '论文', '项目', '其他']
 
 const loading = ref(false)
 const saving = ref(false)
@@ -120,6 +132,8 @@ const form = reactive<any>({
   summary: '',
   coverUrl: '',
   content: '',
+  dateLabel: '',
+  authors: '',
   featured: false,
   seo: { title: '', description: '', keywords: '' },
 })
@@ -141,6 +155,8 @@ onMounted(async () => {
       summary: work.summary || '',
       coverUrl: work.coverUrl || '',
       content: work.content || '',
+      dateLabel: work.dateLabel || '',
+      authors: work.authors || '',
       featured: work.featured === 1,
       seo: data.seo || { title: '', description: '', keywords: '' },
     })

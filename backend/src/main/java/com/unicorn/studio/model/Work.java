@@ -65,7 +65,7 @@ public class Work {
 
     private String coverClass;
 
-    /** award / paper */
+    /** 卡片徽章枚举：award / paper / project / other，由 {@code category} 派生，见 WorkTags */
     private String tagType;
 
     private String authors;

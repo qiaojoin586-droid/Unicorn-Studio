@@ -1,5 +1,6 @@
 package com.unicorn.studio.vo;
 
+import com.unicorn.studio.common.WorkTags;
 import com.unicorn.studio.model.Work;
 
 import java.time.LocalDateTime;
@@ -34,7 +35,8 @@ public record WorkDetailVO(
                 work.getExternalLink(),
                 work.getIcon(),
                 work.getCoverClass(),
-                work.getTagType(),
+                // 与 WorkCardVO 同一兜底口径：历史数据 tag_type 为 NULL 时按 category 还原
+                WorkTags.resolve(work.getTagType(), work.getCategory()),
                 work.getAuthors(),
                 work.getDateLabel(),
                 work.getViewCount(),

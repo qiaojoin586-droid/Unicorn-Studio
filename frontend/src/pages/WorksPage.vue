@@ -61,11 +61,11 @@
           :title="work.title"
           :description="work.summary"
           :cover-url="work.coverUrl"
-          :icon="work.icon"
+          :icon="work.icon || undefined"
           :tag-type="work.tagType"
           :authors="work.authors"
           :date="work.dateLabel"
-          :cover-class="work.coverClass"
+          :cover-class="work.coverClass || undefined"
         />
       </div>
 

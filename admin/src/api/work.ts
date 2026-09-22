@@ -12,6 +12,10 @@ export interface WorkForm {
   featured?: boolean
   sortOrder?: number
   status?: string
+  /** 卡片上显示的日期文案（自由文本，如 2026-03）；后端字段 date_label */
+  dateLabel?: string
+  /** 卡片上显示的作者（如 张三、李四）；后端字段 authors */
+  authors?: string
   seo?: { title?: string; description?: string; keywords?: string }
 }
 

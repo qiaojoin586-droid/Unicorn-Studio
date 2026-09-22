@@ -30,12 +30,17 @@ public interface WorkMapper extends BaseMapper<Work> {
      * 字段清单与 {@code WorkCardVO} 的记录分量一一对应；<b>改动 VO 时务必同步这里</b>，
      * 否则会拿到 null。注意 WHERE/ORDER BY 用到的列（status/featured/category/sortOrder/id）
      * 不需要出现在投影里。
+     * <p>
+     * 例外：{@code category} 不在 {@code WorkCardVO} 里，但被显式选出来，因为
+     * {@code WorkCardVO.from()} 要用它给缺省的 {@code tag_type} 兜底（见
+     * {@link com.unicorn.studio.common.WorkTags}）。它只参与派生、不进响应体，
+     * 所以投影多这一列不会改变缓存 JSON 的形状。
      */
     default LambdaQueryWrapper<Work> cardProjection() {
         return new LambdaQueryWrapper<Work>()
                 .select(Work::getId, Work::getSlug, Work::getTitle, Work::getCoverUrl,
                         Work::getSummary, Work::getIcon, Work::getCoverClass, Work::getTagType,
-                        Work::getAuthors, Work::getDateLabel);
+                        Work::getAuthors, Work::getDateLabel, Work::getCategory);
     }
 
     default List<Work> findByStatusOrderBySortOrderAscIdDesc(String status) {

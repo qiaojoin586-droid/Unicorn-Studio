@@ -7,6 +7,7 @@ import com.unicorn.studio.common.cache.CacheObjectMapper;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.HtmlSanitizer;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.common.WorkTags;
 import com.unicorn.studio.common.cache.CacheHelper;
 import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.mapper.CommentMapper;
@@ -92,6 +93,10 @@ public class WorkAdminService {
                 .slug(form.slug().trim())
                 .title(form.title())
                 .category(form.category())
+                // 分类决定前台卡片徽章：落库时同步成机器枚举，避免两者漂移（见 WorkTags）
+                .tagType(WorkTags.fromCategory(form.category()))
+                .authors(blankToNull(form.authors()))
+                .dateLabel(blankToNull(form.dateLabel()))
                 .coverUrl(form.coverUrl())
                 .summary(form.summary())
                 .content(HtmlSanitizer.clean(form.content()))
@@ -128,6 +133,15 @@ public class WorkAdminService {
         }
         if (form.category() != null) {
             work.setCategory(form.category());
+            // 分类是卡片徽章的唯一来源 ⇒ 每次改分类都把 tag_type 一起对齐（见 WorkTags）。
+            // 清空分类时同步清空 tag_type，前台据此不渲染徽章，而不是留在旧分类上。
+            work.setTagType(WorkTags.fromCategory(form.category()));
+        }
+        if (form.authors() != null) {
+            work.setAuthors(blankToNull(form.authors()));
+        }
+        if (form.dateLabel() != null) {
+            work.setDateLabel(blankToNull(form.dateLabel()));
         }
         if (form.coverUrl() != null) {
             work.setCoverUrl(form.coverUrl());
@@ -303,10 +317,27 @@ public class WorkAdminService {
         return SEO_KEY_PREFIX + workId;
     }
 
-    /** 作品表单（controller record 复用）。 */
+    /**
+     * 作品表单（controller record 复用）。
+     * <p>
+     * <b>刻意不含 {@code tagType}</b>：卡片徽章枚举由 {@code category} 单一派生
+     * （见 {@link WorkTags}），表单再多一个来源只会让两者有机会不一致。
+     * {@code authors} / {@code dateLabel} 是卡片上会直接显示的字段，
+     * 原先没有入口 ⇒ 新建作品这两个字段恒为 NULL，卡片上表现为「作者空白、日期空白」。
+     */
     public record WorkForm(String title, String slug, String category, String coverUrl,
                            String summary, String content, String clientName, String externalLink,
                            Boolean featured, Integer sortOrder, String status,
+                           String authors, String dateLabel,
                            Map<String, String> seo) {
+    }
+
+    /** 空白串归一为 null：后台表单清空一个可选文本时提交的是 {@code ""}，不该落库成空串。 */
+    private static String blankToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }
