@@ -2,7 +2,6 @@ package com.unicorn.studio.controller;
 
 import com.unicorn.studio.common.SlugValidator;
 import com.unicorn.studio.model.ApiResponse;
-import com.unicorn.studio.model.Work;
 import com.unicorn.studio.service.WorkService;
 import com.unicorn.studio.vo.WorkCardVO;
 import com.unicorn.studio.vo.WorkDetailVO;
@@ -28,9 +27,7 @@ public class WorkController {
             @RequestParam(required = false) String category,
             @RequestParam(required = false) Boolean featured) {
         Integer featuredFlag = Boolean.TRUE.equals(featured) ? 1 : null;
-        List<WorkCardVO> items = workService.findPublished(category, featuredFlag).stream()
-                .map(WorkCardVO::from)
-                .toList();
+        List<WorkCardVO> items = workService.findPublished(category, featuredFlag);
         return ApiResponse.ok(Map.of("list", items));
     }
 
@@ -40,8 +37,8 @@ public class WorkController {
         if (!SlugValidator.isValidSlug(slug)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "作品不存在或已下线");
         }
-        Work work = workService.findPublishedBySlug(slug)
+        WorkDetailVO work = workService.findPublishedBySlug(slug)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "作品不存在或已下线"));
-        return ApiResponse.ok(Map.of("work", WorkDetailVO.from(work)));
+        return ApiResponse.ok(Map.of("work", work));
     }
 }

@@ -114,12 +114,15 @@ public class WorkAdminService {
         saveSeo(work.getId(), form.seo());
         // 穿透防护（§4.1 P1 要点 3）：新建后清空该 slug 的空值哨兵，否则「刚发的作品 404」
         cache.evictAfterCommit(CacheKeys.nullWork(work.getSlug()));
+        evictPublicContent(work.getSlug());
         return work;
     }
 
     @Transactional
     public void update(Long id, WorkForm form) {
         Work work = getOrThrow(id);
+        // 改 slug 时必须同时失效「旧 slug」的详情缓存，否则旧地址仍会命中旧数据
+        String previousSlug = work.getSlug();
         if (form.slug() != null && !form.slug().isBlank() && !form.slug().trim().equals(work.getSlug())) {
             String newSlug = form.slug().trim();
             // 与 create 对齐的唯一性校验，避免撞唯一索引落 500
@@ -171,6 +174,7 @@ public class WorkAdminService {
         saveSeo(id, form.seo());
         // 发布/改 slug 后清空该 slug 的空值哨兵（§4.1 P1 要点 3）
         cache.evictAfterCommit(CacheKeys.nullWork(work.getSlug()));
+        evictPublicContent(previousSlug, work.getSlug());
     }
 
     /**
@@ -196,6 +200,8 @@ public class WorkAdminService {
                 .set(Work::getPublishedAt, work.getPublishedAt())
                 .set(Work::getUpdatedAt, LocalDateTime.now())
                 .eq(Work::getId, id));
+        // 上下架会改变列表成员与详情可见性，两边都要失效
+        evictPublicContent(work.getSlug());
     }
 
     /**
@@ -238,12 +244,14 @@ public class WorkAdminService {
                         .eq(Work::getId, w.getId()));
             }
         }
+        // 排序只影响列表顺序，详情缓存仍然有效
+        evictPublicContent();
     }
 
-    /** 状态变更只需要 status/publishedAt，不必把 MEDIUMTEXT 正文读出来（B-12）。 */
+    /** 状态变更只需要 status/publishedAt/slug，不必把 MEDIUMTEXT 正文读出来（B-12）。 */
     private Work loadStatusSnapshot(Long id) {
         Work work = workMapper.selectOne(new LambdaQueryWrapper<Work>()
-                .select(Work::getId, Work::getStatus, Work::getPublishedAt)
+                .select(Work::getId, Work::getSlug, Work::getStatus, Work::getPublishedAt)
                 .eq(Work::getId, id));
         if (work == null) {
             throw BusinessException.notFound("作品不存在");
@@ -258,6 +266,29 @@ public class WorkAdminService {
         commentMapper.deleteByTargetTypeAndTargetId("work", id);
         settingsMapper.findBySettingKey(seoKey(id)).ifPresent(s -> settingsMapper.deleteById(s.getId()));
         workMapper.deleteById(work.getId());
+        evictPublicContent(work.getSlug());
+    }
+
+    /**
+     * 公开读端缓存失效（C1/C2）：列表按维度整体失效，详情按 slug 精确失效。
+     * <p>
+     * 列表之所以整体清（而不是按维度逐个推导）：「作品」的任一写操作都可能同时改变
+     * {@code featured} / {@code cat-xxx} / {@code all} 三种结果集，逐个推导极易漏配，
+     * 而漏配的表现是「后台改完、前台还是旧数据」—— 排查成本远高于多清一片键。
+     * 键空间只有 {@code cache:works:list:*} 这一小片，且只在后台写操作时 SCAN。
+     * <p>
+     * 详情按 slug 精确失效：详情键可能很多（每个作品一个），不能按前缀整体清。
+     */
+    private void evictPublicContent(String... slugs) {
+        cache.evictByPatternAfterCommit(CacheKeys.WORK_LIST_PREFIX + "*");
+        List<String> detailKeys = java.util.Arrays.stream(slugs)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .map(CacheKeys::workDetail)
+                .toList();
+        if (!detailKeys.isEmpty()) {
+            cache.evictAfterCommit(detailKeys.toArray(String[]::new));
+        }
     }
 
     private void changeStatus(Work work, String status) {
