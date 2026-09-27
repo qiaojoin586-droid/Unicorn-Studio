@@ -41,3 +41,7 @@ Thumbs.db
 
 # WorkBuddy 工作区记忆与任务（本地个人，不入库）
 .workbuddy/
+
+# 忽略设计方案
+# 设计方案文件夹（本地个人，不入库）
+docs/
