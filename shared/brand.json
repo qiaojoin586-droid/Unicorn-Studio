@@ -1,0 +1,11 @@
+{
+  "ink": "#121316",
+  "paper": "#f4f2ec",
+  "surface-dark": "#1c1d22",
+  "accent": "#c92d3b",
+  "accent-on-dark": "#ff8c95",
+  "muted": "#62636a",
+  "muted-on-dark": "#a7a8af",
+  "line": "#d9d6cf",
+  "font-sans": "'Inter', 'Avenir Next', 'PingFang SC', 'Microsoft YaHei', sans-serif"
+}

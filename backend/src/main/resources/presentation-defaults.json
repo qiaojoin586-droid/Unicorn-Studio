@@ -1,0 +1,66 @@
+{
+  "home": {
+    "eyebrow": "UNICORN STUDIO / 独角兽工作室",
+    "title": "让好奇心，\n长出作品。",
+    "description": "围绕 AI、软件开发与真实项目，一起学习、实验，把想法做成可以体验的成果。",
+    "primaryLabel": "探索作品",
+    "primaryUrl": "/works",
+    "secondaryLabel": "加入我们",
+    "secondaryUrl": "/join",
+    "mediaMode": "carousel",
+    "featuredLimit": 3,
+    "worksEyebrow": "SELECTED WORKS",
+    "worksTitle": "想法的下一步，\n是把它做出来。",
+    "worksDescription": "项目、竞赛与研究。\n每一份成果，都是一次探索的回响。",
+    "capabilitiesEyebrow": "THE WAY WE GROW",
+    "capabilitiesTitle": "把问题拆开，\n把可能性\n做出来。",
+    "capabilitiesDescription": "在真实项目中学习，也在学习中创造。\n让每一次探索都有回应，\n让一起成长有一些具体。",
+    "directionsEyebrow": "FIND YOUR DIRECTION",
+    "directionsTitle": "好奇，\n可以有很多方向。",
+    "directionsDescription": "找到你想深入的领域，\n和一群有想法的人，一起向前。",
+    "invitationEyebrow": "YOUR NEXT CHAPTER",
+    "invitationTitle": "下一件作品，\n与你有关。",
+    "invitationDescription": "带上你的好奇心。\n我们期待和你一起，创造一点新东西。",
+    "invitationLabel": "一起开始",
+    "invitationUrl": "/join"
+  },
+  "about": {
+    "principlesEyebrow": "02 / 我们相信",
+    "principlesTitle": "好的想法，\n值得亲手实现。",
+    "principles": [
+      {
+        "title": "先有问题，再找答案。",
+        "description": "从真实的需要出发。理解一个问题，也是在寻找值得投入的方向。"
+      },
+      {
+        "title": "把想法放进实践。",
+        "description": "让代码、设计与研究彼此连接。在动手尝试中，看见想法的形状。"
+      },
+      {
+        "title": "让经验继续生长。",
+        "description": "把探索中的思考留下来。一次分享，也可能成为另一个人的起点。"
+      }
+    ],
+    "invitationTitle": "下一次探索，\n一起出发。",
+    "invitationDescription": "带着好奇而来，让想法在这里相遇。",
+    "invitationLabel": "加入我们",
+    "invitationUrl": "/join"
+  },
+  "footer": {
+    "inheritBrand": false,
+    "inheritContact": false,
+    "brandTagline": "IN GOOD COMPANY. IN THE MAKING.",
+    "noteEyebrow": "KEEP THE CURIOSITY.",
+    "noteTitle": "把下一次好奇，\n变成下一件作品。",
+    "noteLinkLabel": "和我们一起创造",
+    "noteLinkUrl": "/join",
+    "wordmark": "UNICORN"
+  },
+  "join": {
+    "platform": "QQ",
+    "groupNumber": "",
+    "joinUrl": "",
+    "phoneHelp": "",
+    "invitationText": "带上你的好奇，\n我们从一个想法开始。"
+  }
+}
