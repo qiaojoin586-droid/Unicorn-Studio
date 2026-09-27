@@ -15,7 +15,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -44,7 +43,6 @@ public class CacheWarmup {
     private static final Duration CACHE_TTL = Duration.ofMinutes(30);
 
     private final CacheHelper cache;
-    private final StringRedisTemplate redis;
     private final Executor warmupExecutor;
     private final boolean enabled;
 
@@ -56,7 +54,6 @@ public class CacheWarmup {
     private final CarouselMapper carouselMapper;
 
     public CacheWarmup(CacheHelper cache,
-                       StringRedisTemplate redis,
                        @Qualifier("warmupExecutor") Executor warmupExecutor,
                        @Value("${app.cache.warmup.enabled:true}") boolean enabled,
                        FooterService footerService,
@@ -66,7 +63,6 @@ public class CacheWarmup {
                        LearningService learningService,
                        CarouselMapper carouselMapper) {
         this.cache = cache;
-        this.redis = redis;
         this.warmupExecutor = warmupExecutor;
         this.enabled = enabled;
         this.footerService = footerService;
@@ -131,10 +127,8 @@ public class CacheWarmup {
 
     /** SETNX 短锁：多实例同时启动时只允许一个预热；Redis 不可达时降级为「仍本地预热」（无副作用）。 */
     private boolean tryLock() {
-        try {
-            return Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(LOCK_KEY, "1", LOCK_TTL));
-        } catch (Exception e) {
-            return true;
-        }
+        // 走 CacheHelper 以带上环境前缀：否则本地实例会把线上实例的预热锁顶掉（或反之），
+        // 两边互相跳过预热，表现为「预热日志随机消失」。
+        return cache.setIfAbsent(LOCK_KEY, LOCK_TTL) || !cache.isEnabled();
     }
 }

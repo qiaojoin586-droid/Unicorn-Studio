@@ -55,11 +55,21 @@ public class SecretsStartupValidator implements ApplicationContextInitializer<Co
         // 走哨兵拓扑时 host/password 允许为空（由 sentinel.nodes 决定连接目标）
         boolean sentinelMode = StringUtils.hasText(env.getProperty("spring.data.redis.sentinel.nodes"));
         if (!sentinelMode) {
-            if (!StringUtils.hasText(env.getProperty("spring.data.redis.host"))) {
+            String redisHost = env.getProperty("spring.data.redis.host");
+            if (!StringUtils.hasText(redisHost)) {
                 missing.add("REDIS_HOST           → spring.data.redis.host（Redis 主机）");
             }
-            if (!StringUtils.hasText(env.getProperty("spring.data.redis.password"))) {
-                missing.add("REDIS_PASSWORD       → spring.data.redis.password（Redis 口令）");
+            // 口令：**回环地址允许留空**，其余一律强制非空。
+            //  · 为什么放开回环：本地开发常跑「无 requirepass 的本机 Redis」（application-local.yml
+            //    把 password 显式留空），此时 Lettuce 根本不发送 AUTH，连接完全正常 ——
+            //    把这种合法配置判成部署错误，既挡死了本地启动，又与本项目既有契约矛盾：
+            //    server-migration/README §6.1 写的是「REDIS_HOST / REDIS_PASSWORD 缺失时
+            //    缓存整体降级（不阻断启动）」。
+            //  · 为什么仍强制外网：这条守卫要防的正是「application.yml 里写死公网 IP + 真实口令」
+            //    那类回归；在非回环地址上裸奔（无口令）才是真正危险的配置。
+            if (!StringUtils.hasText(env.getProperty("spring.data.redis.password"))
+                    && !isLoopbackHost(redisHost)) {
+                missing.add("REDIS_PASSWORD       → spring.data.redis.password（Redis 口令；回环地址可留空）");
             }
         }
 
@@ -73,5 +83,30 @@ public class SecretsStartupValidator implements ApplicationContextInitializer<Co
                             + "（不入库，模板见 application-local.yml.example）\n"
                             + "生产部署：通过环境变量注入；若 Redis 走哨兵模式请设置 REDIS_SENTINEL_NODES");
         }
+    }
+
+    /**
+     * 是否为回环地址（本机 Redis 无口令属合法配置）。
+     * <p>
+     * 覆盖 {@code localhost} / {@code *.localhost} / {@code 127.x.x.x} / {@code ::1}（含 {@code [::1]} 写法）。
+     * <b>认不出来的一律按「非回环」处理</b> —— 宁可误拦，不可误放。
+     */
+    private static boolean isLoopbackHost(String host) {
+        if (!StringUtils.hasText(host)) {
+            return false;
+        }
+        String h = host.trim().toLowerCase(java.util.Locale.ROOT);
+        if (h.startsWith("[") && h.endsWith("]")) { // IPv6 字面量
+            h = h.substring(1, h.length() - 1);
+        }
+        if ("localhost".equals(h) || h.endsWith(".localhost")
+                || "::1".equals(h) || "0:0:0:0:0:0:0:1".equals(h)) {
+            return true;
+        }
+        if (h.startsWith("127.")) {
+            String[] parts = h.split("\\.");
+            return parts.length == 4;
+        }
+        return false;
     }
 }

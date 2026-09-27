@@ -1,40 +1,41 @@
 package com.unicorn.studio.config;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.ViewControllerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 /**
  * Web MVC configuration for static resources and view controllers.
  * In production, Nginx handles static files and Vue history fallback.
  * This config is primarily for development convenience.
  * <p>
- * <b>★ {@code /uploads/**} 必须走与写入方同源的目录（2026-09-22 修复）。</b>
- * 见 {@link #addResourceHandlers} 的注释：这里曾硬编码 {@code file:data/uploads/}，
- * 而 {@code FileService} 写的是 {@code app.upload.dir}（可被 {@code FILE_UPLOAD_DIR} 覆盖）——
- * 两者一旦不一致，就表现为「图片文件在、数据库没错、前端却拿到
- * {@code {"code":404,"message":"资源不存在"}}」。
+ * <b>★ {@code /uploads/**} 的读取目录必须与写入方同源。</b>
+ * 这条规则被违反过两次，症状完全相同：「图片文件在磁盘上、数据库记录也没错，
+ * 前端却拿到 {@code {"code":404,"message":"资源不存在"}}」（该 JSON 是
+ * {@code NoResourceFoundException} 经 {@code GlobalExceptionHandler} 的输出，
+ * 一眼可区别于 nginx 的 HTML 404）。
+ * <ol>
+ *   <li>第一次：这里硬编码 {@code "file:data/uploads/"}，完全不看 {@code app.upload.dir} ——
+ *       {@code FILE_UPLOAD_DIR} 一旦是绝对路径，读写就分家；</li>
+ *   <li>第二次：改为读 {@code app.upload.dir}，但它是<b>相对路径</b>，
+ *       {@code Path#toAbsolutePath()} 相对的是进程启动工作目录 ——
+ *       「从项目根启动」与「从 backend/ 启动」得到两个不同目录。</li>
+ * </ol>
+ * 现在路径解析收敛到 {@link UploadProperties} 单一 Bean（含启动自检探针），
+ * 本类只负责把它注册成资源映射，<b>不再自行拼接任何路径</b>。
  */
 @Configuration
 public class WebMvcConfig implements WebMvcConfigurer {
 
-    private static final Logger log = LoggerFactory.getLogger(WebMvcConfig.class);
+    private final UploadProperties uploadProperties;
+    private final UploadNotFoundInterceptor uploadNotFoundInterceptor;
 
-    /**
-     * 上传根目录，与 {@code FileService} 用同一个配置项、同样的绝对化口径。
-     * 默认 {@code data/uploads}，相对**启动工作目录**解析（故生产建议显式给绝对路径）。
-     */
-    private final Path uploadDir;
-
-    public WebMvcConfig(@Value("${app.upload.dir:data/uploads}") String uploadDir) {
-        this.uploadDir = Path.of(uploadDir).toAbsolutePath().normalize();
+    public WebMvcConfig(UploadProperties uploadProperties,
+                        UploadNotFoundInterceptor uploadNotFoundInterceptor) {
+        this.uploadProperties = uploadProperties;
+        this.uploadNotFoundInterceptor = uploadNotFoundInterceptor;
     }
 
     @Override
@@ -46,26 +47,13 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
         // 上传文件静态映射（生产走 nginx → 本服务；也可改成 nginx alias 直发，见 frontend.conf）。
         //
-        // ★ 这里**必须**用 app.upload.dir 解析出的绝对路径，不能硬编码 "file:data/uploads/"：
-        //   FileService 落盘用的是 Path.of(${app.upload.dir}).toAbsolutePath()，
-        //   而 FILE_UPLOAD_DIR 一旦被设成绝对路径（生产常见做法），
-        //   硬编码的相对位置就会指向另一个目录 —— 于是「图片还在磁盘上、数据库也没变，
-        //   前端却 404」。这个 404 是 NoResourceFoundException 经 GlobalExceptionHandler 输出的
-        //   JSON（{"code":404,"message":"资源不存在"}），一眼能区分于 nginx 的 HTML 404。
+        // 定位串由 UploadProperties 统一给出：绝对 file: 路径 + 结尾斜杠（缺斜杠的坑见该类注释）。
+        // 启动时会打印「静态资源映射 /uploads/** 与上传落盘共用同一目录: file:...」，
+        // 出问题先看那一行，就知道服务到底在哪个目录找图。
         //
-        // 启动时把解析结果打进日志：出问题时先看这一行，就知道服务到底在哪个目录找图。
-        String uploadLocation = toDirectoryUrl(uploadDir);
-        boolean present = Files.isDirectory(uploadDir);
-        log.info("静态资源映射 /uploads/** -> {}（目录存在={}）", uploadLocation, present);
-        if (!present) {
-            log.warn("上传目录不存在：{}。该目录下的文件会被 /uploads/** 返回 404(JSON)。"
-                            + "若「上传的图片全部 404 但文件明明在」，先核对 FILE_UPLOAD_DIR(app.upload.dir) "
-                            + "与启动工作目录，是否与当初写入时一致。",
-                    uploadDir);
-        }
         // classpath 兜底：内置占位图（初始化 SQL 引用的 placeholder-*.jpg）随 jar 分发，全新环境也能显示
         registry.addResourceHandler("/uploads/**")
-                .addResourceLocations(uploadLocation, "classpath:/static/uploads/")
+                .addResourceLocations(uploadProperties.resourceLocation(), "classpath:/static/uploads/")
                 .setCachePeriod(31536000);
     }
 
@@ -76,14 +64,12 @@ public class WebMvcConfig implements WebMvcConfigurer {
     }
 
     /**
-     * 目录 → Spring 资源定位串（形如 {@code file:/opt/app/data/uploads/}）。
+     * {@code /uploads/**} 的 404 定向诊断（见 {@link UploadNotFoundInterceptor}）。
      * <p>
-     * <b>不能直接拿 {@code Path#toUri()} 的结果</b>：路径**不存在**时它不会补结尾的 {@code /}，
-     * 而 {@code addResourceLocations} 少了这个斜杠会把最后一段当文件名去拼，
-     * 结果就是「目录明明配对了、文件却全 404」这种极难定位的错。
+     * 只挂这一条前缀：正常请求（200/304）不进诊断分支，对热路径零影响。
      */
-    private static String toDirectoryUrl(Path dir) {
-        String url = dir.toUri().toString();
-        return url.endsWith("/") ? url : url + "/";
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        registry.addInterceptor(uploadNotFoundInterceptor).addPathPatterns("/uploads/**");
     }
 }

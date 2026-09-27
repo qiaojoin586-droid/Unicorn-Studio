@@ -238,6 +238,14 @@ app:
     # V15 Redis 缓存方案（docs/Redis缓存设计设计方案.md 附录 A）
     # enabled=false 必须能一键回到「全部直读 MySQL」—— 灰度上线与故障应急的生命线。
     enabled: ${CACHE_ENABLED:true}
+    # 缓存键环境隔离（2026-09-22 实测故障后新增）：
+    # 本地开发与线上服务器共用同一台 Redis 的同一个 db，而键名里原本没有任何环境标识，
+    # 于是两边互相读写对方的缓存 —— 服务器写进去的学习资料（7 条，带它自己的 /uploads/... 封面）
+    # 会被本地实例读到并渲染，而对应文件只在服务器磁盘上 ⇒ 图片/附件必然 404；
+    # 反过来线上读到本地写的缓存也一样。TTL 续期让它表现为「过一段时间才 404」，极难定位。
+    # 现在每个键都带 "<profile>:" 前缀（见 CacheHelper.buildPrefix），两套环境天然隔离，
+    # 即使共用一台 Redis 也不会互相污染。要再加固可加本项（如 unicorn），或给本地换 REDIS_DATABASE。
+    namespace: ${CACHE_NAMESPACE:}
     warmup:
       enabled: ${CACHE_WARMUP_ENABLED:true}
     ttl:

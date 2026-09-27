@@ -11,6 +11,7 @@
         <relativePath/>
     </parent>
 
+<!--    每次更新前要更新版本号   -->
     <groupId>com.unicorn</groupId>
     <artifactId>unicorn-studio</artifactId>
     <version>1.0.0</version>
@@ -186,6 +187,50 @@
                             <artifactId>lombok</artifactId>
                         </exclude>
                     </excludes>
+                </configuration>
+            </plugin>
+
+            <!--
+                Mockito 内联 mock maker 需要 Byte Buddy 以【Java agent】形式挂载。
+
+                为什么必须显式配：Mockito 会先尝试「自附加（self-attach）」，即在测试 JVM 里
+                另起一个进程去 attach 自己。这条路在很多环境下不通（JDK 21 已把动态 attach 标为
+                弃用并默认告警，且沙箱/受限环境直接失败），报错是：
+
+                    MockitoInitializationException:
+                    It appears as if your JDK does not supply a working agent attachment mechanism.
+                    Caused by: Could not self-attach to current VM using external process
+
+                后果是**所有**用 @Mock/MockitoExtension 的测试整体报
+                "Could not initialize plugin: interface org.mockito.plugins.MockMaker" ——
+                看着像测试写错了，其实是运行环境缺 agent，极易误判。
+                （IDEA 自己的测试运行器会替你挂上 agent，所以同一套代码在 IDE 里绿、在
+                 mvn 命令行里红 —— 这正是本项目遇到的情形。）
+
+                修法就是 Maven 官方推荐的两步：
+                  ① dependency-plugin 把 byte-buddy-agent 的 jar 绝对路径解析进 ${argLine}；
+                  ② surefire 把 -javaagent:... 传给测试 JVM。
+                只影响 test 阶段，不影响打出来的 jar。
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>resolve-byte-buddy-agent</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>properties</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <!-- @{...} 是 surefire 的延迟求值语法，用于引用本插件之外产生的属性 -->
+                    <argLine>-javaagent:@{net.bytebuddy:byte-buddy-agent:jar}</argLine>
                 </configuration>
             </plugin>
         </plugins>

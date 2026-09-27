@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.config.UploadProperties;
 import com.unicorn.studio.mapper.UploadFileMapper;
 import com.unicorn.studio.model.UploadFile;
 import org.springframework.beans.factory.annotation.Value;
@@ -30,8 +31,12 @@ import java.util.UUID;
  * 文件上传（实施方案 §5.5）：
  * - 扩展名 + 魔数白名单（svg 禁用，防脚本）；ImageIO 重解码成功才落盘（防二次渲染攻击）；
  * - 大小 ≤ maxSize（视频走独立上限 videoMaxSize，见 V11 动态壁纸）；
- * - 文件名 = UUID + 扩展名；落盘 data/uploads/yyyy/MM/；
- * - URL = /uploads/yyyy/MM/uuid.ext（WebMvcConfig 静态映射，生产 nginx alias）。
+ * - 文件名 = UUID + 扩展名；落盘 {@code <UploadProperties.root()>/yyyy/MM/}；
+ * - URL = /uploads/yyyy/MM/uuid.ext（WebMvcConfig 静态映射，生产 nginx 反代/或 alias）。
+ * <p>
+ * <b>★ 落盘目录必须与 {@code /uploads/**} 的读取目录同源（2026-09-22 二次修复）：</b>
+ * 两边统一改为注入 {@link UploadProperties}，不再各自解析 {@code app.upload.dir}。
+ * 详见该类注释里记载的两次同类故障。
  */
 @Service
 public class FileService {
@@ -75,12 +80,20 @@ public class FileService {
     private final long maxSize;
     private final long videoMaxSize;
 
+    /**
+     * 上传根目录来自 {@link UploadProperties}，<b>不再自行解析 {@code app.upload.dir}</b>。
+     * <p>
+     * 这一点是本类的关键约束：读方（{@code WebMvcConfig} 的 {@code /uploads/**} 静态映射）
+     * 与写方（本类）必须拿到<b>同一个</b>绝对路径。此前两处各自 {@code Path.of(...).toAbsolutePath()}，
+     * 只要配置是相对路径、而两次进程的启动工作目录不同，读写就会指向不同目录 ——
+     * 表现为「上传成功、数据库正确、前台图片 404」。
+     */
     public FileService(UploadFileMapper uploadFileMapper,
-                       @Value("${app.upload.dir:data/uploads}") String uploadDir,
+                       UploadProperties uploadProperties,
                        @Value("${app.upload.max-size:10485760}") long maxSize,
                        @Value("${app.upload.video-max-size:52428800}") long videoMaxSize) {
         this.uploadFileMapper = uploadFileMapper;
-        this.uploadDir = Path.of(uploadDir).toAbsolutePath().normalize();
+        this.uploadDir = uploadProperties.root();
         this.maxSize = maxSize;
         this.videoMaxSize = videoMaxSize;
     }

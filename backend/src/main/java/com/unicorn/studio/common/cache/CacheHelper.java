@@ -40,16 +40,69 @@ public class CacheHelper {
     private final boolean enabled;
     private final double jitterRatio;
 
+    /**
+     * 键前缀：{@code app.cache.namespace} + 当前 profile（形如 {@code local:} / {@code prod:}）。
+     * <p>
+     * <b>为什么必须有它（2026-09-22 实测故障）</b>：本地开发与线上服务器<b>共用同一台 Redis 的
+     * 同一个 db</b>（见 {@code application-local.yml} 与 {@code REDIS_HOST}），而缓存键里
+     * 没有任何环境标识 —— 于是两边互相读写对方的缓存：
+     * <ol>
+     *   <li>本地库只有 4 条学习资料，但本地实例的列表接口返回了 <b>7 条</b>；
+     *       顺着查到 {@code cache:learning:list} 里存的正是<b>服务器环境</b>写入的那 7 条；</li>
+     *   <li>那 7 条带着服务器的 {@code coverUrl} / {@code attachmentUrl}
+     *       （{@code /uploads/2026/09/8bb46a63…png}），而对应文件只存在于服务器磁盘 ——
+     *       本地或线上任何一方渲染对方的数据，图片与附件就必然 404；</li>
+     *   <li>更麻烦的是 TTL 让它「像是有延迟」：写方环境一直在续期，读方以为缓存过期后会回源，
+     *       实际每次命中的都是对方的旧数据 —— 这正是「经过一段时间后自动 404」的真实机理。</li>
+     * </ol>
+     * 前缀让 `local:` / `prod:` 两套键彻底分开：即使共用一台 Redis 同一个 db，也不会互相污染。
+     * 历史上已写入的无前缀键不会被再读取（自然过期即可），故本次改动无需手工清理。
+     */
+    private final String keyPrefix;
+
     public CacheHelper(StringRedisTemplate redis,
                        CacheCircuitBreaker breaker,
                        @Value("${app.cache.enabled:true}") boolean enabled,
-                       @Value("${app.cache.jitter-ratio:0.10}") double jitterRatio) {
+                       @Value("${app.cache.jitter-ratio:0.10}") double jitterRatio,
+                       @Value("${app.cache.namespace:}") String namespace,
+                       @Value("${spring.profiles.active:default}") String profiles) {
         this.redis = redis;
         // 缓存专用 ObjectMapper（§5.5.2）：JavaTimeModule + 关闭时间戳，独立于 MVC 的 ObjectMapper
         this.mapper = CacheObjectMapper.create();
         this.breaker = breaker;
         this.enabled = enabled;
         this.jitterRatio = jitterRatio;
+        this.keyPrefix = buildPrefix(namespace, profiles);
+        log.info("缓存键环境隔离前缀: '{}'（可用 app.cache.namespace 覆盖；空前缀=与旧版本行为一致）", keyPrefix);
+    }
+
+    /**
+     * 组装前缀，形如 {@code unicorn:prod:}。
+     * <p>
+     * 用「命名空间 + 生效 profile」而不是只靠运维记得改 {@code spring.data.redis.database}：
+     * 配置会被漏配、会被复制粘贴，而<b>代码里的隔离不依赖任何人的记性</b>。
+     * 多 profile 同时激活（如 {@code local,dev}）时取第一个，保证同一套配置下前缀稳定。
+     */
+    private static String buildPrefix(String namespace, String profiles) {
+        String ns = namespace == null ? "" : namespace.trim();
+        String profile = profiles == null ? "" : profiles.trim();
+        int comma = profile.indexOf(',');
+        if (comma >= 0) {
+            profile = profile.substring(0, comma).trim();
+        }
+        if (profile.isEmpty()) {
+            profile = "default";
+        }
+        StringBuilder sb = new StringBuilder();
+        if (!ns.isEmpty()) {
+            sb.append(ns).append(':');
+        }
+        return sb.append(profile).append(':').toString();
+    }
+
+    /** 加前缀。分隔符统一用 {@code :}，与既有键命名规范一致。 */
+    private String k(String key) {
+        return keyPrefix + key;
     }
 
     public boolean isEnabled() {
@@ -62,7 +115,7 @@ public class CacheHelper {
             return Optional.empty();
         }
         try {
-            String json = redis.opsForValue().get(key);
+            String json = redis.opsForValue().get(k(key));
             breaker.onSuccess();
             return json == null ? Optional.empty() : Optional.ofNullable(mapper.readValue(json, type));
         } catch (Exception e) {
@@ -78,7 +131,7 @@ public class CacheHelper {
             return Optional.empty();
         }
         try {
-            String json = redis.opsForValue().get(key);
+            String json = redis.opsForValue().get(k(key));
             breaker.onSuccess();
             return json == null ? Optional.empty() : Optional.ofNullable(mapper.readValue(json, type));
         } catch (Exception e) {
@@ -94,7 +147,7 @@ public class CacheHelper {
             return Optional.empty();
         }
         try {
-            String value = redis.opsForValue().get(key);
+            String value = redis.opsForValue().get(k(key));
             breaker.onSuccess();
             return Optional.ofNullable(value);
         } catch (Exception e) {
@@ -110,7 +163,7 @@ public class CacheHelper {
             return;
         }
         try {
-            redis.opsForValue().set(key, mapper.writeValueAsString(value), jitter(ttl));
+            redis.opsForValue().set(k(key), mapper.writeValueAsString(value), jitter(ttl));
         } catch (Exception e) {
             breaker.onFailure();
             log.warn("缓存写入降级 key={}: {}", key, e.getMessage());
@@ -123,10 +176,24 @@ public class CacheHelper {
             return;
         }
         try {
-            redis.opsForValue().set(key, value, jitter(ttl));
+            redis.opsForValue().set(k(key), value, jitter(ttl));
         } catch (Exception e) {
             breaker.onFailure();
             log.warn("缓存写入降级 key={}: {}", key, e.getMessage());
+        }
+    }
+
+    /** SETNX 短锁（供预热等多实例互斥使用）：同样带环境前缀，避免跨环境互相顶掉锁。 */
+    public boolean setIfAbsent(String key, Duration ttl) {
+        if (!enabled || breaker.isOpen()) {
+            return false;
+        }
+        try {
+            return Boolean.TRUE.equals(redis.opsForValue().setIfAbsent(k(key), "1", ttl));
+        } catch (Exception e) {
+            breaker.onFailure();
+            log.warn("缓存加锁降级 key={}: {}", key, e.getMessage());
+            return false;
         }
     }
 
@@ -136,7 +203,7 @@ public class CacheHelper {
             return;
         }
         try {
-            redis.delete(List.of(keys));
+            redis.delete(java.util.Arrays.stream(keys).map(this::k).toList());
         } catch (Exception e) {
             breaker.onFailure();
             log.warn("缓存删除降级 keys={}: {}", Arrays.toString(keys), e.getMessage());
@@ -162,9 +229,12 @@ public class CacheHelper {
         if (!enabled || pattern == null || pattern.isBlank()) {
             return;
         }
+        // 前缀在同一处拼装（调用方传的是 CacheKeys 的裸键模式，如 cache:auth:perm:*），
+        // 保证「按模式删」与「按 key 删/写」命中的是同一片键空间 —— 只加在一处才不会漏。
+        String prefixed = k(pattern);
         try {
             List<String> batch = new ArrayList<>(DELETE_BATCH_SIZE);
-            ScanOptions options = ScanOptions.scanOptions().match(pattern).count(100).build();
+            ScanOptions options = ScanOptions.scanOptions().match(prefixed).count(100).build();
             try (Cursor<String> cursor = redis.scan(options)) {
                 while (cursor.hasNext()) {
                     batch.add(cursor.next());
