@@ -27,8 +27,8 @@ import java.util.regex.Pattern;
  * （links、socials 为 JSON 数组）。与「关于我们」一致，这是单例页面配置而非内容集合，
  * 因此复用既有设置存储与写入通道，不新建表。
  * <p>
- * 兜底约定：任何字段缺失或为空时回落到「页脚改造前的原始文案」，
- * 故数据库中尚无 footer 组时，前台表现与改造前完全一致（零配置零回归）。
+ * 兜底约定：缺失字段继承默认；可选字段的显式空字符串保持为空，
+ * 数据库中尚无 footer 组时继续使用原有默认文案与链接。
  */
 @Service
 public class FooterService {
@@ -104,7 +104,7 @@ public class FooterService {
     private FooterVO assemble() {
         Map<String, String> kv = settingsService.listGroup(GROUP);
         return new FooterVO(
-                valueOrDefault(kv.get(KEY_BRAND_NAME), DEFAULT_BRAND_NAME),
+                requiredValueOrDefault(kv.get(KEY_BRAND_NAME), DEFAULT_BRAND_NAME),
                 valueOrDefault(kv.get(KEY_BRAND_INTRO), DEFAULT_BRAND_INTRO),
                 parseBoolean(kv.get(KEY_SHOW_PARTICLES), DEFAULT_SHOW_PARTICLES),
                 valueOrDefault(kv.get(KEY_LINKS_TITLE), DEFAULT_LINKS_TITLE),
@@ -293,8 +293,12 @@ public class FooterService {
         return "true".equalsIgnoreCase(trimmed) || "1".equals(trimmed);
     }
 
-    private static String valueOrDefault(String value, String fallback) {
+    private static String requiredValueOrDefault(String value, String fallback) {
         return isBlank(value) ? fallback : value;
+    }
+
+    private static String valueOrDefault(String value, String fallback) {
+        return value == null ? fallback : value;
     }
 
     private static String trim(String value) {

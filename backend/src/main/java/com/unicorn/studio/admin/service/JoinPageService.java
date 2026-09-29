@@ -20,8 +20,8 @@ import java.util.Map;
  * （paragraphs 以空行分隔的纯文本存放，读取时切分为列表）。这是单例页面配置而非内容集合，
  * 因此复用既有设置存储与写入通道，不新建表。
  * <p>
- * 兜底约定：任何字段缺失或为空时回落到「页面改造前的原始文案」，
- * 故数据库中尚无 join 组时，前台表现与改造前完全一致（零配置零回归）。
+ * 兜底约定：缺失字段继承默认；可选字段的显式空字符串保持为空，
+ * 数据库中尚无 join 组时继续使用原有默认文案与二维码。
  */
 @Service
 public class JoinPageService {
@@ -75,7 +75,7 @@ public class JoinPageService {
         Map<String, String> kv = settingsService.listGroup(GROUP);
         return new JoinPageVO(
                 valueOrDefault(kv.get(KEY_EYEBROW), DEFAULT_EYEBROW),
-                valueOrDefault(kv.get(KEY_TITLE), DEFAULT_TITLE),
+                requiredValueOrDefault(kv.get(KEY_TITLE), DEFAULT_TITLE),
                 valueOrDefault(kv.get(KEY_SUBTITLE), DEFAULT_SUBTITLE),
                 parseParagraphs(kv.get(KEY_PARAGRAPHS)),
                 valueOrDefault(kv.get(KEY_QR_IMAGE), DEFAULT_QR_IMAGE),
@@ -114,7 +114,7 @@ public class JoinPageService {
     }
 
     /**
-     * 解析正文段落。未配置（null / 空白）→ 默认段落；
+     * 解析正文段落。未配置（null）→ 默认段落；
      * 显式配置为空内容（如空串）→ 视为「不展示正文」，此时不回填默认段落。
      */
     private List<String> parseParagraphs(String raw) {
@@ -179,8 +179,12 @@ public class JoinPageService {
         return String.join("\n\n", paragraphs);
     }
 
-    private static String valueOrDefault(String value, String fallback) {
+    private static String requiredValueOrDefault(String value, String fallback) {
         return isBlank(value) ? fallback : value;
+    }
+
+    private static String valueOrDefault(String value, String fallback) {
+        return value == null ? fallback : value;
     }
 
     private static String nullToEmpty(String value) {
