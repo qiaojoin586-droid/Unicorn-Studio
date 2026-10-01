@@ -14,7 +14,7 @@ import java.util.Set;
  * - 允许常用排版标签，script/事件属性一律清除；
  * - img src 仅允许本站 /uploads/ 或白名单域（防外链跟踪；addProtocols 只能限协议，
  *   域名校验通过继承覆盖 isSafeAttribute 实现——Safelist 无公开 addAttributeEvaluator 接口）；
- * - <b>只在写入路径消毒</b>（WorkAdminService / NewsAdminService / LearningAdminService 保存前）。
+ * - 保存前与管理端草稿预览使用同一净化规则；公开读取不重复净化。
  *   读取路径不重复消毒 —— 详见 {@link #clean} 的说明。
  */
 public final class HtmlSanitizer {
@@ -111,9 +111,9 @@ public final class HtmlSanitizer {
      * DOM 化的内存开销就已经发生了，事后再判没有意义。这里抛 400 而不是截断：
      * 静默截断会让管理员以为正文保存成功了，实际内容被砍掉一半。
      * <p>
-     * <b>为什么只在写入路径调用</b>：类注释此前写着「保存与前台输出前各跑一次（双保险）」，
+     * <b>为什么公开读取不重复净化</b>：类注释此前写着「保存与前台输出前各跑一次（双保险）」，
      * 但实现从来只在写入路径消毒 —— 那是注释失实，不是实现漏了。
-     * 现在明确选「只写不读」：
+     * 保存与管理端未保存草稿预览复用同一规则，公开读取保持已保存结果：
      * <ul>
      *   <li>写路径消毒后落库的内容已经是干净的，读路径再跑一次是重复计算；</li>
      *   <li>读路径（作品/新闻/学习资料详情）是<b>被缓存的高频路径</b>，
@@ -121,7 +121,7 @@ public final class HtmlSanitizer {
      *   <li>真要防「绕过写路径的脏数据」，正确做法是入库校验或数据库约束，
      *       而不是在每次读取时重算。</li>
      * </ul>
-     * 保留写入路径消毒这一道，已覆盖所有正常入口。
+     * 保存路径净化覆盖所有正常写入入口，草稿预览复用它以匹配保存后的效果。
      */
     public static String clean(String html) {
         if (html == null || html.isBlank()) {

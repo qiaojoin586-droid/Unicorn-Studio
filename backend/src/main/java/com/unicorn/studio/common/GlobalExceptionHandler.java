@@ -11,6 +11,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -76,6 +77,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<Void>> handleNoResource(NoResourceFoundException e) {
         log.warn("静态资源不存在: {}", e.getResourcePath());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(404, "资源不存在"));
+    }
+
+    /** 接口路由不存在时保留 404，避免被通用异常处理改写为 500。 */
+    @ExceptionHandler(NoHandlerFoundException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNoHandler(NoHandlerFoundException e) {
+        log.warn("接口不存在: {} {}", e.getHttpMethod(), e.getRequestURL());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.error(404, "接口不存在"));
     }
 
     /** 兜底：未知异常 → 500，完整堆栈只进日志 */
