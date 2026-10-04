@@ -85,8 +85,8 @@ public class PublicAuthService {
         if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new BusinessException(org.springframework.http.HttpStatus.UNAUTHORIZED, "邮箱或密码错误");
         }
-        if (user.getStatus() != null && user.getStatus() == 0) {
-            throw new BusinessException(org.springframework.http.HttpStatus.FORBIDDEN, "账号已被禁言");
+        if (user.getStatus() != null && user.getStatus() == 2) {
+            throw new BusinessException(org.springframework.http.HttpStatus.FORBIDDEN, "账号已被注销");
         }
         user.setLastLoginAt(LocalDateTime.now());
         userMapper.updateById(user);
@@ -109,7 +109,7 @@ public class PublicAuthService {
             Claims claims = Jwts.parser().verifyWith(key).build()
                     .parseSignedClaims(authorization.substring(7)).getPayload();
             PublicUser user = userMapper.selectById(Long.valueOf(claims.getSubject()));
-            if (user == null || user.getStatus() == null || user.getStatus() == 0) {
+            if (user == null || user.getStatus() == null || user.getStatus() == 2) {
                 return null;
             }
             return user;

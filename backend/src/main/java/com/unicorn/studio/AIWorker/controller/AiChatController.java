@@ -4,6 +4,7 @@ import com.unicorn.studio.AIWorker.dto.ChatRequest;
 import com.unicorn.studio.AIWorker.service.AiChatService;
 import com.unicorn.studio.AIWorker.vo.AiCapabilitiesVO;
 import com.unicorn.studio.AIWorker.tool.AiToolRegistry;
+import com.unicorn.studio.common.security.RequireSiteUser;
 import com.unicorn.studio.model.ApiResponse;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -21,7 +22,10 @@ import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 前台 AI 助手接口（公开，走 /api/** 公开过滤器链 + 既有 Redis 限流）。
+ * 前台 AI 助手接口（走 /api/** 公开过滤器链 + 既有 Redis 限流）。
+ * <p>
+ * 「公开」指过滤器链不拒绝匿名请求，不等于接口匿名可用：{@code /chat} 需登录，
+ * {@code /capabilities} 保持匿名。
  * <p>
  * <b>协议契约（与前端 useAiChat.js 对齐，勿随意更改）</b>：
  * <pre>
@@ -59,8 +63,12 @@ public class AiChatController {
         this.toolRegistry = toolRegistry;
     }
 
-    /** 流式问答。 */
+    /**
+     * 流式问答。未登录由 {@link RequireSiteUser} 拦在方法体之前 ——
+     * 必须在 {@code new SseEmitter(...)} 之前校验，因为 SSE 一旦开始发送就无法再改状态码。
+     */
     @PostMapping(value = "/chat", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @RequireSiteUser
     public SseEmitter chat(@Valid @RequestBody ChatRequest request) {
         SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MS);
         AtomicBoolean finished = new AtomicBoolean(false);

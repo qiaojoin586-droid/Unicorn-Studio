@@ -1,8 +1,11 @@
 -- ==========================================================================
 -- Unicorn Studio · 服务器端全量建库脚本（01-schema-full.sql）
 -- --------------------------------------------------------------------------
--- 生成方式：backend/sql/tools/gen_merged_schema.py
---   由 mysql-init.sql（V1-V7 基线）+ mysql-migration-v8..v18 + 权限乱码修复合并。
+-- 生成方式（历史沿革）：由 backend/sql/tools/gen_merged_schema.py 合并
+--   mysql-init.sql（V1-V7 基线）+ mysql-migration-v8..v19 + 权限乱码修复。
+--   ⚠️ 该生成脚本从未入库，源迁移文件也已在提交 552fce1 中被删除
+--     ⇒ 无法再「改源脚本 → 重新生成」。本文件现在是【唯一的建库来源】，
+--       表结构变更请直接改这里（新表按本文件既有范式追加到末尾的 V 段中）。
 --
 -- 特性：
 --   * 幂等：可重复执行。表用 IF NOT EXISTS、种子数据用 INSERT IGNORE、
@@ -173,7 +176,15 @@ CREATE TABLE IF NOT EXISTS public_user (
   ban_until     DATETIME COMMENT 'NULL=永久禁言',
   register_ip   VARCHAR(45),
   last_login_at DATETIME,
-  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- V19：前台 AI 使用权限。这是「前台 AI 改为登录后可用」这个需求第一次产生的维度，
+  --      独立于禁言 status —— 禁言仍由 status=0 表达，两者互不影响（禁言用户照样能用 AI）。
+  --      为什么不复用 status：status 已被「登录封禁校验 / 评论拦截 / 前台身份解析」三处依赖，
+  --      把 AI 语义塞进去会把那三处的语义一起搅乱，故独立成列。
+  --      ★ 本列必须排在 created_at 之后：V19 是 ALTER TABLE ADD COLUMN 且不带 AFTER，
+  --        实录库的 ORDINAL_POSITION 即为「追加在末尾」。若在此处前置，
+  --        脚本建出的库与实录库列顺序不一致（列名集合相同、顺序不同）。
+  ai_enabled    TINYINT NOT NULL DEFAULT 1 COMMENT '1允许使用AI助手 0禁止（独立于禁言 status）'
 );
 SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'public_user' AND INDEX_NAME = 'idx_public_user_status');
@@ -1462,6 +1473,34 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 -- 注：验证时该表为 0 行，故「行数」指标不具参考性；filesort 的有无由
 --     查询与索引结构决定，与数据量无关，因此该结论成立。
 -- ============================================================
+
+-- ##########################################################################
+-- 以下来自 mysql-migration-v19-ai-memory.sql（本次仅并入 public_user.ai_enabled 一列）
+-- ##########################################################################
+
+-- ============================================================
+-- V19 迁移：前台 AI 使用权限列 public_user.ai_enabled
+-- 背景：前台 AI 由「匿名可用」改为「登录后可用」，需要一个独立于禁言的 AI 使用开关
+--       （设计方案 §3.2 登录门禁）。1 允许使用 / 0 禁止。
+--       为什么不复用 status：status 已被「登录封禁校验 / 评论拦截 / 前台身份解析」三处依赖，
+--       把 AI 语义塞进去会把那三处的语义一起搅乱，故独立成列。禁言用户照样能用 AI。
+-- 向后兼容：仅新增列，不改动、不删除任何现有表结构与数据。
+-- 幂等：列走 information_schema 判存块（MySQL 8 的 ADD COLUMN 没有 IF NOT EXISTS）。
+-- 非破坏：无 DROP / DELETE / TRUNCATE。
+-- 执行方式：随本文件一起执行；亦可用于已初始化库的增量重跑。
+-- ============================================================
+SET NAMES utf8mb4;
+
+-- public_user 补列 ai_enabled（存在则跳过，写法同 V8 的 learning_resources 补列）
+SET @add_ai_enabled := (
+  SELECT IF(
+    EXISTS(SELECT 1 FROM information_schema.COLUMNS
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'public_user' AND COLUMN_NAME = 'ai_enabled'),
+    'SELECT 1',
+    'ALTER TABLE public_user ADD COLUMN ai_enabled TINYINT NOT NULL DEFAULT 1 COMMENT ''1允许使用AI助手 0禁止（独立于禁言 status）'''
+  )
+);
+PREPARE stmt FROM @add_ai_enabled; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- ##########################################################################
 -- 以下来自 mysql-fix-permission-mojibake.sql（历史乱码修复，幂等）
