@@ -174,16 +174,33 @@ APP_CORS_ORIGINS=https://your-domain.com,http://<server-ip>:3000
 APP_CORS_ORIGIN_PATTERNS=
 ```
 
-### 6.3 Redis：别和本地共用同一个实例
+### 6.3 Redis：**必须**与本地隔离（否则「图片/附件过一段时间就 404」）
 
 Redis 连接池配置里 `REDIS_DATABASE` 默认 `0`。若服务器与本地**指向同一台 Redis 的同一个 db**，
-两套环境的缓存键会互相覆盖 —— 典型表现是「后台保存成功、前台读到别处的旧内容」。
-迁移后请让生产用**独立实例**或至少换一个 `REDIS_DATABASE`（如 `REDIS_DATABASE=1`）。
+两套环境的缓存键会互相覆盖。这已在 2026-09-22 实测踩中，症状极具迷惑性：
 
-导入数据后如已启动过后端，**必须清缓存**，否则前台最长 30 分钟不更新：
+1. 本地库只有 4 条学习资料，本地实例的列表接口却返回了 **7 条** ——
+   顺着查到 `cache:learning:list` 里存的正是**服务器环境**写入的那 7 条；
+2. 那 7 条带着服务器的 `coverUrl` / `attachmentUrl`（`/uploads/2026/09/8bb46a63….png` 等），
+   而对应文件只存在于服务器磁盘 ⇒ **任何一方渲染对方的数据，图片与附件必然 404**；
+3. 更麻烦的是 TTL 会持续续期（两边都在写、都在读），所以它看起来像「**过一段时间才坏**」；
+   而「缓存过期就会回源」的直觉恰恰是错的 —— 回源拿到的仍是对方的键。
+
+**现在的双保险（代码层 + 配置层）**：
+
+| 层 | 措施 | 说明 |
+|---|---|---|
+| 代码 | 缓存键自动带 profile 前缀 | `CacheHelper` 给每个键加 `<profile>:`，如 `local:cache:learning:list` / `prod:cache:carousel:home`。键空间天然分开，**不依赖运维记性** |
+| 配置 | 本地固定 `spring.data.redis.database: 1` | 与线上的 db `0` 物理隔离（已落在 `application-local.yml`） |
+
+启动日志会打印一行便于确认：`缓存键环境隔离前缀: 'prod:'`。
+历史上已写入的无前缀键不会被再读取（自然过期即可），**无需手工清理**。
+
+要再加一层可用 `CACHE_NAMESPACE`（如 `CACHE_NAMESPACE=unicorn` ⇒ `unicorn:prod:` 前缀）。
+迁移后若前台最长 30 分钟不更新，按前缀清一次缓存即可（注意键名已带前缀）：
 
 ```bash
-redis-cli -h <host> -p 6379 -a <pwd> -n <db> --scan --pattern 'cache:*' | xargs -r redis-cli -h <host> -p 6379 -a <pwd> -n <db> DEL
+redis-cli -h <host> -p 6379 -a <pwd> -n <db> --scan --pattern 'prod:cache:*' | xargs -r redis-cli -h <host> -p 6379 -a <pwd> -n <db> DEL
 ```
 
 ### 6.4 其他
@@ -191,15 +208,33 @@ redis-cli -h <host> -p 6379 -a <pwd> -n <db> --scan --pattern 'cache:*' | xargs 
 - `SPRING_PROFILES_ACTIVE`：`application.yml` 未指定默认 profile，务必显式设置（如 `prod`），
   否则读不到对应 profile 的覆盖项。
 - `MYSQLDUMP_PATH`：后台「备份」功能依赖 `mysqldump`，服务器上需装 MySQL 客户端或指向绝对路径。
-- `FILE_UPLOAD_DIR` 默认 `data/uploads`（相对**启动工作目录**）—— 确保启动时 cwd = 项目根。
-  **生产请显式给绝对路径**（如 `export FILE_UPLOAD_DIR=/opt/unicorn-studio/data/uploads`）：
-  它是 `/uploads/**` 静态映射的**读取目录**，也是 `FileService` 的**写入目录**（同一个配置项）。
-  cwd 一旦与当初写入时不同，就会出现**「图片文件还在磁盘上、数据库记录也没变，
+- `FILE_UPLOAD_DIR`：上传根目录，同时是 `FileService` 的**写入目录**与 `/uploads/**` 静态映射的**读取目录**。
+  解析优先级（`UploadProperties`，单一来源）：
+  1. 配置值本身是**绝对路径** → 原样使用（**推荐**，与启动方式彻底无关）；
+  2. 设了 `APP_HOME` → 相对它解析（`backend/start.sh` 会导出）；
+  3. 否则相对**启动工作目录(cwd)** 解析；**但若 cwd 下那个目录为空、而 jar 同级同名目录里有文件，
+     会自动改判到 jar 同级目录**（并打 WARN 说明改判了什么）。
+     这一条是为「直接用 `java -jar` 部署」兜底的 —— 那种场景 cwd 取决于当时在哪敲命令
+     （`cd /opt/app && java -jar app.jar` 与 `java -jar /opt/app/app.jar` 的 cwd 可以差很远），
+     而 jar 的位置是稳定的。实测：从任意目录 `java -jar <别处>/app.jar`，图片都能正常访问。
+  ⚠️ **若上传文件不在上述任一位置**（如 `/srv/unicorn/data/uploads`），必须显式指定：
+  `java -Dapp.upload.dir=/srv/unicorn/data/uploads -jar app.jar` 或
+  `export FILE_UPLOAD_DIR=/srv/unicorn/data/uploads`。
+  两者不一致时会出现**「图片文件还在磁盘上、数据库记录也没变，
   前端主站却返回 `{"code":404,"message":"资源不存在"}`」** —— 这个 JSON 是后端
   `NoResourceFoundException` 的输出（区别于 nginx 的 HTML 404），等价于「后端在它以为的目录里没找到文件」，
-  和图片是不是真的没了无关。服务启动时会打印一行
-  `静态资源映射 /uploads/** -> file:...（目录存在=?）`，排查时先看它。
-  `LOG_DIR`：日志目录，默认 `./logs`，**同样相对启动工作目录**
+  和图片是不是真的没了无关。
+  **排查只需看启动日志里这三行**（`UploadProperties` 输出，搜 `UploadProperties` 即可）：
+  ```
+  静态资源映射 /uploads/** 与上传落盘共用同一目录: file:/opt/unicorn-studio/data/uploads/（基准: ...）
+  上传目录自检通过（存在/可读/可写）：/opt/unicorn-studio/data/uploads
+  ```
+  另外，**任何一个 `/uploads/**` 请求 404 时，后端会直接打出结论**（`UploadNotFoundInterceptor`），
+  区分两种情形并把实际路径写清楚：
+  - `上传文件 404（配置问题）` —— 文件在别处找到了，会打印它真正所在的路径 ⇒ 改配置或迁文件；
+  - `上传文件 404（文件缺失）` —— 哪个候选目录里都没有 ⇒ 多半被清理或被部署动作删掉了。
+  上传目录**不参与健康检查**，服务会照常返回健康状态，所以不能靠 `/actuator/health` 判断这一项。
+- `LOG_DIR`：日志目录，默认 `./logs`，**同样相对启动工作目录**
   （详见 `application.yml` 的 `logging.file.path` 注释）。**强烈建议显式给绝对路径**：
   `export LOG_DIR=/opt/unicorn-studio/logs`；用 `backend/start.sh` 启动时脚本已自动设为
   `<应用目录>/logs`。否则「从别的目录 `java -jar`」会把日志写到那个目录下，
@@ -236,11 +271,49 @@ UPDATE sys_user SET refresh_token = NULL, refresh_token_expires_at = NULL;
 服务器上用 `01-schema-full.sql`（非破坏、幂等）。
 
 ### 7.5 本次修正的一处历史缺陷
+
 `mysql-init.sql` 原先把 V11 追加的三列（`carousel.page_key` / `media_type` / `video_url`）
 写在了 `created_at` / `updated_at` **之前**，而实录库是 V11 `ALTER TABLE ADD COLUMN` 追加的，
 这三列排在末尾。二者列名相同但 `ORDINAL_POSITION` 不同，导致新建库与实录库**列顺序**不一致
 （`mysqldump --complete-insert` 出来的 INSERT 列序不同）。已把这三列在 `mysql-init.sql` 中移到末尾，
 现在 21 张表列顺序与实录库完全一致。
+
+### 7.6 「上传的图片 404」排查清单（按顺序，5 分钟定位）
+
+这个故障出现过两次、症状完全一样，且**服务本身始终是健康的**，所以务必按证据定位而不是猜：
+
+1. **先看 404 的响应体长什么样**（决定是哪一层 404，别跳步）：
+   ```bash
+   curl -s -o /dev/null -w '%{http_code} %{content_type}\n' http://<host>/uploads/2026/09/<file>.jpg
+   curl -s http://<host>/uploads/2026/09/<file>.jpg | head -c 200
+   ```
+   | 响应 | 出自 | 含义 |
+   |---|---|---|
+   | `{"code":404,"message":"资源不存在",...}` | **后端** | 后端在它以为的目录里没找到文件 → 走第 2 步 |
+   | HTML（含 `<title>404 Not Found`） | **nginx** | `/uploads/` 没被代理/alias 到后端 → 查 nginx 配置 |
+   | 纯文本 `Not Found` | **Node 生产服务** | `frontend/server/index.js` 静态分支命中 → 该路径没走 `/uploads/` 代理分支 |
+2. **看后端启动日志里的上传目录两行**（`grep UploadProperties`）：记下它实际用的绝对路径。
+3. **确认文件在不在那个路径下**：
+   ```bash
+   ls -l /opt/unicorn-studio/data/uploads/2026/09/ | head
+   find / -name '<file>.jpg' -path '*uploads*' 2>/dev/null   # 文件其实在别的目录？
+   ```
+   - 文件在**另一个**目录 → `FILE_UPLOAD_DIR` 与写入时不一致：把文件整体迁到日志里那个路径，
+     或把 `FILE_UPLOAD_DIR` 改回原路径后重启。
+   - 文件**确实不在任何地方** → 见第 4 步（多半是被部署动作清掉了）。
+4. **确认上传目录没有被部署动作清掉**：`data/` 在 `.gitignore` 里，
+   所以 `git clean -fdx`、或「重新 clone 到同一目录」都会**删掉全部上传文件**，
+   而数据库里的 `/uploads/...` 记录仍在 → 全部 404。部署脚本里不要对应用目录执行 `git clean -fdx`；
+   上传目录应放在仓库之外（如 `/srv/unicorn/data/uploads`）并显式配 `FILE_UPLOAD_DIR`。
+5. **确认目录可读**：`namei -l /opt/unicorn-studio/data/uploads/2026/09` ——
+   后端进程（`start.sh` 里的用户）必须对该路径每一级都有 `x`，对文件有 `r`。
+6. **确认数据库里的 URL 与磁盘一致**：
+   ```sql
+   SELECT id, page_key, image_url FROM carousel WHERE status = 1;
+   SELECT url FROM upload_file ORDER BY id DESC LIMIT 10;
+   ```
+   `image_url` 形如 `/uploads/yyyy/MM/<uuid>.jpg`；把文件名拼到上传目录后面 `ls` 一下即可。
+   （若前台拿到的是 `http://...` 绝对域名，说明该条是手工填的外链，不是上传产物，另当别论。）
 
 ---
 
@@ -265,3 +338,61 @@ python backend\sql\tools\verify_roundtrip.py       :: 21 表逐行数据比对
 > 说明：结构脚本只保证「结构 + 种子默认值」。源库 `site_settings` 比脚本多 4 个键
 > （`basic.icp`、`content.comment_enabled`、`seo.work.1`、`seo.work.2`），那是通过后台界面写的运行时数据，
 > 由 `02-data.sql` 承载 —— 这也是为什么迁移必须导数据、而不只是跑结构脚本。
+
+---
+
+## 9. 本地构建与打包（含「测试全部报 MockMaker」的处置）
+
+```bat
+cd backend
+mvnw.cmd clean package          :: 含测试；要跳过测试用 -DskipTests
+```
+> ⚠️ **不要长期用 `-DskipTests` 打包**。本项目已有过一次教训：改了
+> `CacheHelper` 的构造器签名后，只用 `-DskipTests` 打包，编译与启动都正常，
+> 但 `CacheHelperTest` 已经编译不过 —— 直到正式打包时才暴露。
+
+### 9.1 环境前提
+
+| 项 | 要求 |
+|---|---|
+| `JAVA_HOME` | 必须指向 JDK 21（只把 `java` 放进 PATH 不够，`mvnw` 会直接报 "JAVA_HOME is not defined correctly"） |
+| 离线构建 | 依赖已缓存时可加 `-o`：`mvnw.cmd -o clean package` |
+| 本地配置 | `src/main/resources/application-local.yml`（已 gitignore）需含真实 DB 口令；缺失则用 `-Dspring.datasource.password=...` 临时覆盖 |
+
+### 9.2 「Could not initialize plugin: interface org.mockito.plugins.MockMaker」
+
+**现象**：一次性几十个测试全红，报
+`MockitoInitializationException: It appears as if your JDK does not supply a working agent attachment mechanism`
+→ `Caused by: Could not self-attach to current VM using external process`。
+看着像测试代码写错了，其实**与测试代码无关**：Mockito 的内联 mock maker 需要
+Byte Buddy 以 Java agent 形式挂载，它先尝试「自附加」，而这条路在 JDK 21 + Maven
+命令行下常常不通（IDEA 自己的测试运行器会替你挂 agent，所以**同一套代码在 IDE 里绿、
+在命令行里红**）。
+
+**处置（已固化在 `pom.xml`，无需手工操作）**：用 `dependency-plugin` 解析出
+`byte-buddy-agent` 的 jar 路径，再由 `surefire` 通过 `-javaagent` 传给测试 JVM：
+
+```xml
+<plugin>
+  <artifactId>maven-dependency-plugin</artifactId>
+  <executions><execution>
+    <id>resolve-byte-buddy-agent</id><phase>initialize</phase><goals><goal>properties</goal></goals>
+  </execution></executions>
+</plugin>
+<plugin>
+  <artifactId>maven-surefire-plugin</artifactId>
+  <configuration>
+    <argLine>-javaagent:@{net.bytebuddy:byte-buddy-agent:jar}</argLine>
+  </configuration>
+</plugin>
+```
+
+**最近一次验证**：`mvnw.cmd -o clean package` → `Tests run: 87, Failures: 0, Errors: 0` → `BUILD SUCCESS`。
+
+### 9.3 关于 `mvnw`
+
+仓库此前只有 `mvnw` / `mvnw.cmd` 脚本、**缺少 `.mvn/wrapper/maven-wrapper.properties`**，
+导致 `mvnw` 每次都去联网重下 Maven，内网/离线环境直接失败。
+现已补齐（wrapper 3.3.4 的 `only-script` 形态，不再依赖 `maven-wrapper.jar`），
+并实测 `mvnw.cmd -o clean package` 可离线跑通。
+

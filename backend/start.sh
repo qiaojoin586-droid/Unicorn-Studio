@@ -22,6 +22,10 @@
 # 可选环境变量：
 #   LOG_DIR              日志目录。本脚本已自动设为 <应用目录>/logs（绝对路径），
 #                        要把日志放到别处（如 /var/log/unicorn-studio）时在调用前覆盖它即可。
+#   FILE_UPLOAD_DIR      上传文件根目录。本脚本已自动设为 <应用目录>/data/uploads（绝对路径）。
+#                        ⚠️ 它同时是 FileService 的【写入目录】与 /uploads/** 的【读取目录】，
+#                        必须与磁盘上既有上传文件的实际位置一致；若上传文件不在应用目录下，
+#                        请在调用前显式覆盖（详见下方注释）。
 #
 set -euo pipefail
 
@@ -58,9 +62,21 @@ mkdir -p "$HEAP_DUMP_DIR"
 # ⚠️ 上传目录是同一类问题，但**更危险**：app.upload.dir（默认 data/uploads）同样相对启动工作目录，
 #    而且它同时决定 /uploads/** 静态映射【读哪个目录】。一旦与当初写入时不一致，就表现为
 #    「图片文件还在、数据库记录也没变，前端主站却拿到 {"code":404,"message":"资源不存在"}」。
-#    本脚本**不替它猜默认值**（各部署的 data/ 放哪儿不一样，猜错反而把上传写到新空目录），
-#    请在启动环境里显式给绝对路径，例如：FILE_UPLOAD_DIR="$APP_HOME/data/uploads"。
-#    服务启动时会打印一行「静态资源映射 /uploads/** -> file:...（目录存在=?）」，出问题先看它。
+#    这种情况已经实际发生过两次（见 WebMvcConfig / UploadProperties 的注释），故本脚本**主动钉住**默认值：
+#
+#    `: "${FILE_UPLOAD_DIR:=$APP_HOME/data/uploads}"` 与上面 LOG_DIR 同一套路 ——
+#      · 外部（systemd 的 Environment=、手工 export）显式给了值就尊重它；
+#      · 没给才落到 <应用目录>/data/uploads，即「上传文件与日志都跟着应用目录走」。
+#    这样「写盘目录」与「读取目录」永远是同一个，且与「在哪个目录敲命令」无关。
+#    ⚠️ 若你把上传文件放在别处（例如 /srv/unicorn/data/uploads），必须显式导出该变量 ——
+#       否则服务会在 <应用目录>/data/uploads 新建一个空目录，
+#       而数据库里已有的 /uploads/... 记录会全部 404。
+: "${FILE_UPLOAD_DIR:=$APP_HOME/data/uploads}"
+export FILE_UPLOAD_DIR
+
+# APP_HOME 一并向子进程导出：应用侧（UploadProperties）在 FILE_UPLOAD_DIR 为相对路径时
+# 以它为基准解析，从而不再依赖启动工作目录。
+export APP_HOME
 
 exec java \
   -Xms512m -Xmx1g \
