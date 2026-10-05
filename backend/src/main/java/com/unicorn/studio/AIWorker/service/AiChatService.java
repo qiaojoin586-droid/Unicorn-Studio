@@ -7,9 +7,15 @@ import com.unicorn.studio.common.BusinessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
+
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * AI 对话服务 —— 流式问答的唯一入口。
@@ -33,13 +39,16 @@ public class AiChatService {
     private final AiConfigProvider configProvider;
     private final ChatClientFactory clientFactory;
     private final AiToolRegistry toolRegistry;
+    private final AiSessionService aisessionService;
+
 
     public AiChatService(AiConfigProvider configProvider,
                          ChatClientFactory clientFactory,
-                         AiToolRegistry toolRegistry) {
+                         AiToolRegistry toolRegistry, AiSessionService aisessionService) {
         this.configProvider = configProvider;
         this.clientFactory = clientFactory;
         this.toolRegistry = toolRegistry;
+        this.aisessionService = aisessionService;
     }
 
     /**
@@ -49,29 +58,62 @@ public class AiChatService {
      * @return 增量文本分片流；调用方负责订阅与错误兜底
      * @throws BusinessException 未配置可用模型时抛出（400）
      */
-    public Flux<String> stream(String userMessage) {
+    public Flux<String> stream(String userMessage, String conversationId,
+                               Long userId, String clientMsgId) {
+        // ① 落 user 行（幂等：同 clientMsgId 重发不插第二条）
+        aisessionService.appendUserMessage(conversationId, userId, userMessage, clientMsgId);
+
+        // ② 历史上下文（正序）。注意元素类型是 Spring AI 的 Message，不是本项目的 AiMessage 实体
+        List<Message> history = aisessionService.loadContext(conversationId, userId).stream()
+                .map(m -> "user".equals(m.getRole())
+                        ? (Message) new UserMessage(m.getContent())
+                        : (Message) new AssistantMessage(m.getContent()))
+                .toList();
+
+        // ③ assistant 占位行
+        Long assistantId = aisessionService.startAssistantMessage(conversationId, userId);
+
         AiRuntimeConfig config = configProvider.runtimeConfig();
         if (!config.usable()) {
-            log.warn("AI 配置不可用：enabled={}, hasKey={}, url={}, model={}",
-                    config.enabled(),
-                    config.apiKey() != null && !config.apiKey().isBlank(),
-                    config.apiUrl(), config.model());
+            // 配置不可用：占位行别留成「空 completed」，标成 empty 再抛
+            aisessionService.finishAssistantMessage(assistantId, conversationId, "", "empty", null);
             throw AiRuntimeConfig.unavailable();
         }
 
         ToolCallback[] tools = toolRegistry.callbacks();
         ChatClient client = clientFactory.client(config, (Object[]) tools);
-        if (tools.length > 0) {
-            log.debug("本轮对话装配工具 {} 个：{}", tools.length, toolRegistry.registeredNames());
-        }
+
+        StringBuilder acc = new StringBuilder();
+        AtomicBoolean finished = new AtomicBoolean(false);
 
         return client.prompt()
-                .user(userMessage)
+                .messages(history)          // ⚠️ 历史在前
+                .user(userMessage)          // ⚠️ 本轮在后
                 .toolCallbacks(tools)
                 .stream()
                 .content()
-                // 单个分片异常不应中断整条流：记录后跳过，让对话继续（前端已能处理缺失分片）
-                .doOnError(e -> log.error("AI 流式响应异常", e));
+                .doOnNext(acc::append)      // 边收边攒
+                .doOnComplete(() -> {
+                    if (finished.compareAndSet(false, true)) {
+                        String content = acc.toString();
+                        aisessionService.finishAssistantMessage(assistantId, conversationId,
+                                content, content.isBlank() ? "empty" : "completed", null);
+                    }
+                })
+                .doOnError(e -> {
+                    log.error("AI 流式响应异常", e);
+                    if (finished.compareAndSet(false, true)) {
+                        aisessionService.finishAssistantMessage(assistantId, conversationId,
+                                acc.toString(), "interrupted", null);
+                    }
+                })
+                .doOnCancel(() -> {
+                    // 用户点停止 → Controller 里 dispose() → 这里收到 cancel，onComplete/onError 都不触发
+                    if (finished.compareAndSet(false, true)) {
+                        aisessionService.finishAssistantMessage(assistantId, conversationId,
+                                acc.toString(), "interrupted", null);
+                    }
+                });
     }
 
     /**

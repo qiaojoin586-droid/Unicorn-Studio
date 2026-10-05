@@ -12,8 +12,8 @@ SELECT DEFAULT_CHARACTER_SET_NAME AS charset, DEFAULT_COLLATION_NAME AS collatio
        IF(DEFAULT_COLLATION_NAME = 'utf8mb4_0900_ai_ci', 'OK', 'FAIL') AS result
 FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = DATABASE();
 
-SELECT '== 2. 表数量（应为 21）==' AS `check`;
-SELECT COUNT(*) AS table_count, IF(COUNT(*) = 21, 'OK', 'FAIL') AS result
+SELECT '== 2. 表数量（应为 23）==' AS `check`;
+SELECT COUNT(*) AS table_count, IF(COUNT(*) = 23, 'OK', 'FAIL') AS result
 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE';
 
 SELECT '== 3. 列排序规则是否统一（不该有 utf8mb4_unicode_ci 混入）==' AS `check`;
@@ -74,6 +74,16 @@ SELECT
   (SELECT COUNT(*) FROM news WHERE status = 'published')    AS published_news,
   (SELECT COUNT(*) FROM carousel WHERE page_key = 'home')   AS home_carousel,
   (SELECT COUNT(*) FROM site_settings WHERE group_name='join') AS join_settings;
+
+SELECT '== 12. AI 记忆模块两张表及其索引对象数（ai_conversation 应 3 = 主键1+索引2；ai_message 应 6 = 主键1+唯一1+索引4）==' AS `check`;
+SELECT TABLE_NAME AS tbl,
+       COUNT(DISTINCT INDEX_NAME) AS idx_objects,
+       COUNT(*)                   AS index_rows,
+       IF(COUNT(DISTINCT INDEX_NAME) = IF(TABLE_NAME = 'ai_message', 6, 3), 'OK', 'FAIL') AS result
+FROM information_schema.STATISTICS
+WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('ai_conversation', 'ai_message')
+GROUP BY TABLE_NAME
+ORDER BY tbl;
 
 -- ==========================================================================
 -- 附加提醒（脚本无法自动校验，需人工确认）：

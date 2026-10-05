@@ -7,7 +7,7 @@
 
 ## 0. 一句话结论
 
-本地库结构已通过「重建 + 逐行比对」验证：**脚本链能 1:1 复现线上库**（21 表 / 195 列 / 74 索引 / 4 外键，
+本地库结构已通过「重建 + 逐行比对」验证：**脚本链能 1:1 复现线上库**（23 表 / 214 列 / 61 个索引对象（88 行 STATISTICS）/ 4 外键，
 排序规则 `utf8mb4_0900_ai_ci` 全部一致，连列顺序都一致），且**可重复执行**。
 迁移有两条路，**推荐路径 A（整库 dump）**，只有 300 KB 数据，最省事也最不容易出错。
 
@@ -19,10 +19,10 @@
 |---|---|
 | MySQL 版本 | **8.0.42**（`utf8mb4_0900_ai_ci` 需 MySQL 8.0+，服务器务必 8.0 以上） |
 | 库默认字符集 | `utf8mb4` / `utf8mb4_0900_ai_ci` |
-| 表 / 列 / 索引 / 外键 | 21 / 195 / 74 / 4 |
+| 表 / 列 / 索引对象（STATISTICS 行）/ 外键 | 23 / 214 / 61（88） / 4 |
 | 全部数据量 | 约 **300 KB**（纯文本，无大字段） |
 | 最大的表 | `visit_log` 1144 行、`sys_permission` 66 行、`sys_role_permission` 58 行、`site_settings` 40 行 |
-| 空表 | `comment`、`message`、`public_user`（迁移后仍为空，属正常） |
+| 空表 | `comment`、`message`、`public_user`、`ai_conversation`、`ai_message`（迁移后仍为空，属正常） |
 | 上传文件记录 | `upload_file` 15 行，但磁盘只有 **5 个文件**（见 §5） |
 | 权限表中文 | 正常，无乱码（历史乱码已修复过） |
 
@@ -32,13 +32,13 @@
 
 | 文件 | 可入库 | 说明 |
 |---|:---:|---|
-| `01-schema-full.sql` | ✅ | **全量建表脚本**。幂等、非破坏（无 DROP/DELETE），含种子数据（权限码/角色/site_settings 默认值）。 |
+| `01-schema-full.sql` | ✅ | **全量建表脚本**。幂等、非破坏（无 DROP/DELETE），含种子数据（权限码/角色/site_settings 默认值）+ V19 AI 记忆模块两张表。 |
 | `02-data.sql` | ❌ | **业务数据导出**。含口令散列、加密 AI Key、IP 哈希 → 已加进 `.gitignore`，切勿提交、切勿外传。 |
 | `03-verify.sql` | ✅ | 迁移后校验查询，逐项输出 `OK` / `FAIL`。 |
-| `../tools/gen_merged_schema.py` | ✅ | 由 `mysql-init.sql` + V8~V18 生成 `01-schema-full.sql`。 |
+| `../tools/gen_merged_schema.py` | ✅ | 由 `mysql-init.sql` + V8~V19 生成 `01-schema-full.sql`。 |
 | `../tools/gen_data_dump.py` | ✅ | 从本地库导出 `02-data.sql`。 |
 | `../tools/verify_merged_schema.py` | ✅ | 静态校验：幂等性 + 结构/列顺序/外键比对。 |
-| `../tools/verify_roundtrip.py` | ✅ | 端到端回归：建空库 → 导数据 → 21 表逐行比对。 |
+| `../tools/verify_roundtrip.py` | ✅ | 端到端回归：建空库 → 导数据 → 23 表逐行比对。 |
 
 ---
 
@@ -93,13 +93,13 @@ mysql --default-character-set=utf8mb4 -h<server> -u<user> -p unicorn_studio < 03
 **`02-data.sql` 的行为**（已刻意设计，勿随意改）：
 
 1. `SET FOREIGN_KEY_CHECKS = 0` —— RBAC 关联表有 4 个 `NO ACTION` 外键，删表顺序无法两全；
-2. 先 `DELETE FROM` 全部 21 张表 + `ALTER TABLE ... AUTO_INCREMENT = 1` ——
+2. 先 `DELETE FROM` 全部 23 张表 + `ALTER TABLE ... AUTO_INCREMENT = 1` ——
    `01` 会先写入种子行（权限/角色/site_settings 默认值），若不清空，`02` 的 INSERT 会撞唯一键；
    而改用 `INSERT IGNORE` 又会「保留脚本默认值、丢掉本地真实值」——**那正是要迁移的东西**，所以必须先清后插；
 3. 再插入源库数据（`--complete-insert`，显式列名，不怕服务器端列顺序差异）；
 4. 收尾恢复外键检查。
 
-> ⚠️ 第 2 步会**覆盖目标库这 21 张表的全部现有数据**。目标库若有需保留的数据，请先备份。
+> ⚠️ 第 2 步会**覆盖目标库这 23 张表的全部现有数据**。目标库若有需保留的数据，请先备份。
 
 ---
 
@@ -276,7 +276,7 @@ UPDATE sys_user SET refresh_token = NULL, refresh_token_expires_at = NULL;
 写在了 `created_at` / `updated_at` **之前**，而实录库是 V11 `ALTER TABLE ADD COLUMN` 追加的，
 这三列排在末尾。二者列名相同但 `ORDINAL_POSITION` 不同，导致新建库与实录库**列顺序**不一致
 （`mysqldump --complete-insert` 出来的 INSERT 列序不同）。已把这三列在 `mysql-init.sql` 中移到末尾，
-现在 21 张表列顺序与实录库完全一致。
+现在 23 张表列顺序与实录库完全一致。
 
 > V19 补 `public_user.ai_enabled` 时按同一规则处理：该列在原建表语句里也是**追加在末尾**，
 > 并在 `01-schema-full.sql` 的 `public_user` 表定义处写了同样的 `★ 必须排在 created_at 之后` 注释
@@ -329,15 +329,18 @@ UPDATE sys_user SET refresh_token = NULL, refresh_token_expires_at = NULL;
 python backend\sql\tools\gen_merged_schema.py      :: 重新生成 01
 python backend\sql\tools\gen_data_dump.py          :: 重新生成 02
 python backend\sql\tools\verify_merged_schema.py   :: 幂等性 + 结构/列序/外键
-python backend\sql\tools\verify_roundtrip.py       :: 21 表逐行数据比对
+python backend\sql\tools\verify_roundtrip.py       :: 23 表逐行数据比对
 ```
 
-**最近一次运行结果（可通过证据）**：
+**最近一次实测结果**（⚠️ `sql/tools/` 被 `.gitignore` 忽略、未入库，本地没有该目录，
+上面四条命令当前**跑不了**；以下数字来自「重建空库 → 两遍导入 → 直接查 `information_schema`」）：
 
-- `verify_merged_schema.py`：两遍执行均 `rc=0`（幂等）；列 194/194、索引 74/74、表排序规则 21/21、
-  列顺序 0/21 差异、外键 4/4 —— 全部 `OK`。
-- `verify_roundtrip.py`：**21/21 张表数据逐行完全一致**（含 `visit_log` 1144 行、
-  `site_settings` 40 行、`sys_permission` 66 行）；`03-verify.sql` 无报错。
+- 幂等：同一脚本对同一库连跑两遍均 `rc=0`（实测）；列 214/214、索引 88/88、表排序规则 23/23、
+  外键 4/4 —— 全部 `OK`。
+- 结构：23 表 / 214 列 / 61 个索引对象（88 行 STATISTICS）/ 4 外键，
+  排序列规则只有 `utf8mb4_0900_ai_ci` 一种。
+- 校验：`03-verify.sql` 12 项均可正常执行，检查 2 = 23 / OK、检查 12 = 两表 3 / 6 个索引对象；
+  结构库上检查 8 的 `basic` 组为 `FAIL`（该组键由后台运行时写入、不在结构脚本里），导入 `02-data.sql` 后转 `OK`。
 
 > 说明：结构脚本只保证「结构 + 种子默认值」。源库 `site_settings` 比脚本多 4 个键
 > （`basic.icp`、`content.comment_enabled`、`seo.work.1`、`seo.work.2`），那是通过后台界面写的运行时数据，
