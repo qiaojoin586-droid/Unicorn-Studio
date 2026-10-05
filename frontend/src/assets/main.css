@@ -1,11 +1,41 @@
+@import './tokens.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-html,
-body {
-  background-color: #030712;
-}
+html { background: var(--color-ink); scroll-padding-top: calc(var(--header-height) + 20px); scrollbar-gutter: stable; }
+body { margin: 0; color: var(--color-ink); background: var(--color-paper); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+::selection { background: var(--color-accent); color: white; }
+:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 5px; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { touch-action: manipulation; }
+button:disabled { cursor: not-allowed; }
+svg { flex-shrink: 0; }
+main h1 { text-wrap: balance; overflow-wrap: anywhere; }
+[id] { scroll-margin-top: calc(var(--header-height) + 20px); }
+.studio-app { min-height: 100dvh; display: flex; flex-direction: column; }
+.site-main { flex: 1; padding-top: var(--header-height); }
+.site-main:focus { outline: none; }
+body.ai-modal-open { overflow: hidden; }
+.skip-link { position: fixed; top: 12px; left: 20px; z-index: 100; padding: 12px 20px; background: var(--color-paper); color: var(--color-ink); transform: translateY(-160%); }
+.skip-link:focus { transform: none; }
+.page-shell { width: 100%; max-width: calc(var(--page-max) + var(--page-gutter) * 2); padding-inline: var(--page-gutter); margin-inline: auto; }
+.eyebrow { display: flex; align-items: center; gap: 12px; font-family: var(--font-mono); font-size: 11px; font-weight: 500; letter-spacing: .12em; line-height: 1.7; text-transform: uppercase; }
+.meta-label { font-family: var(--font-mono); font-size: 11px; letter-spacing: .06em; line-height: 1.6; }
+.configured-lines { white-space: pre-line; overflow-wrap: anywhere; }
+.section-title { font-size: clamp(30px, 4.1vw, 60px); line-height: 1.22; font-weight: 600; letter-spacing: -.045em; text-wrap: balance; }
+.button { display: inline-flex; justify-content: center; align-items: center; gap: 24px; min-height: 52px; padding: 13px 24px; border: 1px solid transparent; border-radius: 3px; font-size: 14px; line-height: 1.5; font-weight: 500; transition: background var(--duration-ui), color var(--duration-ui), border-color var(--duration-ui); }
+.button svg { width: 18px; height: 18px; transition: transform var(--duration-ui) var(--ease-out); }
+.button:hover svg { transform: translate(2px, -2px); }
+.button--primary { background: var(--color-accent); color: white; }
+.button--primary:hover { background: #ab2431; }
+.button--secondary { border-color: currentColor; color: inherit; }
+.button--secondary:hover { background: #88888812; }
+.state-panel { padding: clamp(32px, 5vw, 72px); border: 1px solid var(--color-line); text-align: center; }
+.state-panel p { max-width: 48ch; margin: 12px auto 24px; color: var(--color-muted-light); line-height: 1.8; }
+.state-panel .button { margin-top: 8px; }
+@media(max-width: 767px) { .button { min-height: 48px; padding-inline: 20px; gap: 18px; } }
 
 /* 动效降级（优化方案 F-20）：系统开启"减少动态效果"时，停用全站过渡与关键帧动画 */
 @media (prefers-reduced-motion: reduce) {
@@ -22,26 +52,28 @@ body {
 /* 富文本正文排版（后台 wangeditor 产出的 HTML，经后端 HtmlSanitizer 消毒后 v-html 注入）。
    作品详情、学习资料详情共用，故收敛到全局样式，避免依赖路由懒加载顺序。 */
 .rich-content {
-  color: #d1d5db;
-  line-height: 1.75;
+  color: #37383e;
+  font-size: clamp(16px, 1.3vw, 18px);
+  line-height: 1.9;
+  overflow-wrap: anywhere;
 }
 .rich-content h2 {
   margin: 1.5em 0 0.75em;
   font-size: 1.5rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--color-ink);
 }
 .rich-content h3 {
   margin: 1.25em 0 0.5em;
   font-size: 1.125rem;
   font-weight: 600;
-  color: #e5e7eb;
+  color: var(--color-ink);
 }
 .rich-content h4 {
   margin: 1em 0 0.5em;
   font-size: 1rem;
   font-weight: 600;
-  color: #e5e7eb;
+  color: var(--color-ink);
 }
 .rich-content p {
   margin: 0.75em 0;
@@ -62,14 +94,15 @@ body {
 .rich-content blockquote {
   margin: 1em 0;
   padding: 0.5em 1em;
-  border-left: 3px solid #6366f1;
-  color: #9ca3af;
+  border-left: 2px solid var(--color-accent);
+  color: var(--color-muted-light);
 }
 .rich-content pre {
   margin: 1em 0;
   padding: 1em;
   border-radius: 0.75rem;
   background: #0f172a;
+  color: #e5e7eb;
   border: 1px solid rgba(255, 255, 255, 0.1);
   overflow-x: auto;
 }
@@ -82,13 +115,18 @@ body {
   padding: 0;
 }
 .rich-content a {
-  color: #818cf8;
+  color: var(--color-accent);
   text-decoration: underline;
+  text-underline-offset: 4px;
 }
 .rich-content img {
   max-width: 100%;
   border-radius: 0.5rem;
 }
+.rich-content table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin-block: 24px; }
+.rich-content th, .rich-content td { border: 1px solid var(--color-line); padding: 12px 16px; text-align: left; min-width: 110px; }
+.rich-content th { background: #e9e6df; color: var(--color-ink); }
+.rich-content hr { border: 0; border-top: 1px solid var(--color-line); margin-block: 40px; }
 
 /* ============================================================
    AI 助手对话框的 Markdown 渲染排版
