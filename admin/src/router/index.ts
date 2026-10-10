@@ -181,6 +181,12 @@ export const permissionRoutes: RouteRecordRaw[] = [
         meta: { title: 'AI 配置', icon: 'ChatDotSquare', permission: 'ai:view' },
       },
       {
+        path: 'ai-console',
+        name: 'AiConsole',
+        component: () => import('@/views/ai/AiConsoleView.vue'),
+        meta: { title: 'AI 会话', icon: 'ChatLineSquare', permission: 'ai:view' },
+      },
+      {
         path: 'logs',
         name: 'Logs',
         component: () => import('@/views/logs/LogsView.vue'),

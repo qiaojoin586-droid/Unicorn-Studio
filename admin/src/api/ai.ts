@@ -62,3 +62,88 @@ export const aiApi = {
   test: (data: { apiKey?: string; apiUrl?: string; model?: string }) =>
     http.post<AiTestResult>('/api/admin/ai-config/test', data),
 }
+
+/* ==================== AI 会话后台（§6.5 接口 1~5） ==================== */
+
+/** 会话列表项（对应后端 AdminSessionVO） */
+export interface AdminSession {
+  /** ULID 会话 id */
+  id: string
+  /** 所属站点用户（public_user.id），游客会话为 null */
+  userId: number | null
+  title: string | null
+  /** 含已软删除的消息数，所以不能用来判断「是否已清空」 */
+  messageCount: number | null
+  lastActiveAt: string | null
+  createdAt: string | null
+}
+
+/** 消息项（对应后端 AdminMessageVO） */
+export interface AdminMessage {
+  id: number
+  conversationId: string
+  userId: number | null
+  /** user / assistant */
+  role: string
+  /** 列表接口是 SQL 截断的 ~100 字摘要，详情接口是全文 */
+  content: string
+  /** completed / interrupted / empty / blocked */
+  status: string
+  /** 命中的敏感词（仅 status=blocked 时有值） */
+  blockedWord: string | null
+  tokenUsage: number | null
+  /** 用户是否已清空这条消息 */
+  deleted: boolean
+  createdAt: string | null
+}
+
+/** 清理执行摘要（对应后端 CleanupStatus） */
+export interface AiCleanupStatus {
+  retentionDays: number
+  /** cron 表达式原文 */
+  cron: string
+  nextRunAt: string | null
+  lastRunAt: string | null
+  /** scheduled / manual */
+  lastRunTrigger: string | null
+  lastRunDeleted: number | null
+  /** 最近一次失败原因，空串表示没失败过 */
+  lastError: string | null
+}
+
+/** 单次清理报告（对应后端 CleanupRunReport） */
+export interface AiCleanupReport {
+  trigger: string
+  dryRun: boolean
+  /** 是否因单轮删除上限被截断（还有数据留到下次） */
+  capped: boolean
+  message: string
+  startedAt: string | null
+  /** 保留截止时间：删的是 created_at < cutoff 的行 */
+  cutoff: string | null
+  /** 预演统计到的过期条数（dry-run 时就是实际会删的数量） */
+  expiredMessages: number
+  expiredConversations: number
+  deletedMessages: number
+  deletedConversations: number
+  batches: number
+  durationMs: number
+}
+
+export const aiAdminApi = {
+  /** 会话列表：可按用户、时间区间筛；includeDeleted=false 只返回「还有可见消息」的会话 */
+  conversations: (params: Record<string, any>) => http.get<{ list: AdminSession[]; total: number }>('/api/admin/ai/conversations', params),
+
+  /** 某会话的全部消息（含用户已清空的，带 deleted 标记），content 是全文 */
+  conversationMessages: (id: string, params: Record<string, any>) =>
+    http.get<{ list: AdminMessage[]; total: number }>(`/api/admin/ai/conversations/${id}/messages`, params),
+
+  /** 跨会话检索：status 传 blocked 即违规提问筛选；content 是 ~100 字摘要 */
+  searchMessages: (params: Record<string, any>) => http.get<{ list: AdminMessage[]; total: number }>('/api/admin/ai/messages', params),
+
+  /** 清理执行摘要 */
+  cleanupStatus: () => http.get<AiCleanupStatus>('/api/admin/ai/cleanup/status'),
+
+  /** 手动触发清理；dryRun=true 只统计不删除（dryRun 走 query 参数，后端是 @RequestParam） */
+  cleanup: (dryRun: boolean) => http.post<AiCleanupReport>('/api/admin/ai/cleanup', undefined, { params: { dryRun } }),
+}

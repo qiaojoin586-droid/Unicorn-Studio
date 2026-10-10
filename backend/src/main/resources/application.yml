@@ -164,6 +164,18 @@ app:
     # 工具层（Function Calling 扩展位，见 AIWorker/tool）：
     # false=只做基础问答（当前默认，符合「现阶段先实现最基础的问答功能」）；
     # true=把已注册的 AiTool 实现装配给模型，启用前请确认工具实现已就绪。
+    # ==================== AI 历史 90 天清理（§7.4 / §7.5）====================
+    # 保留天数固定 90，不进后台可调列表：可调 = 多一个出错面（误设成 7 天，用户历史突然消失）。
+    history-cleanup:
+      retention-days: ${AI_HISTORY_RETENTION_DAYS:90}
+      # 单批删除行数，与 RetentionService.BATCH_SIZE 一致
+      batch-size: 2000
+      # 默认每日 04:30，错开既有定时任务：01:00 统计 / 02:00 备份 / 03:00 封禁清理 / 03:30 数据保留。
+      # ⚠️ 不要挪到 03:45 —— 距 retention 的 03:30 只差 15 分钟，两者共用 Druid 池（max-active 20）。
+      cron: ${AI_HISTORY_CLEANUP_CRON:0 30 4 * * *}
+      # 单轮最多删除行数（消息 + 会话合计），防首次接入时一次删空造成长事务/主从延迟
+      max-delete-per-run: ${AI_HISTORY_MAX_DELETE:50000}
+    # ==================== AI 工具（§7.6）====================
     tools:
       enabled: ${AI_TOOLS_ENABLED:false}
     # AI 接口地址（apiUrl）域名白名单，逗号分隔（S-3）。

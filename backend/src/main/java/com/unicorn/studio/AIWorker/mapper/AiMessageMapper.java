@@ -1,13 +1,13 @@
 package com.unicorn.studio.AIWorker.mapper;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.unicorn.studio.AIWorker.entity.AiMessage;
-import org.apache.ibatis.annotations.Mapper;
-import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
-import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.annotations.*;
 
+import java.time.LocalDateTime;
 import java.util.List;
+
 
 @Mapper
 public interface AiMessageMapper extends BaseMapper<AiMessage> {
@@ -70,4 +70,23 @@ public interface AiMessageMapper extends BaseMapper<AiMessage> {
                       @Param("content") String content,
                       @Param("status") String status,
                       @Param("tokenUsage") Integer tokenUsage);
+
+    /**
+     * 后台检索的列投影（文档 §6.5：列表只给 ~100 字摘要，不整列拉 MEDIUMTEXT）。
+     * <p>
+     * 用法同 {@code WorkMapper.cardProjection()}：只负责投影，筛选条件与分页由调用方加。
+     * ⚠️ 漏投影的列不会报错，只会<b>在实体里永远是 null</b> —— 后台列表看着"都是游客、
+     * 没有命中词、也没有已清空标记"，排查起来很费时间。这里必须与 {@code AdminMessageVO}
+     * 的字段一一对应。
+     */
+    default QueryWrapper<AiMessage> adminListProjection(){
+        return new QueryWrapper<AiMessage>()
+                .select("id","conversation_id","user_id","role",
+                        "CONCAT(LEFT(content, 100), IF(CHAR_LENGTH(content) > 100, '...', '')) AS content",
+                        "status","blocked_word","token_usage","deleted_at","created_at");
+    }
+
+    /** 删除 createdAt 早于 cutoff 的记录，最多 limit 条 */
+    @Delete("DELETE FROM ai_message WHERE created_at < #{cutoff} LIMIT #{limit}")
+    int deleteBefore(@Param("cutoff") LocalDateTime cutoff, @Param("limit") int limit);
 }
