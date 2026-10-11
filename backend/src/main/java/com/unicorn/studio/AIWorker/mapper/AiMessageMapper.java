@@ -87,6 +87,21 @@ public interface AiMessageMapper extends BaseMapper<AiMessage> {
     }
 
     /** 删除 createdAt 早于 cutoff 的记录，最多 limit 条 */
+    /**
+     * 返回真实删除的行数
+     */
     @Delete("DELETE FROM ai_message WHERE created_at < #{cutoff} LIMIT #{limit}")
     int deleteBefore(@Param("cutoff") LocalDateTime cutoff, @Param("limit") int limit);
+
+    /**
+     * 清空会话软删除：会话内所有消息
+     * 返回真实删除的行数
+     */
+    @Update("""
+            UPDATE ai_message
+            SET deleted_at = NOW()
+            WHERE conversation_id = #{conversationId} AND deleted_at IS NULL
+            """)
+    int softDeleteByConversation(@Param("conversationId") String conversationId);
+
 }

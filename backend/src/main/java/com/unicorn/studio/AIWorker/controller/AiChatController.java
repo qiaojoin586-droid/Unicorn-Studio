@@ -94,7 +94,7 @@ public class AiChatController {
     public ApiResponse<PageResult<SessionVO>> listSessions(
             @RequestParam(defaultValue = "1") int page,
             @RequestParam(defaultValue = "20") int pageSize){
-        return ApiResponse.ok(aiSessionService.listSessions(currentSiteUser().getId(), page, pageSize));
+        return ApiResponse.ok(aiSessionService.findVisibleConversations(currentSiteUser().getId(), page-1, pageSize));
     }
 
     /**
@@ -107,7 +107,13 @@ public class AiChatController {
             @PathVariable String id,
             @RequestParam(defaultValue = "0") int beforeId,
             @RequestParam(defaultValue = "30") int limit){
-        return ApiResponse.ok(aiSessionService.pageMessages(id, currentSiteUser().getId(), beforeId, limit));
+        return ApiResponse.ok(aiSessionService.findVisibleMessages(id, currentSiteUser().getId(), beforeId, limit));
+    }
+
+    @DeleteMapping("/sessions/{id}")
+    public ApiResponse<Void> clearSession(@PathVariable String id){
+        aiSessionService.clearConversation(id, currentSiteUser().getId());
+        return ApiResponse.ok();
     }
 
 
