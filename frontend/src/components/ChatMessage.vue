@@ -4,17 +4,17 @@
     <div
       class="w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5"
       :class="isUser
-        ? 'bg-indigo-600'
-        : 'bg-gradient-to-br from-indigo-500 to-purple-600'"
+        ? 'bg-[#C92D3B] text-white'
+        : 'bg-white/10 text-white'"
     >
-      {{ isUser ? '🧑' : '🦄' }}
+      <span aria-hidden="true">{{ isUser ? '我' : 'AI' }}</span>
     </div>
 
     <!-- Bubble -->
     <div
       class="rounded-2xl px-4 py-3 max-w-[85%] min-w-0"
       :class="isUser
-        ? 'bg-indigo-600 text-white rounded-tr-sm'
+        ? 'bg-[#C92D3B] text-white rounded-tr-sm'
         : 'bg-white/5 border border-white/10 text-gray-200 rounded-tl-sm'"
     >
       <!--

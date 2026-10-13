@@ -6,12 +6,6 @@
     `bounds.maxW` 统一按视口夹紧；两处同时约束会让「实际渲染宽度」与
     「参与定位/拉伸计算的宽度」不一致，导致拖拽边缘时错位。
   -->
-  <div
-    v-if="store.isOpen"
-    data-ai-panel
-    class="fixed z-50"
-    :style="[panelStyle, sizeStyle]"
-  >
     <transition
       enter-active-class="transition duration-300 ease-out"
       enter-from-class="opacity-0 translate-y-4 scale-95"
@@ -20,11 +14,14 @@
       leave-from-class="opacity-100 translate-y-0 scale-100"
       leave-to-class="opacity-0 translate-y-4 scale-95"
     >
+      <div v-if="store.isOpen" data-ai-panel class="ai-panel fixed" :style="[panelStyle, sizeStyle]">
       <div
+        id="ai-dialog"
         ref="dialogPanel"
         role="dialog"
+        :aria-modal="isCompact ? 'true' : undefined"
         aria-label="AI 助手对话"
-        class="relative bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col w-full h-full"
+        class="ai-dialog relative border border-white/20 rounded-xl shadow-2xl overflow-hidden flex flex-col w-full h-full"
       >
         <!-- Header：同时是「整体拖动」的抓手（光标变 move）。
              `touch-none` 让触屏拖动不被页面滚动抢走；`select-none` 防止拖出选区。
@@ -35,21 +32,22 @@
           @pointerdown="startPairDrag"
           title="按住拖动整个对话框"
         >
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm">
-              🦄
+          <div class="ai-panel-heading flex items-center gap-3">
+            <div class="ai-symbol w-8 h-8 rounded-full flex items-center justify-center text-xs" aria-hidden="true">
+              AI
             </div>
             <div>
               <h3 class="text-white font-semibold text-sm">AI 助手</h3>
-              <p class="text-gray-500 text-xs">独角兽工作室智能助手</p>
+              <p class="text-gray-400 text-xs">独角兽工作室智能助手</p>
             </div>
           </div>
           <!-- 按钮区不参与拖动，否则点「清空/关闭」时轻微抖动会把面板挪走 -->
           <div class="flex items-center gap-2" @pointerdown.stop>
+            <button type="button" class="dialog-control" @click="resetToDefault" aria-label="重置对话框位置" title="重置位置"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10a8 8 0 1 1 1.8 7M4 4v6h6" stroke="currentColor" stroke-width="1.5" /></svg></button>
             <button
               v-if="store.hasMessages"
               @click="store.clearMessages()"
-              class="text-gray-500 hover:text-gray-300 transition p-1"
+              class="dialog-control"
               title="清空对话"
               aria-label="清空对话"
             >
@@ -59,7 +57,7 @@
             </button>
             <button
               @click="store.closeChat()"
-              class="text-gray-500 hover:text-gray-300 transition p-1"
+              class="dialog-control"
               title="关闭"
               aria-label="关闭对话"
             >
@@ -78,7 +76,7 @@
         >
           <!-- Welcome message -->
           <div v-if="!store.hasMessages && !store.streamingText" class="text-center py-8">
-            <div class="text-4xl mb-3">🦄</div>
+            <div class="welcome-mark" aria-hidden="true">AI<span> / </span>UNICORN</div>
             <p class="text-gray-400 text-sm leading-relaxed">
               你好！我是独角兽工作室的 AI 助手。<br />
               有什么可以帮你的吗？
@@ -95,21 +93,21 @@
 
           <!-- Streaming message（同样走 Markdown 渲染，边流边排版） -->
           <div v-if="store.streamingText" class="flex gap-3">
-            <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
-              🦄
+            <div class="ai-symbol w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5" aria-hidden="true">
+              AI
             </div>
             <!-- 气泡样式必须与 ChatMessage 的 assistant 分支保持一致（含 text-gray-200），
                  否则流式阶段文字会继承默认黑色，在深色气泡上变成「一片黑框」。 -->
             <div class="bg-white/5 border border-white/10 text-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%] min-w-0">
               <div ref="streamingBody" class="md-body" v-html="streamingHtml" />
-              <span class="inline-block w-1.5 h-4 bg-indigo-400 animate-pulse ml-0.5 align-middle" />
+              <span class="stream-cursor inline-block w-1.5 h-4 animate-pulse ml-0.5 align-middle" />
             </div>
           </div>
 
           <!-- Thinking indicator -->
           <div v-if="store.isLoading && !store.streamingText" class="flex gap-3">
-            <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs flex-shrink-0">
-              🦄
+            <div class="ai-symbol w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0" aria-hidden="true">
+              AI
             </div>
             <div class="bg-white/5 border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3">
               <div class="flex gap-1">
@@ -121,12 +119,15 @@
           </div>
         </div>
 
+        <button v-if="!stickToBottom && (store.hasMessages || store.streamingText)" type="button" class="latest-message" @click="scrollToLatest">回到最新消息 ↓</button>
+
         <!-- 停止生成（优化方案 F-11）：流式响应期间可中断，保留已生成部分 -->
         <div v-if="store.isLoading" class="px-4 pt-2.5 flex justify-center flex-shrink-0">
           <button
             type="button"
             @click="stopStream"
-            class="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-full px-3 py-1 transition"
+            data-stop-generation
+            class="inline-flex min-h-11 items-center gap-1.5 text-xs text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-full px-3 py-1 transition"
           >
             <span class="w-2 h-2 rounded-sm bg-current inline-block"></span>
             停止生成
@@ -134,6 +135,7 @@
         </div>
 
         <!-- Input area -->
+        <p class="sr-only" role="status">{{ store.isLoading ? '正在生成回复' : store.hasMessages ? '回复已完成' : '' }}</p>
         <ChatInput @send="handleSend" :disabled="store.isLoading" />
 
         <!-- 拉伸把手（八向）：四条边 + 四个角。
@@ -144,13 +146,12 @@
         <div
           v-for="handle in RESIZE_HANDLES"
           :key="handle.dir"
-          class="group absolute z-10 touch-none"
+          class="resize-handle group absolute z-10 touch-none"
           :class="handle.cls"
           :data-resize="handle.dir"
           @pointerdown="startResize(handle.dir, $event)"
           @dblclick="onHandleDblClick(handle)"
-          :role="handle.corner ? 'separator' : null"
-          :aria-label="handle.corner ? '拖拽调整对话框大小' : null"
+          aria-hidden="true"
           :title="handle.corner ? '拖拽调整大小（双击切换默认/放大）' : null"
         >
           <span
@@ -179,8 +180,8 @@
           />
         </div>
       </div>
+      </div>
     </transition>
-  </div>
 </template>
 
 <script setup>
@@ -198,6 +199,21 @@ const messagesContainer = ref(null)
 const streamingBody = ref(null)
 const dialogPanel = ref(null)
 const stickToBottom = ref(true)
+const isCompact = ref(false)
+let returnFocus = null
+
+function syncCompact() { isCompact.value = window.innerWidth < 640 }
+function focusDialog() {
+  const panel = dialogPanel.value
+  const field = panel?.querySelector('input:not(:disabled)')
+  const fallback = panel?.querySelector('[data-stop-generation]') || panel?.querySelector('button:not(:disabled), a[href]')
+  ;(field || fallback || panel)?.focus()
+}
+function scrollToLatest() {
+  stickToBottom.value = true
+  const el = messagesContainer.value
+  if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
+}
 
 // 布局（位置 + 尺寸）由 useResizablePanel 统一管理，并与对话图标共享**同一份单例状态**：
 //   · panelStyle —— 对话框定位（left/top）。拖动图标或拖动本面板的表头，两边一起位移；
@@ -209,6 +225,7 @@ const {
   startPairDrag,
   startResize,
   toggleDefaultSize,
+  resetToDefault,
   attach,
 } = useResizablePanel({
   storageKey: 'unicorn.aiChat.panelSize',
@@ -307,30 +324,79 @@ watch(streamingHtml, () => nextTick(() => hardenLinks(streamingBody.value)))
 // ESC 关闭 + 打开时焦点移入输入框（优化方案 F-16）
 function onKeydown(e) {
   if (e.key === 'Escape' && store.isOpen) store.closeChat()
+  if (e.key === 'Tab' && isCompact.value && store.isOpen) {
+    const items = [...(dialogPanel.value?.querySelectorAll('button:not(:disabled), input:not(:disabled), a[href], [tabindex="0"]') || [])].filter(el => el.getClientRects().length)
+    const first = items[0]
+    const last = items[items.length - 1]
+    if (!dialogPanel.value?.contains(document.activeElement)) { e.preventDefault(); first?.focus() }
+    else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus() }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus() }
+  }
 }
+
+function syncBackground() {
+  const modal = store.isOpen && isCompact.value
+  for (const el of document.querySelectorAll('#main-content, .site-header, .site-footer')) el.inert = modal
+  const launcher = document.querySelector('[data-ai-icon]')
+  if (launcher) launcher.inert = modal
+  document.body.classList.toggle('ai-modal-open', modal)
+}
+watch(isCompact, async compact => {
+  syncBackground()
+  if (compact && store.isOpen) { await nextTick(); focusDialog() }
+})
+watch(() => store.isLoading, async () => {
+  await nextTick()
+  if (store.isOpen && isCompact.value && !dialogPanel.value?.contains(document.activeElement)) focusDialog()
+})
 
 watch(
   () => store.isOpen,
   (open) => {
     if (open) {
+      returnFocus = document.querySelector('[data-ai-trigger]') || document.activeElement
+      syncCompact()
+      syncBackground()
       window.addEventListener('keydown', onKeydown)
       nextTick(() => {
-        dialogPanel.value?.querySelector('input')?.focus()
+        focusDialog()
       })
     } else {
       window.removeEventListener('keydown', onKeydown)
+      syncBackground()
+      if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus({ preventScroll: true })
     }
   },
 )
 
 onMounted(() => {
   attach()
+  syncCompact()
+  window.addEventListener('resize', syncCompact, { passive: true })
   hardenLinks(streamingBody.value)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('resize', syncCompact)
+  for (const el of document.querySelectorAll('#main-content, .site-header, .site-footer, [data-ai-icon]')) el.inert = false
+  document.body.classList.remove('ai-modal-open')
   // 取消挂起的节流帧，避免卸载后仍触发一次渲染
   cancelAnimationFrame(streamRafId)
 })
 </script>
+<style scoped>
+.ai-panel { z-index: var(--z-dialog); color: var(--color-paper); }
+.ai-dialog { background: var(--color-surface-dark); }
+.ai-symbol { background: #333439; color: var(--color-paper); font: 10px var(--font-mono); }
+.ai-panel-heading { min-width: 0; }
+.ai-panel-heading > div:last-child { min-width: 0; }
+.ai-panel-heading p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dialog-control { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; color: var(--color-muted-dark); border-radius: 4px; transition: color var(--duration-fast), background var(--duration-fast); }
+.dialog-control:hover { color: white; background: #ffffff0c; }
+.welcome-mark { margin: 12px 0 24px; font: 15px var(--font-mono); letter-spacing: -.04em; color: var(--color-paper); }
+.welcome-mark span { color: var(--color-accent-on-dark); }
+.stream-cursor { background: var(--color-accent-on-dark); }
+.latest-message { align-self: center; padding: 10px 18px; font-size: 12px; color: var(--color-accent-on-dark); min-height: 44px; }
+@media(max-width:639px) { .ai-panel { left: 12px !important; top: max(12px, env(safe-area-inset-top)) !important; width: calc(100% - 24px) !important; height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important; } .resize-handle { display: none; } .dialog-control { width: 44px; } }
+</style>

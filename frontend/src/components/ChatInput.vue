@@ -8,20 +8,21 @@
         placeholder="输入你的问题..."
         maxlength="2000"
         aria-label="输入你的问题"
-        class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+        class="chat-field flex-1 min-w-0 bg-white/5 border border-white/20 rounded-lg px-4 py-3 text-sm text-white placeholder-gray-400 disabled:opacity-50 disabled:cursor-not-allowed transition"
         @keydown.enter.exact.prevent="onEnter"
       />
       <button
         type="submit"
+        aria-label="发送消息"
         :disabled="disabled || !inputText.trim()"
-        class="w-9 h-9 flex items-center justify-center rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:cursor-not-allowed text-white transition flex-shrink-0"
+        class="chat-send w-11 h-11 flex items-center justify-center rounded-lg disabled:opacity-40 disabled:cursor-not-allowed text-white transition flex-shrink-0"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19V5m0 0l-7 7m7-7l7 7" />
         </svg>
       </button>
     </form>
-    <p class="text-gray-500 text-[10px] mt-1.5 text-center">AI 生成内容仅供参考</p>
+    <p class="text-gray-400 text-xs mt-2 text-center">AI 生成内容仅供参考</p>
   </div>
 </template>
 
@@ -52,3 +53,8 @@ function onEnter(e) {
   handleSubmit()
 }
 </script>
+<style scoped>
+.chat-field:focus-visible { outline: 2px solid var(--color-accent-on-dark); outline-offset: 1px; }
+.chat-send { background: var(--color-accent); }
+.chat-send:hover:not(:disabled) { background: #ab2431; }
+</style>
