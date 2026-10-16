@@ -4,6 +4,7 @@ import com.unicorn.studio.AIWorker.config.AiConfigProvider;
 import com.unicorn.studio.AIWorker.config.AiRuntimeConfig;
 import com.unicorn.studio.AIWorker.tool.AiToolRegistry;
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.service.SensitiveWordService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
@@ -36,19 +37,29 @@ public class AiChatService {
 
     private static final Logger log = LoggerFactory.getLogger(AiChatService.class);
 
+    /** 命中敏感词时的拒绝文案（文档 §9.1，原文给定，可配置） */
+    private static final String BLOCKED_REPLY = "抱歉，该内容不符合平台规范，我无法回答。换个说法我们再聊聊？";
+
     private final AiConfigProvider configProvider;
     private final ChatClientFactory clientFactory;
     private final AiToolRegistry toolRegistry;
     private final AiSessionService aisessionService;
+    private final AiQuotaService aiquotaService;
+    private final SensitiveWordService sensitiveWordService;
 
 
     public AiChatService(AiConfigProvider configProvider,
                          ChatClientFactory clientFactory,
-                         AiToolRegistry toolRegistry, AiSessionService aisessionService) {
+                         AiToolRegistry toolRegistry,
+                         AiSessionService aisessionService,
+                         AiQuotaService aiquotaService,
+                         SensitiveWordService sensitiveWordService) {
         this.configProvider = configProvider;
         this.clientFactory = clientFactory;
         this.toolRegistry = toolRegistry;
         this.aisessionService = aisessionService;
+        this.aiquotaService = aiquotaService;
+        this.sensitiveWordService = sensitiveWordService;
     }
 
     /**
@@ -60,8 +71,23 @@ public class AiChatService {
      */
     public Flux<String> stream(String userMessage, String conversationId,
                                Long userId, String clientMsgId) {
-        // ① 落 user 行（幂等：同 clientMsgId 重发不插第二条）
-        aisessionService.appendUserMessage(conversationId, userId, userMessage, clientMsgId);
+        // ⓪ 敏感词阻断（文档 §9.1：必须在调用模型之前）。
+        // 命中也要落库（status=blocked + 命中词），否则无法审计"谁问了什么违规内容"。
+        // ⚠️ 日志只打命中词、绝不打消息全文（§9.2：聊天内容里会有用户主动输入的密码/密钥）。
+        String hit = sensitiveWordService.findSensitive(userMessage);
+        if (hit != null) {
+            aisessionService.appendUserMessage(conversationId, userId, userMessage,
+                    clientMsgId, "blocked", hit);
+            // 拒答也要落库：否则用户刷新后只剩一条孤零零的提问，看不出"我问过、被拒了"
+            aisessionService.appendBlockedReply(conversationId, userId, BLOCKED_REPLY);
+            log.info("AI 提问命中敏感词，已阻断 userId={} conversationId={} word={}", userId, conversationId, hit);
+            // 阻断并返回固定文案
+            return Flux.just(BLOCKED_REPLY);
+        }
+        // ①.1 流式计费（文档 §9.1：必须在调用模型之前）
+        aiquotaService.consume(userId);
+        // ①.2 落 user 行（幂等：同 clientMsgId 重发不插第二条）
+        aisessionService.appendUserMessage(conversationId, userId, userMessage, clientMsgId, "completed", null);
 
         // ② 历史上下文（正序）。注意元素类型是 Spring AI 的 Message，不是本项目的 AiMessage 实体
         List<Message> history = aisessionService.loadContext(conversationId, userId).stream()

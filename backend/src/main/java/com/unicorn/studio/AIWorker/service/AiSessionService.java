@@ -153,23 +153,34 @@ public class AiSessionService {
         log.info("清空对话 conversationId={} userId={} 软删消息 {} 条", conversationId, userId, affected);
     }
 
-    // 加幂次去重
+    /**
+     * 落库一条 user 消息。
+     * <p>
+     * <b>{@code status} / {@code blockedWord} 由调用方决定</b>：正常提问传 {@code completed} + null；
+     * 命中敏感词时传 {@code blocked} + 命中词（文档 §9.1：阻断<b>也要落库</b>，否则无法审计
+     * "谁问了什么违规内容"；命中词要记录，词库变化后才能复核）。
+     *
+     * @return 新消息 id；命中 {@code clientMsgId} 幂等去重时返回 {@code null}
+     */
     @Transactional
-    public void appendUserMessage(String conversationId, Long userId, String content, String clientMsgId){
+    public Long appendUserMessage(String conversationId, Long userId, String content,
+                                  String clientMsgId, String status, String blockedWord) {
         Long existed = messageMapper.findIdByClientMsgId(conversationId, clientMsgId);
         if (existed != null) {
-            return;
+            return null;
         }
         AiMessage msg = new AiMessage();
         msg.setConversationId(conversationId);
         msg.setUserId(userId);
         msg.setRole("user");
         msg.setContent(content);
-        msg.setStatus("completed");
+        msg.setStatus(status);
         msg.setClientMsgId(clientMsgId);
-        msg.setContextEligible(1);
+        msg.setBlockedWord(blockedWord);
+        msg.setContextEligible("blocked".equals(status) ? 0 : 1);
         messageMapper.insert(msg);
         touchConversation(conversationId);
+        return msg.getId();
     }
 
     // AI生成回复消息
@@ -186,6 +197,25 @@ public class AiSessionService {
         msg.setContextEligible(1);
         messageMapper.insert(msg);
         return msg.getId();
+    }
+
+    /**
+     * 落一条「拒答」助手行（敏感词阻断，文档 §9.1）。
+     */
+    @Transactional
+    public void appendBlockedReply(String conversationId, Long userId, String reply) {
+        AiMessage msg = new AiMessage();
+        msg.setConversationId(conversationId);
+        msg.setUserId(userId);
+        msg.setRole("assistant");
+        msg.setContent(reply);
+        msg.setStatus("blocked");
+        msg.setClientMsgId(null);
+        // 拒绝文案不进上下文：不是模型输出，留着只会占窗口名额
+        msg.setContextEligible(0);
+        messageMapper.insert(msg);
+        // 让 message_count 把这次拒答算进去，否则会话里「用户 7 条 / 助手 5 条」对不上
+        touchConversation(conversationId);
     }
 
     // 完成回复消息或中断返回token使用

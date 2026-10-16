@@ -150,6 +150,20 @@ public class AiChatController {
                                 completeQuietly(emitter, finished);
                             },
                             () -> completeQuietly(emitter, finished));
+        } catch (BusinessException e) {
+            // 429（问答配额超限）必须原样抛出，让 GlobalExceptionHandler 产出真正的 429 ——
+            // 不放行的话 HTTP 状态停在 200，前端只看状态码的 429 分支永远走不到，
+            // 用户只会看到"AI 服务暂不可用"。
+            // ⚠️ 不能写成 "catch (BusinessException) { throw e; }"：AI 未配置时抛的也是
+            // BusinessException.badRequest（AiRuntimeConfig.unavailable()），那样会把
+            // 「200 + 友好提示」变成错误响应。必须按状态码挑。
+            // 此处 emitter 尚未 send 任何分片，响应未提交，改状态码仍然有效（同 @RequireSiteUser）。
+            if (e.getStatusCode().value() == HttpStatus.TOO_MANY_REQUESTS.value()) {
+                throw e;
+            }
+            sendQuietly(emitter, friendlyMessage(e));
+            completeQuietly(emitter, finished);
+            return emitter;
         } catch (RuntimeException e) {
             // 配置不可用等「启动即失败」的情况：同步给出提示后正常收尾
             log.warn("AI 对话启动失败：{}", e.getMessage());

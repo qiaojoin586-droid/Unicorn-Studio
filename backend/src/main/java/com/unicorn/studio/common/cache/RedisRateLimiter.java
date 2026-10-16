@@ -34,9 +34,13 @@ public class RedisRateLimiter {
 
     private final CacheCircuitBreaker breaker;
 
-    public RedisRateLimiter(StringRedisTemplate redis, CacheCircuitBreaker breaker) {
+    /** 只借它的环境前缀（复用同一份拼装逻辑，不自己复制一遍） */
+    private final CacheHelper cache;
+
+    public RedisRateLimiter(StringRedisTemplate redis, CacheCircuitBreaker breaker, CacheHelper cache) {
         this.redis = redis;
         this.breaker = breaker;
+        this.cache = cache;
     }
 
     /**
@@ -52,7 +56,7 @@ public class RedisRateLimiter {
             return true;
         }
         try {
-            Long count = redis.execute(INCR_AND_EXPIRE, List.of(key),
+            Long count = redis.execute(INCR_AND_EXPIRE, List.of(cache.prefixed(key)),
                     String.valueOf(Math.max(1, window.getSeconds())));
             breaker.onSuccess();
             return count != null && count <= limit;

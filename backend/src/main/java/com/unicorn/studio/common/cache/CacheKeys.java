@@ -162,4 +162,17 @@ public final class CacheKeys {
     public static String aiMessagesPattern(String conversationId) {
         return "cache:ai:msgs:" + conversationId + ":*";
     }
+
+    // ---- AI 问答配额（文档 §9.3）----
+    // 日期段由调用方格式化传入：过期时间要按自然日/自然月对齐，键名必须自带窗口类型，
+    // 否则 "202610"（月）与 "20261010"（日）在同一用户下无法区分
+    /** AI 会话每日配额 */
+    public static String aiQuotaDaily(Long userId, String yyyyMMdd){
+        return "chat:quota:" + userId + ":day:" + yyyyMMdd;
+    }
+
+    /** AI 会话月度配额 */
+    public static String aiQuotaMonthly(Long userId, String yyyyMM){
+        return "chat:quota:" + userId + ":month:" + yyyyMM;
+    }
 }
