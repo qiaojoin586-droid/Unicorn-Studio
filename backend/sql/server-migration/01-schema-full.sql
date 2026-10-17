@@ -1640,5 +1640,109 @@ UPDATE sys_permission SET name = '编辑招收方向', module = '主要招收方
 UPDATE sys_permission SET name = '删除招收方向', module = '主要招收方向' WHERE code = 'service:delete';
 
 -- ==========================================================================
+-- V20 迁移：AI 工具层（工具配置表 ai_tool_config / 调用审计表 ai_tool_invocation）
+-- ==========================================================================
+-- 背景：设计方案 §11.1 P4 要求工具调用可观测（原先日志与审计都是零），
+--       §11.2 定义工具配置表；二期 MCP 才用的 ai_mcp_server 本期不建。
+-- 向后兼容：仅新增表，不改动、不删除任何现有表结构与数据；两张新表都不建外键
+--       （本库业务表一律不建外键，见 V19 的说明）。
+-- 幂等：表用 IF NOT EXISTS；索引一律走 information_schema 判存块 ——
+--       因为表已存在时 CREATE TABLE IF NOT EXISTS 会整条跳过，表内索引补不上。
+-- 非破坏：无 DROP / DELETE / TRUNCATE。
+-- 执行方式：随本文件一起执行；亦可用于已初始化库的增量重跑。
+-- ============================================================
+SET NAMES utf8mb4;
+
+-- 1. 工具配置表
+--    ⚠️ scope 是 v1.2 定下的三态，建表前必须定死：原设计只有 tool_type=builtin/api/mcp，
+--    没有「前台能不能用」这个维度，按原文实施会发现前台一个工具都装不上（§11.4 明确指出该矛盾）。
+--    enabled 默认 0（保守），但【内置工具同步入库时置 1】—— 它的描述来自本项目代码、
+--    不存在「被外部篡改」这条路径；让管理员逐个点确认只会导致升级后新工具集体静默不生效。
+CREATE TABLE IF NOT EXISTS ai_tool_config (
+  id             BIGINT       NOT NULL AUTO_INCREMENT,
+  tool_name      VARCHAR(64)  NOT NULL COMMENT '模型看到的工具名（全局唯一）',
+  tool_type      VARCHAR(16)  NOT NULL COMMENT 'builtin / api / mcp',
+  display_name   VARCHAR(64)  NOT NULL,
+  description    VARCHAR(500) NOT NULL COMMENT '【模型路由依据】模型据此判断何时调用，必填',
+  http_method    VARCHAR(8)   NULL COMMENT 'api 类型：GET/POST',
+  http_url       VARCHAR(500) NULL COMMENT 'api 类型：目标地址（受 §11.4 SSRF 防护约束）',
+  http_headers   VARCHAR(1000) NULL COMMENT 'api 类型：JSON；敏感值加密存储',
+  http_body_tmpl VARCHAR(1000) NULL COMMENT 'api 类型：请求体模板',
+  param_schema   VARCHAR(2000) NULL COMMENT 'JSON Schema（P2 改造后由工具声明或后台填写）',
+  mcp_server_id  BIGINT       NULL COMMENT 'mcp 类型（§11.3 二期才建 ai_mcp_server，本期恒为 NULL）',
+  enabled        TINYINT      NOT NULL DEFAULT 0 COMMENT '0禁用 1启用；新行默认禁用（保守）。内置工具同步入库时置 1——其描述来自代码、无被外部篡改的可能',
+  scope          VARCHAR(16)  NOT NULL DEFAULT 'admin' COMMENT '可见范围三态：public=内置只读工具，前台可装配；admin=仅后台管理员；mcp=恒仅后台',
+  priority       INT          NOT NULL DEFAULT 100 COMMENT '越小越优先；用于单轮装配上限的取舍',
+  timeout_ms     INT          NOT NULL DEFAULT 5000 COMMENT '单工具超时（R18 默认 5s）',
+  fingerprint    CHAR(64)     NOT NULL COMMENT '名称+描述+参数Schema 的 SHA-256，用于变更需确认',
+  confirmed_at   DATETIME     NULL COMMENT '管理员确认当前 fingerprint 的时间；内置工具直接写 NOW()',
+  created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ai_tool_name (tool_name),
+  KEY idx_ai_tool_scope_enabled (scope, enabled, priority)
+);
+
+-- 2. 工具调用审计表（§11.7 R16）
+--    ⚠️ args_digest 只存【截断 + 脱敏】后的参数摘要，绝不存返回值全文 ——
+--    返回值可能含正文，几 KB 一条会让本表膨胀成第二个 sys_operation_log（§11.7 六条硬约束第 1 条）。
+--    ⚠️ message_id 的处置（§11.7 v1.2）：流式下工具调用发生在 assistant 消息落库【之前】，
+--    写入时必然为 NULL。本期保留该列并【留待 ⑧ 落库后回填】——
+--    文档给的另一条路是直接删列，但两者都必须选一个；保留而不回填会让人误判成「关联失败」。
+--    ⚠️ 本表必须纳入保留期清理（§7.4 v1.2）：它是「每次工具调用一行」的表，
+--    放任不管就是第二个 sys_operation_log。清理挂在 RetentionService 上（复用后台的 7/15/30/90 天档位）。
+CREATE TABLE IF NOT EXISTS ai_tool_invocation (
+  id              BIGINT       NOT NULL AUTO_INCREMENT,
+  conversation_id VARCHAR(26)  NULL COMMENT 'ai_conversation.id；后台助手为 NULL',
+  message_id      BIGINT       NULL COMMENT '关联的 assistant 消息。流式下写入时必然为 NULL，⑧ 落库后回填',
+  invoker_type    VARCHAR(16)  NOT NULL COMMENT 'site_user / admin；配额与越权排查都依赖它',
+  invoker_id      BIGINT       NOT NULL COMMENT 'public_user.id 或 sys_user.id',
+  tool_name       VARCHAR(64)  NOT NULL,
+  args_digest     VARCHAR(500) NULL COMMENT '参数摘要（截断 500 字符 + 脱敏），绝不存全文',
+  result_status   VARCHAR(16)  NOT NULL COMMENT 'ok / empty / invalid_argument / timeout / upstream_error / forbidden',
+  result_bytes    INT          NULL COMMENT '返回体大小（用于观测大返回值）',
+  duration_ms     INT          NOT NULL,
+  created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+);
+
+-- 2. 工具配置表索引
+--    ⚠️ 表内已写了 UNIQUE / KEY，为什么下面还要再来一遍判存块？
+--    因为表已存在时 CREATE TABLE IF NOT EXISTS 是【整条跳过】的（不是"只跳表体"），
+--    写在括号里的索引一个都不会被创建；而 MySQL 8 的 CREATE INDEX 又没有 IF NOT EXISTS，
+--    裸写会在重跑时抛 Duplicate key name 并中断后续语句。
+--    写法与 V19 段（ai_conversation / ai_message 的 7 个索引）保持一致。
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_tool_config' AND INDEX_NAME = 'uk_ai_tool_name');
+SET @sql := IF(@exists = 0,
+  'CREATE UNIQUE INDEX uk_ai_tool_name ON `ai_tool_config` (tool_name)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_tool_config' AND INDEX_NAME = 'idx_ai_tool_scope_enabled');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_tool_scope_enabled ON `ai_tool_config` (scope, enabled, priority)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 3. 审计表索引（同样理由：表已存在时上面的 CREATE TABLE IF NOT EXISTS 会整条跳过，索引补不上）
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_tool_invocation' AND INDEX_NAME = 'idx_ai_tool_inv_user');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_tool_inv_user ON `ai_tool_invocation` (invoker_id, created_at)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_tool_invocation' AND INDEX_NAME = 'idx_ai_tool_inv_name');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_tool_inv_name ON `ai_tool_invocation` (tool_name, created_at)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_tool_invocation' AND INDEX_NAME = 'idx_ai_tool_inv_created');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_tool_inv_created ON `ai_tool_invocation` (created_at)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- ==========================================================================
 -- 完成。执行 03-verify.sql 校验结构，再导入 02-data.sql。
 -- ==========================================================================

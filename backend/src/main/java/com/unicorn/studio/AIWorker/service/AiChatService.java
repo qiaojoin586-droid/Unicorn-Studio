@@ -107,7 +107,12 @@ public class AiChatService {
         }
 
         ToolCallback[] tools = toolRegistry.callbacks();
-        ChatClient client = clientFactory.client(config, (Object[]) tools);
+        // §11.7 第 6 条：装配清单也要有落点，否则无法区分「工具没生效」与「模型没选它」
+        // （前者查配置/代码，后者改描述措辞，两类故障修法完全不同）。
+        // 这行只含工具名与调用者 id，不含任何用户消息内容，与 §9.2 不冲突。
+        log.info("AI 本轮装配工具：invokerType=site_user invokerId={} tools={}",
+                userId, toolRegistry.registeredNames());
+        ChatClient client = clientFactory.client(config);
 
         StringBuilder acc = new StringBuilder();
         AtomicBoolean finished = new AtomicBoolean(false);

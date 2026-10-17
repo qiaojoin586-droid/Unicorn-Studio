@@ -75,11 +75,15 @@ public class ChatClientFactory {
 
     /**
      * 按运行时配置构建（或复用）ChatClient。
+     * <p>
+     * ⚠️ <b>刻意不接受 tools 参数</b>（文档 §11.1 P1 曾指出它是死参数）：工具在<b>请求级</b>装配
+     * ——{@code AiChatService.stream()} 里的 {@code .toolCallbacks(tools)}，那是唯一正确的位置（§11.6）。
+     * 放这里有两个坏处：① 工具集会被拼进下面的 {@link #fingerprint}，每改一次工具配置就换一个缓存键，
+     * {@code MAX_CACHE=8} 会被击穿、客户端反复重建；② 被复用的同一客户端会串用不同请求的工具集。
      *
      * @param config 已解密的运行时配置
-     * @param tools  需要装配的工具回调（当前阶段为空数组）
      */
-    public ChatClient client(AiRuntimeConfig config, Object... tools) {
+    public ChatClient client(AiRuntimeConfig config) {
         return cached(fingerprint(config) + "|chat", config, CHAT_CONNECT_TIMEOUT, CHAT_READ_TIMEOUT);
     }
 

@@ -12,8 +12,8 @@ SELECT DEFAULT_CHARACTER_SET_NAME AS charset, DEFAULT_COLLATION_NAME AS collatio
        IF(DEFAULT_COLLATION_NAME = 'utf8mb4_0900_ai_ci', 'OK', 'FAIL') AS result
 FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = DATABASE();
 
-SELECT '== 2. 表数量（应为 23）==' AS `check`;
-SELECT COUNT(*) AS table_count, IF(COUNT(*) = 23, 'OK', 'FAIL') AS result
+SELECT '== 2. 表数量（应为 25）==' AS `check`;
+SELECT COUNT(*) AS table_count, IF(COUNT(*) = 25, 'OK', 'FAIL') AS result
 FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_TYPE = 'BASE TABLE';
 
 SELECT '== 3. 列排序规则是否统一（不该有 utf8mb4_unicode_ci 混入）==' AS `check`;
