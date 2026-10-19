@@ -13,10 +13,10 @@
       <!-- 统计卡片：两行 × 4 列 -->
       <el-row :gutter="16" class="stat-row">
         <el-col :xs="24" :sm="12" :lg="6">
-          <StatCard label="今日 PV" :value="summary?.todayPv ?? 0" icon="View" color="#6366f1" />
+          <StatCard label="今日 PV" :value="summary?.todayPv ?? 0" icon="View" color="#414249" />
         </el-col>
         <el-col :xs="24" :sm="12" :lg="6">
-          <StatCard label="今日 UV" :value="summary?.todayUv ?? 0" icon="User" color="#a78bfa" />
+          <StatCard label="今日 UV" :value="summary?.todayUv ?? 0" icon="User" color="#62636a" />
         </el-col>
         <el-col :xs="24" :sm="12" :lg="6">
           <StatCard label="作品数（已发布）" :value="`${summary?.publishedWorks ?? 0}/${summary?.workCount ?? 0}`" icon="Picture" color="#f59e0b" />
@@ -37,7 +37,7 @@
           <StatCard label="今日新增用户" :value="summary?.todayNewUsers ?? 0" icon="Plus" color="#06b6d4" />
         </el-col>
         <el-col :xs="24" :sm="12" :lg="6">
-          <StatCard label="新闻数" :value="summary?.newsCount ?? 0" icon="Document" color="#8b5cf6" />
+          <StatCard label="新闻数" :value="summary?.newsCount ?? 0" icon="Document" color="#414249" />
         </el-col>
       </el-row>
 
@@ -171,8 +171,7 @@ load()
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #a855f7);
-  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+  background: var(--admin-accent);
 }
 .recent-list {
   max-height: 340px;
