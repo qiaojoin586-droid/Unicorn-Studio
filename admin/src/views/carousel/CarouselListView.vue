@@ -1,19 +1,20 @@
 <template>
   <div class="page-container">
     <div class="page-header">
-      <span class="page-title">轮播图管理</span>
+      <span class="page-title">首页媒体与页面背景</span>
       <el-button type="primary" v-permission="'carousel:create'" @click="openDialog()">
-        <el-icon><Plus /></el-icon>&nbsp;{{ activeTab === 'home' ? '新增轮播图' : '新增页面背景' }}
+        <el-icon><Plus /></el-icon>&nbsp;{{ activeTab === 'home' ? '新增首页媒体' : '新增页面背景' }}
       </el-button>
     </div>
 
     <el-tabs v-model="activeTab" @tab-change="onTabChange">
-      <el-tab-pane label="首页轮播" name="home" />
+      <el-tab-pane label="首页媒体" name="home" />
       <el-tab-pane label="页面背景" name="background" />
     </el-tabs>
 
     <!-- 首页轮播（原有语义不变） -->
     <el-card v-if="activeTab === 'home'" shadow="never">
+      <p class="tab-tip">{{ mediaMode === 'single' ? '当前模式：精选单图，仅展示第一张有效且已启用的首页媒体。其他已启用图片保留为候选。' : mediaMode === 'carousel' ? '当前模式：可控轮播，按排序展示已启用的有效媒体，提供前后切换，不自动播放。' : '媒体模式尚未加载，请在首页配置中核对。' }} 标题、副标题展示在媒体区域；设置跳转链接后出现可操作入口。<router-link to="/home">前往首页配置 →</router-link></p>
       <el-table :data="homeList" v-loading="homeLoading">
         <el-table-column label="预览" width="180">
           <template #default="{ row }">
@@ -23,6 +24,7 @@
         </el-table-column>
         <el-table-column prop="title" label="标题" min-width="160" />
         <el-table-column prop="subtitle" label="副标题" min-width="180" />
+        <el-table-column prop="linkUrl" label="跳转链接" min-width="180" show-overflow-tooltip />
         <el-table-column label="排序" prop="sortOrder" width="70" />
         <el-table-column label="状态" width="90">
           <template #default="{ row }">
@@ -149,7 +151,8 @@
             <el-input v-model="form.subtitle" maxlength="200" />
           </el-form-item>
           <el-form-item label="跳转链接">
-            <el-input v-model="form.linkUrl" placeholder="https://…（可选）" />
+            <el-input v-model="form.linkUrl" maxlength="2048" placeholder="/works 或 https://…（可选）" />
+            <div class="field-tip">留空不显示跳转入口；有链接时，标题与图片仍来自本条媒体记录。</div>
           </el-form-item>
         </template>
 
@@ -174,6 +177,8 @@ import { carouselApi } from '@/api/carousel'
 import { useTable } from '@/composables/useTable'
 import ImageUpload from '@/components/ImageUpload.vue'
 import VideoUpload from '@/components/VideoUpload.vue'
+import { presentationApi } from '@/api/presentation'
+const mediaMode = ref('')
 
 const PAGE_LABELS: Record<string, string> = {
   home: '首页轮播',
@@ -209,7 +214,7 @@ const form = reactive<any>({
 
 const isHomeDialog = computed(() => form.pageKey === 'home')
 const isVideoDialog = computed(() => !isHomeDialog.value && form.mediaType === 'video')
-const dialogTitle = computed(() => `${editingId.value ? '编辑' : '新增'}${isHomeDialog.value ? '轮播图' : '页面背景'}`)
+const dialogTitle = computed(() => `${editingId.value ? '编辑' : '新增'}${isHomeDialog.value ? '首页媒体' : '页面背景'}`)
 
 function openDialog(row?: any) {
   editingId.value = row?.id ?? null
@@ -285,6 +290,7 @@ function onTabChange(name: string | number) {
 
 onMounted(() => {
   loadHome()
+  presentationApi.get('home').then((data) => { mediaMode.value = data.mediaMode }).catch(() => { mediaMode.value = '' })
 })
 </script>
 
