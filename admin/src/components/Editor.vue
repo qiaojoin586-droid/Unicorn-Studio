@@ -36,6 +36,7 @@ const toolbarConfig = {
 }
 
 const editorConfig = {
+  autoFocus: false,
   placeholder: '请输入内容…',
   MENU_CONF: {
     uploadImage: {
