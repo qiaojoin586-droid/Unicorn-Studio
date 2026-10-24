@@ -201,17 +201,6 @@ public class AiSessionService {
         return msg.getId();
     }
 
-    /**
-     * 撞键重放：查这条 clientMsgId 已产生的 assistant 回答（文档 §4.5 v1.2）。
-     * <p>
-     * 文档原文：「已 {@code completed} 则原样重放内容，仍在生成中则提示"该消息正在生成"」。
-     *
-     * @return 已存在的 assistant 消息；还没有（正在生成）返回 {@link Optional#empty()}
-     */
-    public Optional<AiMessage> findExistingAssistant(String conversationId, Long userId, String clientMsgId) {
-        return messageMapper.findAssistantReplyFor(conversationId, userId, clientMsgId);
-    }
-
     // AI生成回复消息
     @Transactional
     public Long startAssistantMessage(String conversationId, Long userId){
@@ -226,25 +215,6 @@ public class AiSessionService {
         msg.setContextEligible(1);
         messageMapper.insert(msg);
         return msg.getId();
-    }
-
-    /**
-     * 落一条「拒答」助手行（敏感词阻断，文档 §9.1）。
-     */
-    @Transactional
-    public void appendBlockedReply(String conversationId, Long userId, String reply) {
-        AiMessage msg = new AiMessage();
-        msg.setConversationId(conversationId);
-        msg.setUserId(userId);
-        msg.setRole("assistant");
-        msg.setContent(reply);
-        msg.setStatus("blocked");
-        msg.setClientMsgId(null);
-        // 拒绝文案不进上下文：不是模型输出，留着只会占窗口名额
-        msg.setContextEligible(0);
-        messageMapper.insert(msg);
-        // 让 message_count 把这次拒答算进去，否则会话里「用户 7 条 / 助手 5 条」对不上
-        touchConversation(conversationId);
     }
 
     // 完成回复消息或中断返回token使用
@@ -283,6 +253,25 @@ public class AiSessionService {
         if (updated > 0) {
             log.info("AI 工具调用记录已回填 messageId={}，本会话更新 {} 条", messageId, updated);
         }
+    }
+
+    /**
+     * 落一条「拒答」助手行（敏感词阻断，文档 §9.1）。
+     */
+    @Transactional
+    public void appendBlockedReply(String conversationId, Long userId, String reply) {
+        AiMessage msg = new AiMessage();
+        msg.setConversationId(conversationId);
+        msg.setUserId(userId);
+        msg.setRole("assistant");
+        msg.setContent(reply);
+        msg.setStatus("blocked");
+        msg.setClientMsgId(null);
+        // 拒绝文案不进上下文：不是模型输出，留着只会占窗口名额
+        msg.setContextEligible(0);
+        messageMapper.insert(msg);
+        // 让 message_count 把这次拒答算进去，否则会话里「用户 7 条 / 助手 5 条」对不上
+        touchConversation(conversationId);
     }
 
     // 加载会话上下文

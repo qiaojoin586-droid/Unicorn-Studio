@@ -35,13 +35,24 @@ public interface AiMessageMapper extends BaseMapper<AiMessage> {
                                  @Param("beforeId") long beforeId,
                                  @Param("limit") int limit);
 
-    /** 取最近 N 条作为上下文（调用方反转成正序拼 prompt）。带 user_id 是表约定的「所有查询都校验归属」 */
+    /**
+     * 取最近 N 条作为上下文（调用方反转成正序拼 prompt）。带 user_id 是表约定的「所有查询都校验归属」。
+     * <p>
+     * ⚠️ <b>只取 status='completed' 的行</b>：被中断/出错的 assistant 行是<b>半截内容</b>
+     * （content 停在模型吐到一半的地方），它对模型没有任何信息量，却会占掉上下文窗口的名额，
+     * 还可能让模型困惑「我是不是已经说过这段了」。拒答行（status='blocked'）同理不该进 ——
+     * 那是被拦下的违规提问与固定拒答文案，带进上下文等于让模型反复想起被拒的内容。
+     * <p>
+     * ⚠️ {@code context_eligible} 那一列仍然保留：它是"即使 completed 也不进上下文"的开关
+     * （比如将来要排除某些已完成的行）。两道过滤各管一件事，都不能省。
+     */
     @Select("""
             SELECT id, conversation_id, role, content, status, created_at
             FROM ai_message
             WHERE conversation_id = #{conversationId}
               AND user_id = #{userId}
               AND context_eligible = 1
+              AND status = 'completed'
               AND deleted_at IS NULL
             ORDER BY id DESC
             LIMIT #{limit}
@@ -63,40 +74,6 @@ public interface AiMessageMapper extends BaseMapper<AiMessage> {
             """)
     Long findIdByClientMsgId(@Param("conversationId") String conversationId,
                              @Param("clientMsgId") String clientMsgId);
-
-    /**
-     * 撞键重放：查这条 clientMsgId 对应的回答（文档 §4.5 v1.2「撞键后的行为」）。
-     * <p>
-     * <b>为什么一条 SQL 就够</b>：回答 = 「这条 user 消息<b>之后</b>的第一条 assistant 行」。
-     * 表里 assistant 行与 user 行之间没有外键，只有顺序关系（先 user 后 assistant），
-     * 所以"之后"只能靠 id 大小界定。用子查询一次查完，不必先查 id 再查内容。
-     * <p>
-     * ⚠️ 子查询用 {@code apply} 的 {@code {0}} 占位而不是字符串拼接：
-     * 拼接会被当成 SQL 字面量（{@code inSql} 那种写法在 {@code SysPermissionMapper} 里能用，
-     * 是因为拼进去的是 Long 转出来的纯数字；这里是用户可控的 clientMsgId，拼接即注入）。
-     * {@code apply} 会把占位符转成预编译参数，是安全的那条路。
-     * <p>
-     * ⚠️ {@code user_id} 在<b>子查询和外层都带</b>：外层保证不返回别人的行，
-     * 子查询保证"锚点"也是自己的消息（否则别人的消息 id 也可能被当锚点）。
-     * <p>
-     * ⚠️ {@code .last("LIMIT 1")}：同一轮里模型可能调多次工具、产生多条 assistant 行，
-     * 不加限制 {@code selectOne} 遇多行会抛 TooManyResultsException。
-     *
-     * @return 该消息的 assistant 回答；还没有（正在生成）返回 {@link Optional#empty()}
-     */
-    default Optional<AiMessage> findAssistantReplyFor(String conversationId, Long userId, String clientMsgId) {
-        return Optional.ofNullable(selectOne(new LambdaQueryWrapper<AiMessage>()
-                .select(AiMessage::getId, AiMessage::getConversationId, AiMessage::getRole,
-                        AiMessage::getContent, AiMessage::getStatus, AiMessage::getCreatedAt)
-                .eq(AiMessage::getConversationId, conversationId)
-                .eq(AiMessage::getUserId, userId)
-                .eq(AiMessage::getRole, "assistant")
-                .apply("id > (SELECT id FROM ai_message WHERE conversation_id = {0} "
-                                + "AND user_id = {1} AND client_msg_id = {2})",
-                        conversationId, userId, clientMsgId)
-                .orderByAsc(AiMessage::getId)
-                .last("LIMIT 1")));
-    }
 
     /** 中断/结束时补写 assistant 行（流式是先插占位再更新，见第 3 步） */
     @Update("""

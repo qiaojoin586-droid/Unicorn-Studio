@@ -46,9 +46,6 @@ public class AiChatService {
     /** 命中敏感词时的拒绝文案（文档 §9.1，原文给定，可配置） */
     private static final String BLOCKED_REPLY = "抱歉，该内容不符合平台规范，我无法回答。换个说法我们再聊聊？";
 
-    /** 撞键重放时，上一次回答还没生成/没完成时给用户的提示（文档 §4.5 v1.2） */
-    private static final String REPLAY_IN_PROGRESS = "该消息正在生成，请稍候。";
-
     private final AiConfigProvider configProvider;
     private final ChatClientFactory clientFactory;
     private final AiToolRegistry toolRegistry;
@@ -108,11 +105,17 @@ public class AiChatService {
         Long newMessageId = aisessionService.appendUserMessage(conversationId, userId, userMessage,
                 clientMsgId, "completed", null);
         if (newMessageId == null) {
-            // ⓪' 撞键：这条 clientMsgId 之前已经受理过 ⇒【不再调模型、不再调工具】，
-            // 直接重放上次的回答（文档 §4.5 v1.2「撞键后的行为」）。
-            // ⚠️ 必须在这里 return：往下走会重复调模型、重复调工具（烧真实外部 API 的钱）、
-            // 再插一行 assistant，前端也会看到两份回答。
-            return replayExisting(conversationId, userId, clientMsgId);
+            // ⓪' 撞键：这条 clientMsgId 之前已经受理过 ⇒ user 行不再重复插。
+            // ⚠️ 这里【不返回、继续往下走】：当作一次新的对话正常生成。
+            //   · 不覆盖旧行 —— 旧的半截 assistant 行留着，新结果另起一行；
+            //     列表与上下文都是按 id 倒序取（recentForContext / pageByCursor 都 ORDER BY id DESC），
+            //     新的在前、旧的半截行沉在下面。
+            //   · 半截行不再进上下文（recentForContext 只取 status='completed'），
+            //     所以模型看不到"我上次只答了一半"，不会困惑或重复啰嗦。
+            // ⚠️ 曾试过"返回「该消息正在生成」"：那是个死局 —— 占位行的 status 与被中断的行
+            //   都是 interrupted，分不出"还在跑"和"早就死了"，用户重发一百次都只得到同一句提示。
+            log.info("AI 消息撞幂等键，按新对话继续生成 conversationId={} clientMsgId={}",
+                    conversationId, clientMsgId);
         }
 
         // ② 历史上下文（正序）。注意元素类型是 Spring AI 的 Message，不是本项目的 AiMessage 实体
@@ -188,56 +191,6 @@ public class AiChatService {
             names.add(t.getToolDefinition().name());
         }
         return names;
-    }
-
-    /**
-     * 撞键重放（文档 §4.5 v1.2「撞键后的行为」）。
-     * <p>
-     * <b>为什么要把已存的内容重新切片推出去</b>：前端只认 SSE 帧（{@code data: <分片>}），
-     * 不认"直接给完整答案"。所以这里把已存的回答切片后逐片 yield，
-     * 让前端的表现和正常流式完全一致（前端只管把分片拼起来）。
-     * <p>
-     * <b>⚠️ 重放不算新一轮</b>：不消耗单轮预算、不写新的 assistant 行、不产生工具调用与审计。
-     *
-     * @return 重放内容的分片流；该消息还在生成中时返回一句提示
-     */
-    private Flux<String> replayExisting(String conversationId, Long userId, String clientMsgId) {
-        Optional<AiMessage> existing = aisessionService.findExistingAssistant(conversationId, userId, clientMsgId);
-        if (existing.isEmpty()) {
-            // 还没有 assistant 行 ⇒ 上一次还在生成中（文档：「仍在生成中则提示"该消息正在生成"」）
-            log.info("AI 消息撞幂等键但回答尚未生成，返回「正在生成」提示 clientMsgId={}", clientMsgId);
-            return Flux.just(REPLAY_IN_PROGRESS);
-        }
-        AiMessage answer = existing.get();
-        if (!"completed".equals(answer.getStatus())) {
-            // 有行但不是 completed ⇒ 上一次被中断或失败。
-            // ⚠️ 不能拿半截内容当答案重放（模型当时可能只吐了半句），也不能说"正在生成"（它已经停了）——
-            // 统一按"未完成"提示，让用户知道这条没答完。
-            log.info("AI 消息撞幂等键但上次回答未完成（status={}），返回「未完成」提示 clientMsgId={}",
-                    answer.getStatus(), clientMsgId);
-            return Flux.just(REPLAY_IN_PROGRESS);
-        }
-        String content = answer.getContent();
-        log.info("AI 消息撞幂等键，重放已有回答 clientMsgId={} contentLength={}", clientMsgId, content.length());
-        // 分片后逐片返回
-        return Flux.fromIterable(splitForReplay(content));
-    }
-
-    /**
-     * 把已存内容切成 SSE 分片。
-     * <p>
-     * ⚠️ 切片长度与正常流式不同没有影响：前端只负责拼接，只要拼回去的内容一致就行。
-     */
-    private List<String> splitForReplay(String content) {
-        List<String> chunks = new ArrayList<>();
-        if (content == null || content.isEmpty()) {
-            return chunks;
-        }
-        int step = 64;
-        for (int i = 0; i < content.length(); i += step) {
-            chunks.add(content.substring(i, Math.min(content.length(), i + step)));
-        }
-        return chunks;
     }
 
     /**
