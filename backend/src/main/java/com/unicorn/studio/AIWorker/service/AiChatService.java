@@ -2,7 +2,10 @@ package com.unicorn.studio.AIWorker.service;
 
 import com.unicorn.studio.AIWorker.config.AiConfigProvider;
 import com.unicorn.studio.AIWorker.config.AiRuntimeConfig;
+import com.unicorn.studio.AIWorker.entity.AiMessage;
+import com.unicorn.studio.AIWorker.entity.AiToolInvocation;
 import com.unicorn.studio.AIWorker.tool.AiToolRegistry;
+import com.unicorn.studio.AIWorker.tool.ToolCallBudget;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.service.SensitiveWordService;
 import org.slf4j.Logger;
@@ -12,10 +15,13 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.tool.ToolCallback;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -40,6 +46,9 @@ public class AiChatService {
     /** 命中敏感词时的拒绝文案（文档 §9.1，原文给定，可配置） */
     private static final String BLOCKED_REPLY = "抱歉，该内容不符合平台规范，我无法回答。换个说法我们再聊聊？";
 
+    /** 撞键重放时，上一次回答还没生成/没完成时给用户的提示（文档 §4.5 v1.2） */
+    private static final String REPLAY_IN_PROGRESS = "该消息正在生成，请稍候。";
+
     private final AiConfigProvider configProvider;
     private final ChatClientFactory clientFactory;
     private final AiToolRegistry toolRegistry;
@@ -47,19 +56,28 @@ public class AiChatService {
     private final AiQuotaService aiquotaService;
     private final SensitiveWordService sensitiveWordService;
 
+    /** 单轮工具调用次数上限（§11.5：≤3 次） */
+    private final int toolMaxCallsPerRound;
+    /** 单轮工具调用累计耗时上限（§11.5：15 秒） */
+    private final long toolMaxDurationMillis;
+
 
     public AiChatService(AiConfigProvider configProvider,
                          ChatClientFactory clientFactory,
                          AiToolRegistry toolRegistry,
                          AiSessionService aisessionService,
                          AiQuotaService aiquotaService,
-                         SensitiveWordService sensitiveWordService) {
+                         SensitiveWordService sensitiveWordService,
+                         @Value("${app.ai.tools.budget.max-calls:3}") int toolMaxCallsPerRound,
+                         @Value("${app.ai.tools.budget.max-duration-millis:15000}") long toolMaxDurationMillis) {
         this.configProvider = configProvider;
         this.clientFactory = clientFactory;
         this.toolRegistry = toolRegistry;
         this.aisessionService = aisessionService;
         this.aiquotaService = aiquotaService;
         this.sensitiveWordService = sensitiveWordService;
+        this.toolMaxCallsPerRound = toolMaxCallsPerRound;
+        this.toolMaxDurationMillis = toolMaxDurationMillis;
     }
 
     /**
@@ -87,7 +105,15 @@ public class AiChatService {
         // ①.1 流式计费（文档 §9.1：必须在调用模型之前）
         aiquotaService.consume(userId);
         // ①.2 落 user 行（幂等：同 clientMsgId 重发不插第二条）
-        aisessionService.appendUserMessage(conversationId, userId, userMessage, clientMsgId, "completed", null);
+        Long newMessageId = aisessionService.appendUserMessage(conversationId, userId, userMessage,
+                clientMsgId, "completed", null);
+        if (newMessageId == null) {
+            // ⓪' 撞键：这条 clientMsgId 之前已经受理过 ⇒【不再调模型、不再调工具】，
+            // 直接重放上次的回答（文档 §4.5 v1.2「撞键后的行为」）。
+            // ⚠️ 必须在这里 return：往下走会重复调模型、重复调工具（烧真实外部 API 的钱）、
+            // 再插一行 assistant，前端也会看到两份回答。
+            return replayExisting(conversationId, userId, clientMsgId);
+        }
 
         // ② 历史上下文（正序）。注意元素类型是 Spring AI 的 Message，不是本项目的 AiMessage 实体
         List<Message> history = aisessionService.loadContext(conversationId, userId).stream()
@@ -106,12 +132,18 @@ public class AiChatService {
             throw AiRuntimeConfig.unavailable();
         }
 
-        ToolCallback[] tools = toolRegistry.callbacks();
+        // 工具装配（文档 §11.5 方案 A）：
+        // ⚠️ 预算对象在【每轮】这里新建 —— Spring AI 的调用循环在 DefaultChatClient 内部，
+        // 拿不到"第几次调用"，只能靠"每轮一个对象"把计数圈住。
+        // 下一轮自然是另一个对象 ⇒ 不用清理、不会串轮。
+        ToolCallBudget budget = new ToolCallBudget(toolMaxCallsPerRound, toolMaxDurationMillis);
+        ToolCallback[] tools = toolRegistry.callbacks(
+                new AiToolRegistry.Caller(AiToolInvocation.INVOKER_SITE_USER, userId, conversationId), budget);
         // §11.7 第 6 条：装配清单也要有落点，否则无法区分「工具没生效」与「模型没选它」
         // （前者查配置/代码，后者改描述措辞，两类故障修法完全不同）。
         // 这行只含工具名与调用者 id，不含任何用户消息内容，与 §9.2 不冲突。
-        log.info("AI 本轮装配工具：invokerType=site_user invokerId={} tools={}",
-                userId, toolRegistry.registeredNames());
+        log.info("AI 本轮装配工具：invokerType=site_user invokerId={} budget={}/{} 个 tools={}",
+                userId, budget.usedCalls(), budget.maxCalls(), toolNames(tools));
         ChatClient client = clientFactory.client(config);
 
         StringBuilder acc = new StringBuilder();
@@ -145,6 +177,67 @@ public class AiChatService {
                                 acc.toString(), "interrupted", null);
                     }
                 });
+    }
+
+    /**
+     * 装配上的工具名列表（只含名字，不含任何用户内容，与 §9.2 不冲突）。
+     */
+    private List<String> toolNames(ToolCallback[] tools) {
+        List<String> names = new ArrayList<>(tools.length);
+        for (ToolCallback t : tools) {
+            names.add(t.getToolDefinition().name());
+        }
+        return names;
+    }
+
+    /**
+     * 撞键重放（文档 §4.5 v1.2「撞键后的行为」）。
+     * <p>
+     * <b>为什么要把已存的内容重新切片推出去</b>：前端只认 SSE 帧（{@code data: <分片>}），
+     * 不认"直接给完整答案"。所以这里把已存的回答切片后逐片 yield，
+     * 让前端的表现和正常流式完全一致（前端只管把分片拼起来）。
+     * <p>
+     * <b>⚠️ 重放不算新一轮</b>：不消耗单轮预算、不写新的 assistant 行、不产生工具调用与审计。
+     *
+     * @return 重放内容的分片流；该消息还在生成中时返回一句提示
+     */
+    private Flux<String> replayExisting(String conversationId, Long userId, String clientMsgId) {
+        Optional<AiMessage> existing = aisessionService.findExistingAssistant(conversationId, userId, clientMsgId);
+        if (existing.isEmpty()) {
+            // 还没有 assistant 行 ⇒ 上一次还在生成中（文档：「仍在生成中则提示"该消息正在生成"」）
+            log.info("AI 消息撞幂等键但回答尚未生成，返回「正在生成」提示 clientMsgId={}", clientMsgId);
+            return Flux.just(REPLAY_IN_PROGRESS);
+        }
+        AiMessage answer = existing.get();
+        if (!"completed".equals(answer.getStatus())) {
+            // 有行但不是 completed ⇒ 上一次被中断或失败。
+            // ⚠️ 不能拿半截内容当答案重放（模型当时可能只吐了半句），也不能说"正在生成"（它已经停了）——
+            // 统一按"未完成"提示，让用户知道这条没答完。
+            log.info("AI 消息撞幂等键但上次回答未完成（status={}），返回「未完成」提示 clientMsgId={}",
+                    answer.getStatus(), clientMsgId);
+            return Flux.just(REPLAY_IN_PROGRESS);
+        }
+        String content = answer.getContent();
+        log.info("AI 消息撞幂等键，重放已有回答 clientMsgId={} contentLength={}", clientMsgId, content.length());
+        // 分片后逐片返回
+        return Flux.fromIterable(splitForReplay(content));
+    }
+
+    /**
+     * 把已存内容切成 SSE 分片。
+     * <p>
+     * ⚠️ 切片长度与正常流式不同没有影响：前端只负责拼接，只要拼回去的内容一致就行。
+     */
+    private List<String> splitForReplay(String content) {
+        List<String> chunks = new ArrayList<>();
+        if (content == null || content.isEmpty()) {
+            return chunks;
+        }
+        int step = 64;
+        for (int i = 0; i < content.length(); i += step) {
+            chunks.add(content.substring(i, Math.min(content.length(), i + step)));
+        }
+        return chunks;
     }
 
     /**

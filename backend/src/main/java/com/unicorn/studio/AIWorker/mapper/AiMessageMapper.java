@@ -1,5 +1,6 @@
 package com.unicorn.studio.AIWorker.mapper;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.unicorn.studio.AIWorker.entity.AiMessage;
@@ -7,6 +8,7 @@ import org.apache.ibatis.annotations.*;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 
 @Mapper
@@ -52,13 +54,49 @@ public interface AiMessageMapper extends BaseMapper<AiMessage> {
     @Select("SELECT COUNT(*) FROM ai_message WHERE conversation_id = #{conversationId}")
     int countByConversation(@Param("conversationId") String conversationId);
 
-    /** 幂等去重：同会话同 clientMsgId 已存在则跳过 */
+    /**
+     * 幂等去重：同会话同 clientMsgId 已存在则跳过
+     */
     @Select("""
             SELECT id FROM ai_message
             WHERE conversation_id = #{conversationId} AND client_msg_id = #{clientMsgId}
             """)
     Long findIdByClientMsgId(@Param("conversationId") String conversationId,
                              @Param("clientMsgId") String clientMsgId);
+
+    /**
+     * 撞键重放：查这条 clientMsgId 对应的回答（文档 §4.5 v1.2「撞键后的行为」）。
+     * <p>
+     * <b>为什么一条 SQL 就够</b>：回答 = 「这条 user 消息<b>之后</b>的第一条 assistant 行」。
+     * 表里 assistant 行与 user 行之间没有外键，只有顺序关系（先 user 后 assistant），
+     * 所以"之后"只能靠 id 大小界定。用子查询一次查完，不必先查 id 再查内容。
+     * <p>
+     * ⚠️ 子查询用 {@code apply} 的 {@code {0}} 占位而不是字符串拼接：
+     * 拼接会被当成 SQL 字面量（{@code inSql} 那种写法在 {@code SysPermissionMapper} 里能用，
+     * 是因为拼进去的是 Long 转出来的纯数字；这里是用户可控的 clientMsgId，拼接即注入）。
+     * {@code apply} 会把占位符转成预编译参数，是安全的那条路。
+     * <p>
+     * ⚠️ {@code user_id} 在<b>子查询和外层都带</b>：外层保证不返回别人的行，
+     * 子查询保证"锚点"也是自己的消息（否则别人的消息 id 也可能被当锚点）。
+     * <p>
+     * ⚠️ {@code .last("LIMIT 1")}：同一轮里模型可能调多次工具、产生多条 assistant 行，
+     * 不加限制 {@code selectOne} 遇多行会抛 TooManyResultsException。
+     *
+     * @return 该消息的 assistant 回答；还没有（正在生成）返回 {@link Optional#empty()}
+     */
+    default Optional<AiMessage> findAssistantReplyFor(String conversationId, Long userId, String clientMsgId) {
+        return Optional.ofNullable(selectOne(new LambdaQueryWrapper<AiMessage>()
+                .select(AiMessage::getId, AiMessage::getConversationId, AiMessage::getRole,
+                        AiMessage::getContent, AiMessage::getStatus, AiMessage::getCreatedAt)
+                .eq(AiMessage::getConversationId, conversationId)
+                .eq(AiMessage::getUserId, userId)
+                .eq(AiMessage::getRole, "assistant")
+                .apply("id > (SELECT id FROM ai_message WHERE conversation_id = {0} "
+                                + "AND user_id = {1} AND client_msg_id = {2})",
+                        conversationId, userId, clientMsgId)
+                .orderByAsc(AiMessage::getId)
+                .last("LIMIT 1")));
+    }
 
     /** 中断/结束时补写 assistant 行（流式是先插占位再更新，见第 3 步） */
     @Update("""

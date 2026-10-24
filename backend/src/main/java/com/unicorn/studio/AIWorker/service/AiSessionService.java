@@ -1,12 +1,15 @@
 package com.unicorn.studio.AIWorker.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.type.TypeFactory;
 import com.unicorn.studio.AIWorker.mapper.AiConversationMapper;
 import com.unicorn.studio.AIWorker.mapper.AiMessageMapper;
+import com.unicorn.studio.AIWorker.mapper.AiToolInvocationMapper;
 import com.unicorn.studio.AIWorker.entity.AiConversation;
 import com.unicorn.studio.AIWorker.entity.AiMessage;
+import com.unicorn.studio.AIWorker.entity.AiToolInvocation;
 import com.unicorn.studio.AIWorker.dto.*;
 import com.unicorn.studio.AIWorker.vo.MessageVO;
 import com.unicorn.studio.AIWorker.vo.SessionVO;
@@ -17,6 +20,7 @@ import com.unicorn.studio.common.cache.CacheKeys;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -55,6 +59,7 @@ public class AiSessionService {
 
     private final AiConversationMapper conversationMapper;
     private final AiMessageMapper messageMapper;
+    private final AiToolInvocationMapper toolInvocationMapper;
     private final CacheHelper cache;
 
     // 创建会话
@@ -178,9 +183,33 @@ public class AiSessionService {
         msg.setClientMsgId(clientMsgId);
         msg.setBlockedWord(blockedWord);
         msg.setContextEligible("blocked".equals(status) ? 0 : 1);
-        messageMapper.insert(msg);
+        try {
+            messageMapper.insert(msg);
+        } catch (DuplicateKeyException e) {
+            // ⚠️ 并发撞键（文档 §4.5 v1.2「撞键后的行为」）：两个请求同时"查不到 → 插入"，
+            // 后到的那个会撞唯一键 uk_ai_msg_client (conversation_id, client_msg_id)。
+            // 文档要求「撞键 ≠ 报错」，按「已受理」处理，交给调用方走重放分支。
+            // ⚠️ 这里绝不能让异常冒出去：GlobalExceptionHandler 没有接 DuplicateKeyException，
+            // 冒出去就是 500；而 R6 的「登录后自动重发」恰恰是最容易撞键的路径，
+            // 500 会把一次正常重发变成用户看到的「网络错误」。
+            // ⚠️ 也不调 touchConversation：那条消息本来就数过了，再数一次是多余的写。
+            log.warn("AI 消息并发撞幂等键（已受理，走重放）conversationId={} clientMsgId={}",
+                    conversationId, clientMsgId);
+            return null;
+        }
         touchConversation(conversationId);
         return msg.getId();
+    }
+
+    /**
+     * 撞键重放：查这条 clientMsgId 已产生的 assistant 回答（文档 §4.5 v1.2）。
+     * <p>
+     * 文档原文：「已 {@code completed} 则原样重放内容，仍在生成中则提示"该消息正在生成"」。
+     *
+     * @return 已存在的 assistant 消息；还没有（正在生成）返回 {@link Optional#empty()}
+     */
+    public Optional<AiMessage> findExistingAssistant(String conversationId, Long userId, String clientMsgId) {
+        return messageMapper.findAssistantReplyFor(conversationId, userId, clientMsgId);
     }
 
     // AI生成回复消息
@@ -223,6 +252,37 @@ public class AiSessionService {
     public void finishAssistantMessage(Long messageId , String conversationId, String content, String status, Integer tokenUsage){
         messageMapper.finishMessage(messageId, content, status, tokenUsage);
         touchConversation(conversationId);
+        // 助手消息有了 id，回填本会话这一轮工具调用的 message_id（文档 §11.7 第 4 条）。
+        // ⚠️ 必须在消息落库【之后】——流式下工具调用发生在落库之前，那时拿不到 id。
+        backfillToolMessageId(conversationId, messageId);
+    }
+
+    /**
+     * 回填本会话工具调用记录的 message_id（文档 §11.7 第 4 条）。
+     * <p>
+     * <b>为什么必须回填</b>：流式下模型调工具发生在 assistant 消息落库【之前】，
+     * 写入审计时 message_id 必然为 NULL。文档原文：
+     * 「要么回填、要么删列 —— 不要保留一个永远为空的列，它会让人误判成"关联失败"」。
+     * <p>
+     * <b>为什么只回填 message_id IS NULL 的</b>：同一会话可能有多轮工具调用，
+     * 回填要落到"这一轮"上，而这一轮的界定就是"落库之前产生的那些"。
+     * <p>
+     * ⚠️ 本方法【不单独加 @Transactional】：它由 {@link #finishAssistantMessage} 内部调用，
+     * Spring AOP 的自调用不走代理 ⇒ 这里的注解不生效。好处是外层已有事务，
+     * 回填的 UPDATE 与消息落库在同一个事务里（原子性更好）。
+     */
+    private void backfillToolMessageId(String conversationId, Long messageId) {
+        if (conversationId == null || messageId == null) {
+            return;
+        }
+        LambdaUpdateWrapper<AiToolInvocation> wrapper = new LambdaUpdateWrapper<>();
+        wrapper.set(AiToolInvocation::getMessageId, messageId)
+                .eq(AiToolInvocation::getConversationId, conversationId)
+                .isNull(AiToolInvocation::getMessageId);
+        int updated = toolInvocationMapper.update(null, wrapper);
+        if (updated > 0) {
+            log.info("AI 工具调用记录已回填 messageId={}，本会话更新 {} 条", messageId, updated);
+        }
     }
 
     // 加载会话上下文
