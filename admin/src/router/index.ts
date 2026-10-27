@@ -73,10 +73,16 @@ export const permissionRoutes: RouteRecordRaw[] = [
         meta: { title: '编辑新闻', hidden: true, permission: 'news:edit' },
       },
       {
+        path: 'home',
+        name: 'HomeConfig',
+        component: () => import('@/views/home/HomeView.vue'),
+        meta: { title: '首页配置', icon: 'House', permission: 'carousel:list' },
+      },
+      {
         path: 'carousel',
         name: 'Carousel',
         component: () => import('@/views/carousel/CarouselListView.vue'),
-        meta: { title: '轮播图管理', icon: 'Monitor', permission: 'carousel:list' },
+        meta: { title: '首页媒体与背景', icon: 'Monitor', permission: 'carousel:list' },
       },
       {
         path: 'services',

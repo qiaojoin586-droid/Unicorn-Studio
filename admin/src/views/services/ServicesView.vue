@@ -9,6 +9,7 @@
     </div>
 
     <el-card shadow="never">
+      <el-alert title="已启用方向展示在首页「技术方向」。编号按公开排序生成；图标按所选键或原有 emoji 展示。章节标题在「首页配置」维护，保存后刷新主站生效。" type="info" :closable="false" class="module-guide" />
       <el-table :data="list" v-loading="loading" row-key="id">
         <el-table-column label="图标" width="72" align="center">
           <template #default="{ row }">
@@ -110,12 +111,10 @@
         </el-form-item>
         <div class="form-grid">
           <el-form-item label="展示图标" prop="icon">
-            <el-input
-              v-model="form.icon"
-              maxlength="50"
-              placeholder="可选，例如：🤖"
-              autocomplete="off"
-            />
+            <el-select v-model="form.icon" filterable allow-create clearable default-first-option placeholder="可选，兼容原有 emoji" style="width:100%">
+              <el-option label="代码 · code" value="code" /><el-option label="智能 · ai" value="ai" /><el-option label="研究 · research" value="research" /><el-option label="设计 · design" value="design" />
+              <el-option v-if="form.icon && !['code','ai','research','design'].includes(form.icon)" :label="'现有图标：' + form.icon" :value="form.icon" />
+            </el-select>
           </el-form-item>
           <el-form-item label="排序值" prop="sortOrder">
             <el-input-number v-model="form.sortOrder" :min="0" :max="9999" controls-position="right" />
@@ -272,6 +271,7 @@ onMounted(load)
   justify-content: center;
   font-size: 22px;
 }
+.module-guide { margin-bottom: 18px; }
 
 .form-grid {
   display: grid;

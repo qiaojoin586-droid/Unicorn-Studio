@@ -1,54 +1,17 @@
 <template>
-  <button
-    type="button"
-    aria-label="回到顶部"
-    title="回到顶部"
-    class="fixed right-6 bottom-[120px] z-[999] w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-gradient-to-br from-[#6C5CE7] to-[#A29BFE] text-white flex items-center justify-center shadow-lg hover:shadow-xl hover:scale-105 cursor-pointer transition-all duration-200"
-    :class="visible ? 'opacity-100' : 'opacity-0 pointer-events-none'"
-    @click="scrollToTop"
-  >
-    <svg
-      class="w-5 h-5"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      stroke-width="2"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M19 15l-7-7-7 7" />
-    </svg>
-  </button>
+  <button v-if="visible && !store.isOpen" type="button" aria-label="回到顶部" title="回到顶部" class="back-to-top" @click="scrollToTop"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m6 13 6-6 6 6M12 7v13" stroke="currentColor" stroke-width="1.5" /></svg></button>
 </template>
-
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
-
-/** 滚动超过该阈值（首屏 Hero 之后）才显示 */
-const SCROLL_THRESHOLD = 600
-
+import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { useAiChatStore } from '@/stores/aiChat'
+const store = useAiChatStore()
 const visible = ref(false)
-
-function handleScroll() {
-  const shouldShow = window.scrollY > SCROLL_THRESHOLD
-  // 仅在状态翻转时赋值，避免高频 scroll 触发无谓的响应式更新
-  if (shouldShow !== visible.value) {
-    visible.value = shouldShow
-  }
-}
-
-function scrollToTop() {
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-}
-
-onMounted(() => {
-  window.addEventListener('scroll', handleScroll, { passive: true })
-  // 初始化同步：处理刷新/路由切换后浏览器恢复滚动位置的情况
-  handleScroll()
-})
-
-onUnmounted(() => {
-  window.removeEventListener('scroll', handleScroll)
-})
+function onScroll() { visible.value = window.scrollY > 600 }
+function scrollToTop() { window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }) }
+onMounted(() => { onScroll(); window.addEventListener('scroll', onScroll, { passive: true }) })
+onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 </script>
+<style scoped>
+.back-to-top { position: fixed; z-index: calc(var(--z-tools) - 1); right: 42px; bottom: calc(112px + env(safe-area-inset-bottom, 0px)); width: 44px; height: 44px; display: grid; place-items: center; color: var(--color-ink); background: var(--color-paper); border: 1px solid var(--color-line); border-radius: 50%; transition: background var(--duration-ui), transform var(--duration-ui); }
+.back-to-top:hover { background: white; transform: translateY(-3px); }
+</style>

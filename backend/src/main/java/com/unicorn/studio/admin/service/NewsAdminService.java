@@ -101,12 +101,15 @@ public class NewsAdminService {
         newsMapper.insert(news);
         saveSeo(news.getId(), form.seo());
         cache.evictAfterCommit(CacheKeys.nullNews(news.getSlug()));
+        evictPublicContent(news.getSlug());
         return news;
     }
 
     @Transactional
     public void update(Long id, NewsForm form) {
         News news = getOrThrow(id);
+        // 改 slug 时必须同时失效「旧 slug」的详情缓存
+        String previousSlug = news.getSlug();
         if (form.slug() != null && !form.slug().isBlank() && !form.slug().trim().equals(news.getSlug())) {
             String newSlug = form.slug().trim();
             // 与 create 对齐的唯一性校验，避免撞唯一索引落 500
@@ -142,6 +145,7 @@ public class NewsAdminService {
         newsMapper.updateById(news);
         saveSeo(id, form.seo());
         cache.evictAfterCommit(CacheKeys.nullNews(news.getSlug()));
+        evictPublicContent(previousSlug, news.getSlug());
     }
 
     /** 局部列更新 + 投影读，理由同 {@link WorkAdminService#changeStatus}（B-12）。 */
@@ -154,6 +158,7 @@ public class NewsAdminService {
                 .set(News::getPublishedAt, news.getPublishedAt())
                 .set(News::getUpdatedAt, LocalDateTime.now())
                 .eq(News::getId, id));
+        evictPublicContent(news.getSlug());
     }
 
     /** 只读 id/sortOrder、只写 sortOrder，理由同 {@link WorkAdminService#sort}（B-12）。 */
@@ -190,12 +195,14 @@ public class NewsAdminService {
                         .eq(News::getId, n.getId()));
             }
         }
+        // 排序只影响列表顺序，详情缓存仍然有效
+        evictPublicContent();
     }
 
-    /** 状态变更只需要 status/publishedAt，不必把 MEDIUMTEXT 正文读出来（B-12）。 */
+    /** 状态变更只需要 status/publishedAt/slug，不必把 MEDIUMTEXT 正文读出来（B-12）。 */
     private News loadStatusSnapshot(Long id) {
         News news = newsMapper.selectOne(new LambdaQueryWrapper<News>()
-                .select(News::getId, News::getStatus, News::getPublishedAt)
+                .select(News::getId, News::getSlug, News::getStatus, News::getPublishedAt)
                 .eq(News::getId, id));
         if (news == null) {
             throw BusinessException.notFound("新闻不存在");
@@ -205,10 +212,28 @@ public class NewsAdminService {
 
     @Transactional
     public void delete(Long id) {
-        getOrThrow(id);
+        News news = getOrThrow(id);
         commentMapper.deleteByTargetTypeAndTargetId("news", id);
         settingsMapper.findBySettingKey(seoKey(id)).ifPresent(s -> settingsMapper.deleteById(s.getId()));
         newsMapper.deleteById(id);
+        evictPublicContent(news.getSlug());
+    }
+
+    /**
+     * 公开读端缓存失效：列表按维度整体失效，详情按 slug 精确失效。
+     * 理由同 {@link WorkAdminService#evictPublicContent}（任一写操作都可能改变
+     * {@code all} / {@code cat-xxx} 两种结果集，逐个推导易漏配）。
+     */
+    private void evictPublicContent(String... slugs) {
+        cache.evictByPatternAfterCommit(CacheKeys.NEWS_LIST_PREFIX + "*");
+        List<String> detailKeys = java.util.Arrays.stream(slugs)
+                .filter(java.util.Objects::nonNull)
+                .distinct()
+                .map(CacheKeys::newsDetail)
+                .toList();
+        if (!detailKeys.isEmpty()) {
+            cache.evictAfterCommit(detailKeys.toArray(String[]::new));
+        }
     }
 
     private void changeStatus(News news, String status) {

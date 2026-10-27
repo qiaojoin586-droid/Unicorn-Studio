@@ -38,7 +38,7 @@ Thumbs.db
 # IDE 配置（本地个人配置，不入库）
 .idea/
 .vscode/
-
+.claude/
 # WorkBuddy 工作区记忆与任务（本地个人，不入库）
 .workbuddy/
 
@@ -46,5 +46,5 @@ Thumbs.db
 # 设计方案文件夹（本地个人，不入库）
 docs/
 
-# 助手临时工作目录（构建产物/日志/临时源码副本）
-.workbuddy-tmp/
+# 忽略 Docker 相关文件夹
+backend/docker/

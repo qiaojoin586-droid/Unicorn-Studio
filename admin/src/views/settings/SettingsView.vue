@@ -5,6 +5,8 @@
       <el-button type="primary" :loading="saving" @click="save">保存设置</el-button>
     </div>
 
+    <el-alert title="站点名称和 Slogan 用于主站导航；SEO 用于页面元信息。页脚名称、邮箱可在「页脚配置」选择继承全局。页面文案请到对应内容页面维护。" type="info" :closable="false" style="margin-bottom: 18px" />
+
     <el-card shadow="never" v-loading="loading">
       <el-tabs v-model="activeTab">
         <el-tab-pane label="基础信息" name="basic">
@@ -17,9 +19,11 @@
             </el-form-item>
             <el-form-item label="备案号">
               <el-input v-model="groups.basic['basic.icp']" />
+              <p class="field-note">保留的全局资料；当前主站页脚使用「页脚配置」中的版权文案。</p>
             </el-form-item>
             <el-form-item label="版权信息">
               <el-input v-model="groups.basic['basic.copyright']" />
+              <p class="field-note">当前模板的显示文案在「页脚配置」维护，此项保留为全局资料。</p>
             </el-form-item>
           </el-form>
         </el-tab-pane>
@@ -27,16 +31,20 @@
           <el-form :model="groups.contact" label-width="120px" class="settings-form">
             <el-form-item label="联系邮箱">
               <el-input v-model="groups.contact['contact.email']" />
+              <p class="field-note">页脚启用「继承全局联系邮箱」后，页脚与加入页使用此邮箱。</p>
             </el-form-item>
             <el-form-item label="联系电话">
               <el-input v-model="groups.contact['contact.phone']" />
+              <p class="field-note">保留为全局资料，当前主站模板不直接展示。</p>
             </el-form-item>
             <el-form-item label="地址">
               <el-input v-model="groups.contact['contact.address']" />
+              <p class="field-note">保留为全局资料，当前主站模板不直接展示。</p>
             </el-form-item>
           </el-form>
         </el-tab-pane>
         <el-tab-pane label="社交媒体" name="social">
+          <p class="field-note" style="margin-bottom: 18px">以下为全局资料；主站当前展示的社交链接由「页脚配置」中的社交条目维护。</p>
           <el-form :model="groups.social" label-width="120px" class="settings-form">
             <el-form-item label="微信公众号">
               <el-input v-model="groups.social['social.wechat']" />
@@ -124,6 +132,8 @@ async function save() {
   const items: { group: string; key: string; value: string }[] = []
   Object.entries(groups).forEach(([group, kvs]) => {
     Object.entries(kvs).forEach(([key, value]) => {
+      // Dedicated content editors own these keys. Do not replay a stale settings snapshot.
+      if (key.startsWith('content.presentation.')) return
       items.push({ group, key, value: value ?? '' })
     })
   })

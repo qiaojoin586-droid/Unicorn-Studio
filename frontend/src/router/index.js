@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 const routes = [
+  { path: '/preview/:kind', name: 'Preview', component: () => import('@/pages/PreviewPage.vue'), meta: { preview: true } },
   {
     path: '/',
     name: 'Home',
@@ -68,6 +69,33 @@ function isReloadNavigation() {
 // 只有「文档加载后的第一次导航」需要按刷新处理；同一次会话里后续的前进/后退照旧恢复原位置
 let firstNavigationHandled = false
 
+// 列表是异步内容：先等待 aria-busy 结束，再还原历史位置。
+// 否则长列表仍是较短的骨架屏时，浏览器会把保存的位置截到页面底部。
+function restoreAfterContent(to, savedPosition) {
+  return new Promise(resolve => {
+    const main = document.getElementById('main-content')
+    let observer
+    let timeout
+    let finished = false
+    function finish(position) {
+      if (finished) return
+      finished = true
+      observer?.disconnect()
+      clearTimeout(timeout)
+      resolve(position)
+    }
+    function check() {
+      if (router.currentRoute.value.fullPath !== to.fullPath) return finish(false)
+      if (!main?.querySelector('[aria-busy="true"]')) finish(savedPosition)
+    }
+    observer = new MutationObserver(check)
+    observer.observe(main || document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-busy'] })
+    // API 默认 15 秒超时；错误态同样结束等待，新导航会取消旧恢复。
+    timeout = setTimeout(() => finish(router.currentRoute.value.fullPath === to.fullPath ? savedPosition : false), 16000)
+    check()
+  })
+}
+
 const router = createRouter({
   history: createWebHistory(),
   routes,
@@ -88,8 +116,9 @@ const router = createRouter({
       firstNavigationHandled = true
       if (isReloadNavigation()) return { top: 0 }
     }
-    if (savedPosition) return savedPosition
-    if (to.hash) return { el: to.hash, behavior: 'smooth' }
+    if (savedPosition) return restoreAfterContent(to, savedPosition)
+    if (to.path === from.path && to.hash === from.hash) return false
+    if (to.hash) return { el: to.hash, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }
     return { top: 0 }
   },
 })

@@ -4,7 +4,11 @@ import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.IpUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.databind.JavaType;
+import com.fasterxml.jackson.databind.type.TypeFactory;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.common.cache.CacheHelper;
+import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.mapper.CommentMapper;
 import com.unicorn.studio.model.Comment;
 import com.unicorn.studio.model.PublicUser;
@@ -12,6 +16,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,13 +33,29 @@ public class CommentService {
 
     private static final Set<String> TARGET_TYPES = Set.of("work", "news");
 
+    /** 公开评论列表 TTL：与 {@code app.cache.ttl.comment} 的 5 min 对齐（先审后发，5 min 延迟可接受） */
+    private static final Duration CACHE_TTL = Duration.ofMinutes(5);
+
+    /**
+     * 参与缓存的页码范围。超出直接回源且不写缓存：
+     * 分页参数来自请求，若不加边界，任意 {@code page/size} 都能生成新键，把键空间撑成无界。
+     */
+    private static final int MAX_CACHEABLE_PAGE = 100;
+    private static final int MAX_CACHEABLE_SIZE = 100;
+
+    private static final JavaType PAGE_TYPE = TypeFactory.defaultInstance()
+            .constructMapType(LinkedHashMap.class, String.class, Object.class);
+
     private final CommentMapper commentMapper;
     private final SensitiveWordService sensitiveWordService;
+    private final CacheHelper cache;
 
     public CommentService(CommentMapper commentMapper,
-                          SensitiveWordService sensitiveWordService) {
+                          SensitiveWordService sensitiveWordService,
+                          CacheHelper cache) {
         this.commentMapper = commentMapper;
         this.sensitiveWordService = sensitiveWordService;
+        this.cache = cache;
     }
 
     /** 发表评论：登录用户（禁言校验）或游客；默认 pending。 */
@@ -81,6 +102,36 @@ public class CommentService {
     }
 
     /**
+     * 公开列表（Redis 优先 → 回源 → 回填，5 min）。
+     * <p>
+     * <b>为什么缓存（C3）</b>：一次列表请求要 2~3 条 SQL（COUNT + LIMIT + 子评论 IN），
+     * 而评论内容在审核通过后基本不再变化 —— 这是典型的「读多写少 + 分页参数有限」场景。
+     * 键按 {@code targetType:targetId:page:size} 拆分；写侧（审核/回复/删除）按
+     * {@code cache:comment:list:{targetType}:{targetId}:*} 整体失效。
+     * <p>
+     * 只对白名单内的 targetType 与有限分页范围缓存：这两个参数直接来自请求，
+     * 不做边界的话任意取值都能生成新键，把键空间撑成无界。
+     */
+    public Map<String, Object> listApproved(String targetType, Long targetId, int page, int size) {
+        if (!cacheable(targetType, targetId, page, size)) {
+            return loadApproved(targetType, targetId, page, size);
+        }
+        String key = CacheKeys.commentList(targetType, targetId, page, size);
+        return cache.<Map<String, Object>>get(key, PAGE_TYPE).orElseGet(() -> {
+            Map<String, Object> result = loadApproved(targetType, targetId, page, size);
+            cache.set(key, result, CACHE_TTL);
+            return result;
+        });
+    }
+
+    private static boolean cacheable(String targetType, Long targetId, int page, int size) {
+        return TARGET_TYPES.contains(targetType)
+                && targetId != null && targetId > 0
+                && page >= 0 && page < MAX_CACHEABLE_PAGE
+                && size >= 1 && size <= MAX_CACHEABLE_SIZE;
+    }
+
+    /**
      * 公开列表：仅 approved；楼中楼树形（一级评论 + 其下子评论）。
      * <p>
      * <b>真分页（B-08）</b>：原实现是先把某作品下<b>全部</b> approved 评论
@@ -97,7 +148,7 @@ public class CommentService {
      * 见 {@code mysql-migration-v18-comment-pagination-index.sql}。缺它的话 COUNT 仍会扫全表，
      * <b>可能比原来的假分页更慢</b> —— 这是本项的前置条件，不是可选优化。
      */
-    public Map<String, Object> listApproved(String targetType, Long targetId, int page, int size) {
+    private Map<String, Object> loadApproved(String targetType, Long targetId, int page, int size) {
         // controller 已做 page-1（0-based），MP Page 为 1-based；safePage 顺带钳制非法 size
         Page<Comment> rootPage = commentMapper.selectPage(
                 PageResult.safePage(page + 1, size),

@@ -1,0 +1,27 @@
+@import '../generated/brand.css';
+:root {
+  --color-ink: var(--brand-ink);
+  --color-paper: var(--brand-paper);
+  --color-surface-dark: var(--brand-surface-dark);
+  --color-muted-light: var(--brand-muted);
+  --color-muted-dark: var(--brand-muted-on-dark);
+  --color-accent: var(--brand-accent);
+  --color-accent-on-dark: var(--brand-accent-on-dark);
+  --color-line: var(--brand-line);
+  --font-sans: var(--brand-font-sans);
+  --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --header-height: 88px;
+  --page-gutter: clamp(20px, 4.2vw, 72px);
+  --page-max: 1360px;
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --duration-fast: 160ms;
+  --duration-ui: 240ms;
+  --z-header: 40;
+  --z-tools: 50;
+  --z-menu: 60;
+  --z-dialog: 70;
+  --z-toast: 80;
+}
+@media (max-width: 767px) {
+  :root { --header-height: 72px; }
+}

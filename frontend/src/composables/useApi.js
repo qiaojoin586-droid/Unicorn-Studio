@@ -1,8 +1,19 @@
+import { getCurrentInstance, inject } from 'vue'
 const BASE_URL = import.meta.env.VITE_API_BASE || ''
 const DEFAULT_TIMEOUT = 15000
 
 export function useApi() {
+  const preview = getCurrentInstance() ? inject('studio-preview', null) : null
   async function request(url, options = {}) {
+    if (preview) {
+      if (options.method && options.method !== 'GET') return { error: true, message: '预览模式不提交业务请求' }
+      const path = url.split('?')[0]
+      if (preview.work && path.startsWith('/api/works/')) return { code: 200, data: { work: preview.work } }
+      if (preview.resource && path.startsWith('/api/learning/resources/')) return { code: 200, data: { resource: preview.resource } }
+      if (preview.about && path === '/api/about') return { code: 200, data: preview.about }
+      if (preview.join && path === '/api/join') return { code: 200, data: preview.join }
+      if (preview.footer && path === '/api/footer') return { code: 200, data: preview.footer }
+    }
     try {
       const res = await fetch(BASE_URL + url, {
         // 先展开调用方配置，再统一合并 headers（修复：调用方自定义 headers 会整体覆盖 Content-Type）

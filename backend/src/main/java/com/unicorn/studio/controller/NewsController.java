@@ -2,7 +2,6 @@ package com.unicorn.studio.controller;
 
 import com.unicorn.studio.common.SlugValidator;
 import com.unicorn.studio.model.ApiResponse;
-import com.unicorn.studio.model.News;
 import com.unicorn.studio.service.NewsService;
 import com.unicorn.studio.vo.NewsCardVO;
 import com.unicorn.studio.vo.NewsDetailVO;
@@ -26,9 +25,7 @@ public class NewsController {
 
     @GetMapping
     public ApiResponse<Map<String, List<NewsCardVO>>> list(@RequestParam(required = false) String category) {
-        List<NewsCardVO> items = newsService.findPublished(category).stream()
-                .map(NewsCardVO::from)
-                .toList();
+        List<NewsCardVO> items = newsService.findPublished(category);
         return ApiResponse.ok(Map.of("list", items));
     }
 
@@ -37,8 +34,8 @@ public class NewsController {
         if (!SlugValidator.isValidSlug(slug)) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "新闻不存在或已下线");
         }
-        News news = newsService.findPublishedBySlug(slug)
+        NewsDetailVO news = newsService.findPublishedBySlug(slug)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "新闻不存在或已下线"));
-        return ApiResponse.ok(Map.of("news", NewsDetailVO.from(news)));
+        return ApiResponse.ok(Map.of("news", news));
     }
 }

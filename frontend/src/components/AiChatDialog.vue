@@ -6,12 +6,6 @@
     `bounds.maxW` 统一按视口夹紧；两处同时约束会让「实际渲染宽度」与
     「参与定位/拉伸计算的宽度」不一致，导致拖拽边缘时错位。
   -->
-  <div
-    v-if="store.isOpen"
-    data-ai-panel
-    class="fixed z-50"
-    :style="[panelStyle, sizeStyle]"
-  >
     <transition
       enter-active-class="transition duration-300 ease-out"
       enter-from-class="opacity-0 translate-y-4 scale-95"
@@ -20,11 +14,14 @@
       leave-from-class="opacity-100 translate-y-0 scale-100"
       leave-to-class="opacity-0 translate-y-4 scale-95"
     >
+      <div v-if="store.isOpen" data-ai-panel class="ai-panel fixed" :style="[panelStyle, sizeStyle]">
       <div
+        id="ai-dialog"
         ref="dialogPanel"
         role="dialog"
+        :aria-modal="isCompact ? 'true' : undefined"
         aria-label="AI 助手对话"
-        class="relative bg-gray-900/95 backdrop-blur-xl border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col w-full h-full"
+        class="ai-dialog relative border border-white/20 rounded-xl shadow-2xl overflow-hidden flex flex-col w-full h-full"
       >
         <!-- Header：同时是「整体拖动」的抓手（光标变 move）。
              `touch-none` 让触屏拖动不被页面滚动抢走；`select-none` 防止拖出选区。
@@ -35,40 +32,22 @@
           @pointerdown="startPairDrag"
           title="按住拖动整个对话框"
         >
-          <div class="flex items-center gap-3">
-            <div class="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-sm">
-              🦄
+          <div class="ai-panel-heading flex items-center gap-3">
+            <div class="ai-symbol w-8 h-8 rounded-full flex items-center justify-center text-xs" aria-hidden="true">
+              AI
             </div>
             <div>
               <h3 class="text-white font-semibold text-sm">AI 助手</h3>
-              <p class="text-gray-500 text-xs">独角兽工作室智能助手</p>
+              <p class="text-gray-400 text-xs">独角兽工作室智能助手</p>
             </div>
           </div>
-          <!-- 按钮区不参与拖动，否则点「历史/清空/关闭」时轻微抖动会把面板挪走 -->
+          <!-- 按钮区不参与拖动，否则点「清空/关闭」时轻微抖动会把面板挪走 -->
           <div class="flex items-center gap-2" @pointerdown.stop>
-            <!-- 历史对话抽屉（§8.2） -->
+            <button type="button" class="dialog-control" @click="resetToDefault" aria-label="重置对话框位置" title="重置位置"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10a8 8 0 1 1 1.8 7M4 4v6h6" stroke="currentColor" stroke-width="1.5" /></svg></button>
             <button
-              type="button"
-              @click="store.drawerOpen ? store.closeDrawer() : openHistory()"
-              class="transition p-1"
-              :class="store.drawerOpen ? 'text-indigo-400' : 'text-gray-500 hover:text-gray-300'"
-              title="历史对话"
-              aria-label="历史对话"
-            >
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </button>
-            <!--
-              清空对话。语义已从「清空本地消息」改成「删除当前会话历史」（§8.3）：
-              原来那个 clearMessages 只清前端内存，刷新后历史又回来了，而且 sessionId 还在，
-              下一条消息会继续写进同一个会话——用户看着就像"进了一个新对话"。
-            -->
-            <button
-              v-if="store.hasMessages && store.sessionId"
-              type="button"
-              @click="store.openConfirm({ id: store.sessionId })"
-              class="text-gray-500 hover:text-gray-300 transition p-1"
+              v-if="store.hasMessages"
+              @click="store.clearMessages()"
+              class="dialog-control"
               title="清空对话"
               aria-label="清空对话"
             >
@@ -78,7 +57,7 @@
             </button>
             <button
               @click="store.closeChat()"
-              class="text-gray-500 hover:text-gray-300 transition p-1"
+              class="dialog-control"
               title="关闭"
               aria-label="关闭对话"
             >
@@ -89,68 +68,66 @@
           </div>
         </div>
 
-        <!-- 抽屉 + 消息区并排（§8.2：打开抽屉时对话框整体不变形，输入框始终可用） -->
-        <div class="flex-1 min-h-0 flex">
-          <AiHistoryDrawer v-if="store.drawerOpen" @close="store.closeDrawer()" />
+        <!-- Messages area -->
+        <div
+          ref="messagesContainer"
+          class="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4"
+          @scroll="onMessagesScroll"
+        >
+          <!-- Welcome message -->
+          <div v-if="!store.hasMessages && !store.streamingText" class="text-center py-8">
+            <div class="welcome-mark" aria-hidden="true">AI<span> / </span>UNICORN</div>
+            <p class="text-gray-400 text-sm leading-relaxed">
+              你好！我是独角兽工作室的 AI 助手。<br />
+              有什么可以帮你的吗？
+            </p>
+          </div>
 
-          <!-- Messages area -->
-          <div
-            ref="messagesContainer"
-            class="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4"
-            @scroll="onMessagesScroll"
-          >
-            <!-- Welcome message -->
-            <div v-if="!store.hasMessages && !store.streamingText" class="text-center py-8">
-              <div class="text-4xl mb-3">🦄</div>
-              <p class="text-gray-400 text-sm leading-relaxed">
-                你好！我是独角兽工作室的 AI 助手。<br />
-                有什么可以帮你的吗？
-              </p>
+          <!-- Message bubbles -->
+          <ChatMessage
+            v-for="msg in store.messages"
+            :key="msg.id"
+            :role="msg.role"
+            :content="msg.content"
+          />
+
+          <!-- Streaming message（同样走 Markdown 渲染，边流边排版） -->
+          <div v-if="store.streamingText" class="flex gap-3">
+            <div class="ai-symbol w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5" aria-hidden="true">
+              AI
             </div>
-
-            <!-- Message bubbles -->
-            <ChatMessage
-              v-for="msg in store.messages"
-              :key="msg.id"
-              :role="msg.role"
-              :content="msg.content"
-            />
-
-            <!-- Streaming message（同样走 Markdown 渲染，边流边排版） -->
-            <div v-if="store.streamingText" class="flex gap-3">
-              <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
-                🦄
-              </div>
-              <!-- 气泡样式必须与 ChatMessage 的 assistant 分支保持一致（含 text-gray-200），
-                   否则流式阶段文字会继承默认黑色，在深色气泡上变成「一片黑框」。 -->
-              <div class="bg-white/5 border border-white/10 text-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%] min-w-0">
-                <div ref="streamingBody" class="md-body" v-html="streamingHtml" />
-                <span class="inline-block w-1.5 h-4 bg-indigo-400 animate-pulse ml-0.5 align-middle" />
-              </div>
+            <!-- 气泡样式必须与 ChatMessage 的 assistant 分支保持一致（含 text-gray-200），
+                 否则流式阶段文字会继承默认黑色，在深色气泡上变成「一片黑框」。 -->
+            <div class="bg-white/5 border border-white/10 text-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%] min-w-0">
+              <div ref="streamingBody" class="md-body" v-html="streamingHtml" />
+              <span class="stream-cursor inline-block w-1.5 h-4 animate-pulse ml-0.5 align-middle" />
             </div>
+          </div>
 
-            <!-- Thinking indicator -->
-            <div v-if="store.isLoading && !store.streamingText" class="flex gap-3">
-              <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs flex-shrink-0">
-                🦄
-              </div>
-              <div class="bg-white/5 border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3">
-                <div class="flex gap-1">
-                  <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0ms" />
-                  <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 150ms" />
-                  <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 300ms" />
-                </div>
+          <!-- Thinking indicator -->
+          <div v-if="store.isLoading && !store.streamingText" class="flex gap-3">
+            <div class="ai-symbol w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0" aria-hidden="true">
+              AI
+            </div>
+            <div class="bg-white/5 border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3">
+              <div class="flex gap-1">
+                <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0ms" />
+                <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 150ms" />
+                <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 300ms" />
               </div>
             </div>
           </div>
         </div>
+
+        <button v-if="!stickToBottom && (store.hasMessages || store.streamingText)" type="button" class="latest-message" @click="scrollToLatest">回到最新消息 ↓</button>
 
         <!-- 停止生成（优化方案 F-11）：流式响应期间可中断，保留已生成部分 -->
         <div v-if="store.isLoading" class="px-4 pt-2.5 flex justify-center flex-shrink-0">
           <button
             type="button"
             @click="stopStream"
-            class="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-full px-3 py-1 transition"
+            data-stop-generation
+            class="inline-flex min-h-11 items-center gap-1.5 text-xs text-gray-300 hover:text-white bg-white/5 hover:bg-white/10 border border-white/10 rounded-full px-3 py-1 transition"
           >
             <span class="w-2 h-2 rounded-sm bg-current inline-block"></span>
             停止生成
@@ -158,10 +135,8 @@
         </div>
 
         <!-- Input area -->
+        <p class="sr-only" role="status">{{ store.isLoading ? '正在生成回复' : store.hasMessages ? '回复已完成' : '' }}</p>
         <ChatInput @send="handleSend" :disabled="store.isLoading" />
-
-        <!-- 清空二次确认：抽屉里的垃圾桶与右上角那个共用同一个（§8.2 / §8.3） -->
-        <AiConfirmDialog />
 
         <!-- 拉伸把手（八向）：四条边 + 四个角。
              边把手平时透明、hover 才显出一道浅色条；角把手常驻淡色斜纹（沿用改造前
@@ -171,13 +146,12 @@
         <div
           v-for="handle in RESIZE_HANDLES"
           :key="handle.dir"
-          class="group absolute z-10 touch-none"
+          class="resize-handle group absolute z-10 touch-none"
           :class="handle.cls"
           :data-resize="handle.dir"
           @pointerdown="startResize(handle.dir, $event)"
           @dblclick="onHandleDblClick(handle)"
-          :role="handle.corner ? 'separator' : null"
-          :aria-label="handle.corner ? '拖拽调整对话框大小' : null"
+          aria-hidden="true"
           :title="handle.corner ? '拖拽调整大小（双击切换默认/放大）' : null"
         >
           <span
@@ -206,8 +180,8 @@
           />
         </div>
       </div>
+      </div>
     </transition>
-  </div>
 </template>
 
 <script setup>
@@ -218,15 +192,28 @@ import { renderMarkdown, hardenLinks } from '@/composables/useMarkdown'
 import { useResizablePanel } from '@/composables/useResizablePanel'
 import ChatMessage from './ChatMessage.vue'
 import ChatInput from './ChatInput.vue'
-import AiHistoryDrawer from './AiHistoryDrawer.vue'
-import AiConfirmDialog from './AiConfirmDialog.vue'
 
 const store = useAiChatStore()
-const { streamChat, stopStream, openHistory } = useAiChat()
+const { streamChat, stopStream } = useAiChat()
 const messagesContainer = ref(null)
 const streamingBody = ref(null)
 const dialogPanel = ref(null)
 const stickToBottom = ref(true)
+const isCompact = ref(false)
+let returnFocus = null
+
+function syncCompact() { isCompact.value = window.innerWidth < 640 }
+function focusDialog() {
+  const panel = dialogPanel.value
+  const field = panel?.querySelector('input:not(:disabled)')
+  const fallback = panel?.querySelector('[data-stop-generation]') || panel?.querySelector('button:not(:disabled), a[href]')
+  ;(field || fallback || panel)?.focus()
+}
+function scrollToLatest() {
+  stickToBottom.value = true
+  const el = messagesContainer.value
+  if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
+}
 
 // 布局（位置 + 尺寸）由 useResizablePanel 统一管理，并与对话图标共享**同一份单例状态**：
 //   · panelStyle —— 对话框定位（left/top）。拖动图标或拖动本面板的表头，两边一起位移；
@@ -238,6 +225,7 @@ const {
   startPairDrag,
   startResize,
   toggleDefaultSize,
+  resetToDefault,
   attach,
 } = useResizablePanel({
   storageKey: 'unicorn.aiChat.panelSize',
@@ -330,61 +318,85 @@ watch(
   },
 )
 
-// 切换会话后强制回到底部。
-// ⚠️ 为什么必须单独一个 watch：stickToBottom 表示「用户此刻是否停在底部」，
-//   上翻看旧消息后它就是 false。而上面那个滚动 watch 的条件正是 stickToBottom，
-//   于是「加载历史 → 消息变了 → 但不滚」⇒ 表现为「重新打开对话停在最上面的那条」。
-watch(
-  () => store.sessionId,
-  async () => {
-    stickToBottom.value = true
-    await nextTick()
-    await scrollToBottom()
-  },
-)
-
-/** 把消息区滚到底部（并把「跟随底部」标记置回 true）。 */
-async function scrollToBottom() {
-  stickToBottom.value = true
-  await nextTick()
-  const el = messagesContainer.value
-  if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
-}
-
 // v-html 注入后补外链安全属性（流式气泡同样需要）
 watch(streamingHtml, () => nextTick(() => hardenLinks(streamingBody.value)))
 
 // ESC 关闭 + 打开时焦点移入输入框（优化方案 F-16）
 function onKeydown(e) {
   if (e.key === 'Escape' && store.isOpen) store.closeChat()
+  if (e.key === 'Tab' && isCompact.value && store.isOpen) {
+    const items = [...(dialogPanel.value?.querySelectorAll('button:not(:disabled), input:not(:disabled), a[href], [tabindex="0"]') || [])].filter(el => el.getClientRects().length)
+    const first = items[0]
+    const last = items[items.length - 1]
+    if (!dialogPanel.value?.contains(document.activeElement)) { e.preventDefault(); first?.focus() }
+    else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus() }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus() }
+  }
 }
+
+function syncBackground() {
+  const modal = store.isOpen && isCompact.value
+  for (const el of document.querySelectorAll('#main-content, .site-header, .site-footer')) el.inert = modal
+  const launcher = document.querySelector('[data-ai-icon]')
+  if (launcher) launcher.inert = modal
+  document.body.classList.toggle('ai-modal-open', modal)
+}
+watch(isCompact, async compact => {
+  syncBackground()
+  if (compact && store.isOpen) { await nextTick(); focusDialog() }
+})
+watch(() => store.isLoading, async () => {
+  await nextTick()
+  if (store.isOpen && isCompact.value && !dialogPanel.value?.contains(document.activeElement)) focusDialog()
+})
 
 watch(
   () => store.isOpen,
-  async (open) => {
+  (open) => {
     if (open) {
+      returnFocus = document.querySelector('[data-ai-trigger]') || document.activeElement
+      syncCompact()
+      syncBackground()
       window.addEventListener('keydown', onKeydown)
-      await nextTick()
-      dialogPanel.value?.querySelector('input')?.focus()
-      // ⚠️ 打开面板时必须回到底部：关闭再打开会把消息区重新渲染一遍，滚动位置归零，
-      // 表现为「点图标关掉再打开，停在最上面的那条」。
-      // 顺带把 stickToBottom 重置回 true —— 它表示「用户此刻是否停在底部」，
-      // 上翻看旧消息后是 false，不重置的话下面那个滚动 watch 也会被它挡住。
-      await scrollToBottom()
+      nextTick(() => {
+        focusDialog()
+      })
     } else {
       window.removeEventListener('keydown', onKeydown)
+      syncBackground()
+      if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus({ preventScroll: true })
     }
   },
 )
 
 onMounted(() => {
   attach()
+  syncCompact()
+  window.addEventListener('resize', syncCompact, { passive: true })
   hardenLinks(streamingBody.value)
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
+  window.removeEventListener('resize', syncCompact)
+  for (const el of document.querySelectorAll('#main-content, .site-header, .site-footer, [data-ai-icon]')) el.inert = false
+  document.body.classList.remove('ai-modal-open')
   // 取消挂起的节流帧，避免卸载后仍触发一次渲染
   cancelAnimationFrame(streamRafId)
 })
 </script>
+<style scoped>
+.ai-panel { z-index: var(--z-dialog); color: var(--color-paper); }
+.ai-dialog { background: var(--color-surface-dark); }
+.ai-symbol { background: #333439; color: var(--color-paper); font: 10px var(--font-mono); }
+.ai-panel-heading { min-width: 0; }
+.ai-panel-heading > div:last-child { min-width: 0; }
+.ai-panel-heading p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dialog-control { display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0; color: var(--color-muted-dark); border-radius: 4px; transition: color var(--duration-fast), background var(--duration-fast); }
+.dialog-control:hover { color: white; background: #ffffff0c; }
+.welcome-mark { margin: 12px 0 24px; font: 15px var(--font-mono); letter-spacing: -.04em; color: var(--color-paper); }
+.welcome-mark span { color: var(--color-accent-on-dark); }
+.stream-cursor { background: var(--color-accent-on-dark); }
+.latest-message { align-self: center; padding: 10px 18px; font-size: 12px; color: var(--color-accent-on-dark); min-height: 44px; }
+@media(max-width:639px) { .ai-panel { left: 12px !important; top: max(12px, env(safe-area-inset-top)) !important; width: calc(100% - 24px) !important; height: calc(100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)) !important; } .resize-handle { display: none; } .dialog-control { width: 44px; } }
+</style>

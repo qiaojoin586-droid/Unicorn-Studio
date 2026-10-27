@@ -1,4 +1,5 @@
-import { watchEffect, onUnmounted } from 'vue'
+import { watchEffect, onUnmounted, inject } from 'vue'
+import { useSiteSettings } from './useSiteSettings'
 
 export const DEFAULT_TITLE = '独角兽工作室'
 export const DEFAULT_DESCRIPTION =
@@ -24,10 +25,18 @@ function descriptionMetaEl() {
  * mounted 不会重跑；卸载时复位为站点默认值。
  */
 export function usePageMeta(meta) {
+  const site = useSiteSettings()
+  const preview = inject('studio-preview', null)
   const stop = watchEffect(() => {
     const m = typeof meta === 'function' ? meta() : meta
-    document.title = m?.title ? `${m.title} - ${DEFAULT_TITLE}` : DEFAULT_TITLE
-    descriptionMetaEl().setAttribute('content', m?.description || DEFAULT_DESCRIPTION)
+    const configuredTitle = site.settings.seo['seo.site_title']?.trim()
+    const title = m?.home && configuredTitle ? configuredTitle : m?.title ? `${m.title} - ${site.siteName.value}` : site.siteName.value
+    document.title = (preview ? '未保存预览 · ' : '') + title
+    descriptionMetaEl().setAttribute('content', (m?.description && m.description !== DEFAULT_DESCRIPTION ? m.description : site.description.value) || m?.description || DEFAULT_DESCRIPTION)
+    const keywords = site.settings.seo['seo.site_keywords'] || ''
+    let keywordsMeta = document.head.querySelector('meta[name="keywords"]')
+    if (keywords && !keywordsMeta) { keywordsMeta = document.createElement('meta'); keywordsMeta.name = 'keywords'; document.head.appendChild(keywordsMeta) }
+    if (keywordsMeta) keywordsMeta.setAttribute('content', keywords)
   })
   onUnmounted(() => {
     // 只停副作用，不复位标题/描述：SPA 站内导航时旧页面卸载钩子可能在新页面

@@ -1,0 +1,12 @@
+# 仅发送构建所需的 Maven 配置与源码，排除本地数据、日志和已有构建产物。
+**
+!pom.xml
+!src/
+!src/**
+
+# jar profile 同样排除 profile 配置，避免本地凭据进入构建上下文。
+src/**/application-*.yml
+src/**/application-*.yaml
+src/**/.env
+src/**/.env.*
+src/**/AGENTS.md

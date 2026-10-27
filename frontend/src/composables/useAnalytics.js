@@ -25,7 +25,7 @@ function reportPv(path, referer) {
  */
 export function initPvTracking(router) {
   router.afterEach((to, from) => {
-    if (navigator.doNotTrack === '1') return
+    if (navigator.doNotTrack === '1' || to.meta.preview) return
     const referer = from.matched.length === 0 ? document.referrer : from.fullPath
     reportPv(to.fullPath, referer)
   })

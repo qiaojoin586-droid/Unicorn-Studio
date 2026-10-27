@@ -23,8 +23,8 @@ import java.util.Map;
  * （stats 为 JSON 数组，元素 {@code {value,label}}）。这是单例页面配置而非内容集合，
  * 因此复用既有设置存储与写入通道，不新建表。
  * <p>
- * 兜底约定：任何字段缺失或为空时回落到「页面改造前的原始文案」，
- * 故数据库中尚无 about 组时，前台表现与改造前完全一致（零配置零回归）。
+ * 兜底约定：缺失字段继承默认；可选字段的显式空字符串保持为空，
+ * 数据库中尚无 about 组时使用工作室介绍默认文案，统计指标留空，已有值继续保留。
  */
 @Service
 public class AboutPageService {
@@ -41,15 +41,12 @@ public class AboutPageService {
 
     private static final String DEFAULT_EYEBROW = "About Us";
     private static final String DEFAULT_TITLE = "关于独角兽工作室";
-    private static final String DEFAULT_SUBTITLE = "一群热爱技术与创造力的伙伴，致力于在数字世界中创造价值";
+    private static final String DEFAULT_SUBTITLE = "我们是一群热爱技术与创造的伙伴，在学习、研究与真实项目中，探索想法的更多可能。";
     private static final String DEFAULT_CONTENT = """
-            独角兽工作室是一支充满激情的技术团队，专注于为客户提供高质量的数字产品与服务。我们相信，优秀的技术结合出色的设计，能够为用户带来非凡的体验。
+            独角兽工作室关注 AI 智能应用、Agent 开发与大模型学术研究，也关注每一个想法如何成为可以体验的作品。
 
-            自创立以来，我们已为众多企业提供了 Web 开发、移动应用、大模型学术研究等方面的专业服务，赢得了客户的广泛认可与好评。""";
-    private static final List<AboutPageVO.Stat> DEFAULT_STATS = List.of(
-            new AboutPageVO.Stat("50+", "完成项目"),
-            new AboutPageVO.Stat("30+", "合作客户"),
-            new AboutPageVO.Stat("5+", "年行业经验"));
+            我们希望把学习与实践连接起来：带着问题探索技术，在交流中分享经验，与志同道合的伙伴一起成长。""";
+    private static final List<AboutPageVO.Stat> DEFAULT_STATS = List.of();
 
     /** 统计指标条数上限（防误填导致首屏拥挤） */
     private static final int MAX_STATS = 8;
@@ -79,7 +76,7 @@ public class AboutPageService {
         Map<String, String> kv = settingsService.listGroup(GROUP);
         return new AboutPageVO(
                 valueOrDefault(kv.get(KEY_EYEBROW), DEFAULT_EYEBROW),
-                valueOrDefault(kv.get(KEY_TITLE), DEFAULT_TITLE),
+                requiredValueOrDefault(kv.get(KEY_TITLE), DEFAULT_TITLE),
                 valueOrDefault(kv.get(KEY_SUBTITLE), DEFAULT_SUBTITLE),
                 valueOrDefault(kv.get(KEY_CONTENT), DEFAULT_CONTENT),
                 valueOrDefault(kv.get(KEY_IMAGE), null),
@@ -149,8 +146,12 @@ public class AboutPageService {
         }
     }
 
-    private static String valueOrDefault(String value, String fallback) {
+    private static String requiredValueOrDefault(String value, String fallback) {
         return isBlank(value) ? fallback : value;
+    }
+
+    private static String valueOrDefault(String value, String fallback) {
+        return value == null ? fallback : value;
     }
 
     private static String nullToEmpty(String value) {

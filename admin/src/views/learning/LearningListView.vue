@@ -98,8 +98,9 @@
       </div>
     </el-card>
 
-    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑资料' : '新增资料'" width="900px" destroy-on-close>
-      <el-form :model="form" label-width="90px">
+    <el-dialog v-model="dialogVisible" :title="editingId ? '编辑资料' : '新增资料'" width="min(1100px, calc(100vw - 32px))" destroy-on-close :close-on-click-modal="false">
+      <el-alert title="预览使用真实主站阅读模板，表单修改不会直接发布。上架状态决定保存后能否公开访问；分类、封面、正文及附件会按当前内容展示。" type="info" :closable="false" class="learning-preview-tip" />
+      <el-form :model="form" label-width="90px" :disabled="saving">
         <el-form-item label="标题" required>
           <el-input v-model="form.title" maxlength="200" placeholder="资料标题" />
         </el-form-item>
@@ -133,6 +134,7 @@
           <el-switch v-model="form.enabled" />
         </el-form-item>
       </el-form>
+      <SitePreview kind="learning" :payload="{ resource: form }" :public-path="editingId ? '/learning/' + editingId : '/learning'" title="学习资料 · 未保存预览" />
       <template #footer>
         <el-button @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="save">保存</el-button>
@@ -147,6 +149,7 @@ import { learningApi, type LearningCategoryItem } from '@/api/learning'
 import { useTable } from '@/composables/useTable'
 import ImageUpload from '@/components/ImageUpload.vue'
 import FileUpload from '@/components/FileUpload.vue'
+import SitePreview from '@/components/SitePreview.vue'
 // A-04：<Editor> 只在编辑弹窗里用（该 el-dialog 带 destroy-on-close），而列表页绝大多数访问
 // 不会打开弹窗。原先静态引入会把 wangEditor 及其 CSS 顶进本路由的 __vite__mapDeps 预加载表，
 // 一进「学习资料」列表页就白下约 810 KB JS + 15 KB CSS。改为异步组件后，只有真正打开弹窗才拉取。
@@ -192,6 +195,7 @@ function openDialog(row?: any) {
 }
 
 async function save() {
+  if (saving.value) return
   if (!form.title?.trim()) {
     ElMessage.warning('请填写标题')
     return
@@ -247,6 +251,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
+.learning-preview-tip { margin-bottom: 20px; }
+@media(max-width:640px) { :deep(.el-dialog .el-form-item) { display: block; } :deep(.el-dialog .el-form-item__label) { float: none; display: block; width: auto !important; text-align: left; } :deep(.el-dialog .el-form-item__content) { margin-left: 0 !important; } }
 .thumb {
   width: 80px;
   height: 45px;

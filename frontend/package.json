@@ -7,10 +7,12 @@
     "dev": "node scripts/dev.js",
     "dev:vite": "vite",
     "dev:api": "node server/index.js",
-    "build": "node scripts/verify-sse-parse.mjs && vite build && node scripts/build-deploy.js",
+    "build": "node scripts/verify-sse-parse.mjs && node scripts/verify-footer-links.mjs && vite build && node scripts/build-deploy.js",
     "start": "node server/index.js",
     "preview": "vite preview",
     "verify:sse": "node scripts/verify-sse-parse.mjs",
+    "verify:preview-policy": "node scripts/verify-preview-policy.mjs",
+    "verify:footer-links": "node scripts/verify-footer-links.mjs",
     "verify:aichat": "node scripts/verify-aichat-interaction.mjs",
     "test": "npm run build && node scripts/smoke-test.js"
   },

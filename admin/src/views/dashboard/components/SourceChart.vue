@@ -55,7 +55,6 @@ const donutOption = computed<EChartsOption>(() => ({
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #a855f7);
-  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+  background: var(--admin-accent);
 }
 </style>

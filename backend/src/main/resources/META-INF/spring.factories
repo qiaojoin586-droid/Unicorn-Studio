@@ -1,5 +1,0 @@
-# 启动期凭据校验（S-4）：在 Environment 就绪后、任何 Bean 实例化之前执行，
-# 保证「缺凭据」的报错是用户看到的那一条，而不是被 Druid 的建连失败抢先。
-# 实现与理由见 com.unicorn.studio.config.SecretsStartupValidator。
-org.springframework.context.ApplicationContextInitializer=\
-com.unicorn.studio.config.SecretsStartupValidator
