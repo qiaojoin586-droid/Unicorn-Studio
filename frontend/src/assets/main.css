@@ -90,6 +90,29 @@ body {
   border-radius: 0.5rem;
 }
 
+/* 深色面板里的滚动条：浏览器默认给的是亮白竖条，在 gray-900 底上非常刺眼。
+   写在全局而不是组件里，是因为 AI 对话框、登录弹窗、历史抽屉三处都要用。
+   标准属性（scrollbar-color / scrollbar-width）覆盖 Firefox 与 Chrome 121+，
+   ::-webkit-scrollbar 覆盖更早的 Chromium；两者都只是"变细 + 变淡"，不影响可用性。 */
+.scrollbar-slim {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.16) transparent;
+}
+.scrollbar-slim::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-slim::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-slim::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.16);
+  border-radius: 9999px;
+}
+.scrollbar-slim::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 255, 255, 0.28);
+}
+
 /* ============================================================
    AI 助手对话框的 Markdown 渲染排版
    ------------------------------------------------------------

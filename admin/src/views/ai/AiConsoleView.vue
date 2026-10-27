@@ -456,6 +456,9 @@ async function runCleanup() {
 
 onMounted(() => {
   loadSessions()
+  // ⚠️ 消息列表也要在打开时加载：messageQuery 初始只有 {page,size}、没有 status 过滤，
+  // 所以这就是「全部消息」。不加载的话表格初始是空的，必须点一次「查询」才出数据。
+  loadMessages()
   loadCleanupStatus()
 })
 </script>

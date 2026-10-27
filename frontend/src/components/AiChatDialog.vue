@@ -44,11 +44,30 @@
               <p class="text-gray-500 text-xs">独角兽工作室智能助手</p>
             </div>
           </div>
-          <!-- 按钮区不参与拖动，否则点「清空/关闭」时轻微抖动会把面板挪走 -->
+          <!-- 按钮区不参与拖动，否则点「历史/清空/关闭」时轻微抖动会把面板挪走 -->
           <div class="flex items-center gap-2" @pointerdown.stop>
+            <!-- 历史对话抽屉（§8.2） -->
             <button
-              v-if="store.hasMessages"
-              @click="store.clearMessages()"
+              type="button"
+              @click="store.drawerOpen ? store.closeDrawer() : openHistory()"
+              class="transition p-1"
+              :class="store.drawerOpen ? 'text-indigo-400' : 'text-gray-500 hover:text-gray-300'"
+              title="历史对话"
+              aria-label="历史对话"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+            <!--
+              清空对话。语义已从「清空本地消息」改成「删除当前会话历史」（§8.3）：
+              原来那个 clearMessages 只清前端内存，刷新后历史又回来了，而且 sessionId 还在，
+              下一条消息会继续写进同一个会话——用户看着就像"进了一个新对话"。
+            -->
+            <button
+              v-if="store.hasMessages && store.sessionId"
+              type="button"
+              @click="store.openConfirm({ id: store.sessionId })"
               class="text-gray-500 hover:text-gray-300 transition p-1"
               title="清空对话"
               aria-label="清空对话"
@@ -70,52 +89,57 @@
           </div>
         </div>
 
-        <!-- Messages area -->
-        <div
-          ref="messagesContainer"
-          class="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4"
-          @scroll="onMessagesScroll"
-        >
-          <!-- Welcome message -->
-          <div v-if="!store.hasMessages && !store.streamingText" class="text-center py-8">
-            <div class="text-4xl mb-3">🦄</div>
-            <p class="text-gray-400 text-sm leading-relaxed">
-              你好！我是独角兽工作室的 AI 助手。<br />
-              有什么可以帮你的吗？
-            </p>
-          </div>
+        <!-- 抽屉 + 消息区并排（§8.2：打开抽屉时对话框整体不变形，输入框始终可用） -->
+        <div class="flex-1 min-h-0 flex">
+          <AiHistoryDrawer v-if="store.drawerOpen" @close="store.closeDrawer()" />
 
-          <!-- Message bubbles -->
-          <ChatMessage
-            v-for="msg in store.messages"
-            :key="msg.id"
-            :role="msg.role"
-            :content="msg.content"
-          />
+          <!-- Messages area -->
+          <div
+            ref="messagesContainer"
+            class="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4"
+            @scroll="onMessagesScroll"
+          >
+            <!-- Welcome message -->
+            <div v-if="!store.hasMessages && !store.streamingText" class="text-center py-8">
+              <div class="text-4xl mb-3">🦄</div>
+              <p class="text-gray-400 text-sm leading-relaxed">
+                你好！我是独角兽工作室的 AI 助手。<br />
+                有什么可以帮你的吗？
+              </p>
+            </div>
 
-          <!-- Streaming message（同样走 Markdown 渲染，边流边排版） -->
-          <div v-if="store.streamingText" class="flex gap-3">
-            <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
-              🦄
-            </div>
-            <!-- 气泡样式必须与 ChatMessage 的 assistant 分支保持一致（含 text-gray-200），
-                 否则流式阶段文字会继承默认黑色，在深色气泡上变成「一片黑框」。 -->
-            <div class="bg-white/5 border border-white/10 text-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%] min-w-0">
-              <div ref="streamingBody" class="md-body" v-html="streamingHtml" />
-              <span class="inline-block w-1.5 h-4 bg-indigo-400 animate-pulse ml-0.5 align-middle" />
-            </div>
-          </div>
+            <!-- Message bubbles -->
+            <ChatMessage
+              v-for="msg in store.messages"
+              :key="msg.id"
+              :role="msg.role"
+              :content="msg.content"
+            />
 
-          <!-- Thinking indicator -->
-          <div v-if="store.isLoading && !store.streamingText" class="flex gap-3">
-            <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs flex-shrink-0">
-              🦄
+            <!-- Streaming message（同样走 Markdown 渲染，边流边排版） -->
+            <div v-if="store.streamingText" class="flex gap-3">
+              <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs flex-shrink-0 mt-0.5">
+                🦄
+              </div>
+              <!-- 气泡样式必须与 ChatMessage 的 assistant 分支保持一致（含 text-gray-200），
+                   否则流式阶段文字会继承默认黑色，在深色气泡上变成「一片黑框」。 -->
+              <div class="bg-white/5 border border-white/10 text-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%] min-w-0">
+                <div ref="streamingBody" class="md-body" v-html="streamingHtml" />
+                <span class="inline-block w-1.5 h-4 bg-indigo-400 animate-pulse ml-0.5 align-middle" />
+              </div>
             </div>
-            <div class="bg-white/5 border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3">
-              <div class="flex gap-1">
-                <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0ms" />
-                <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 150ms" />
-                <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 300ms" />
+
+            <!-- Thinking indicator -->
+            <div v-if="store.isLoading && !store.streamingText" class="flex gap-3">
+              <div class="w-7 h-7 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xs flex-shrink-0">
+                🦄
+              </div>
+              <div class="bg-white/5 border border-white/10 rounded-2xl rounded-tl-sm px-4 py-3">
+                <div class="flex gap-1">
+                  <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0ms" />
+                  <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 150ms" />
+                  <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 300ms" />
+                </div>
               </div>
             </div>
           </div>
@@ -135,6 +159,9 @@
 
         <!-- Input area -->
         <ChatInput @send="handleSend" :disabled="store.isLoading" />
+
+        <!-- 清空二次确认：抽屉里的垃圾桶与右上角那个共用同一个（§8.2 / §8.3） -->
+        <AiConfirmDialog />
 
         <!-- 拉伸把手（八向）：四条边 + 四个角。
              边把手平时透明、hover 才显出一道浅色条；角把手常驻淡色斜纹（沿用改造前
@@ -191,9 +218,11 @@ import { renderMarkdown, hardenLinks } from '@/composables/useMarkdown'
 import { useResizablePanel } from '@/composables/useResizablePanel'
 import ChatMessage from './ChatMessage.vue'
 import ChatInput from './ChatInput.vue'
+import AiHistoryDrawer from './AiHistoryDrawer.vue'
+import AiConfirmDialog from './AiConfirmDialog.vue'
 
 const store = useAiChatStore()
-const { streamChat, stopStream } = useAiChat()
+const { streamChat, stopStream, openHistory } = useAiChat()
 const messagesContainer = ref(null)
 const streamingBody = ref(null)
 const dialogPanel = ref(null)
@@ -301,6 +330,27 @@ watch(
   },
 )
 
+// 切换会话后强制回到底部。
+// ⚠️ 为什么必须单独一个 watch：stickToBottom 表示「用户此刻是否停在底部」，
+//   上翻看旧消息后它就是 false。而上面那个滚动 watch 的条件正是 stickToBottom，
+//   于是「加载历史 → 消息变了 → 但不滚」⇒ 表现为「重新打开对话停在最上面的那条」。
+watch(
+  () => store.sessionId,
+  async () => {
+    stickToBottom.value = true
+    await nextTick()
+    await scrollToBottom()
+  },
+)
+
+/** 把消息区滚到底部（并把「跟随底部」标记置回 true）。 */
+async function scrollToBottom() {
+  stickToBottom.value = true
+  await nextTick()
+  const el = messagesContainer.value
+  if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
+}
+
 // v-html 注入后补外链安全属性（流式气泡同样需要）
 watch(streamingHtml, () => nextTick(() => hardenLinks(streamingBody.value)))
 
@@ -311,12 +361,16 @@ function onKeydown(e) {
 
 watch(
   () => store.isOpen,
-  (open) => {
+  async (open) => {
     if (open) {
       window.addEventListener('keydown', onKeydown)
-      nextTick(() => {
-        dialogPanel.value?.querySelector('input')?.focus()
-      })
+      await nextTick()
+      dialogPanel.value?.querySelector('input')?.focus()
+      // ⚠️ 打开面板时必须回到底部：关闭再打开会把消息区重新渲染一遍，滚动位置归零，
+      // 表现为「点图标关掉再打开，停在最上面的那条」。
+      // 顺带把 stickToBottom 重置回 true —— 它表示「用户此刻是否停在底部」，
+      // 上翻看旧消息后是 false，不重置的话下面那个滚动 watch 也会被它挡住。
+      await scrollToBottom()
     } else {
       window.removeEventListener('keydown', onKeydown)
     }

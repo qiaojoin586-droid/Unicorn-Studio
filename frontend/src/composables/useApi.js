@@ -55,5 +55,32 @@ export function useApi() {
     })
   }
 
-  return { request, get, post }
+  async function del(url) {
+    return request(url, { method: 'DELETE' })
+  }
+
+  /**
+   * 前台站点用户登录/注册（/api/auth/*，与后台 sys_user 是两套体系）。
+   * 提前固定好请求体字段名，调用方只传值，避免各处手写 body 写漂。
+   */
+  function login(email, password) {
+    return post('/api/auth/login', { email, password })
+  }
+
+  function register(nickname, email, password) {
+    return post('/api/auth/register', { nickname, email, password })
+  }
+
+  /**
+   * 退出登录。<b>必须带 token</b>：后端据此把它记进 Redis 撤销名单，
+   * 否则纯无状态 JWT 删了本地也仍然可用（没有 logout 接口时的既有限制）。
+   */
+  function logout(token) {
+    return request('/api/auth/logout', {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+  }
+
+  return { request, get, post, del, login, register, logout }
 }

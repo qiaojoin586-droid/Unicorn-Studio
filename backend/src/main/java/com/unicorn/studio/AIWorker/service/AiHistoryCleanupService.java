@@ -105,7 +105,7 @@ public class AiHistoryCleanupService {
         long deletedMessages = 0L;
         long deletedConversations = 0L;
         try {
-            BatchOutcome messages = deleteInBatches(maxDeletePerRun, limit -> messageMapper.deleteBefore(cutoff, limit));
+            BatchOutcome messages = deleteInBatches(maxDeletePerRun, limit -> messageMapper.deleteBefore(cutoff, limit)/** limit提前占位 **/);
             deletedMessages = messages.deleted;
             BatchOutcome conversations = deleteInBatches((int) Math.max(0 , maxDeletePerRun-deletedMessages)
                     , limit -> conversationMapper.deleteEmptyBefore(cutoff, limit));
