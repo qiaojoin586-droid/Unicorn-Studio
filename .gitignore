@@ -38,7 +38,7 @@ Thumbs.db
 # IDE 配置（本地个人配置，不入库）
 .idea/
 .vscode/
-
+.claude/
 # WorkBuddy 工作区记忆与任务（本地个人，不入库）
 .workbuddy/
 
