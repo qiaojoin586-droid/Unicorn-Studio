@@ -1,6 +1,7 @@
 package com.unicorn.studio.service;
 
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.common.cache.RevokedTokenStore;
 import com.unicorn.studio.mapper.PublicUserMapper;
 import com.unicorn.studio.model.PublicUser;
 import io.jsonwebtoken.Claims;
@@ -15,9 +16,14 @@ import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Date;
+import java.util.HexFormat;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * 前台用户体系（独立于后台 token 体系，不同 secret）：
@@ -40,10 +46,12 @@ public class PublicAuthService {
 
     private final PublicUserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
+    private final RevokedTokenStore revokedTokens;
     private final SecretKey key;
 
     public PublicAuthService(PublicUserMapper userMapper,
                              PasswordEncoder passwordEncoder,
+                             RevokedTokenStore revokedTokens,
                              @Value("${app.public.jwt-secret:}") String secret) {
         if (secret == null || secret.length() < MIN_SECRET_LENGTH) {
             log.error("PUBLIC_JWT_SECRET 未配置或长度不足 {} 字符，拒绝启动（安全要求）", MIN_SECRET_LENGTH);
@@ -52,6 +60,7 @@ public class PublicAuthService {
         }
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
+        this.revokedTokens = revokedTokens;
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
@@ -85,8 +94,8 @@ public class PublicAuthService {
         if (!passwordEncoder.matches(password, user.getPassword())) {
             throw new BusinessException(org.springframework.http.HttpStatus.UNAUTHORIZED, "邮箱或密码错误");
         }
-        if (user.getStatus() != null && user.getStatus() == 0) {
-            throw new BusinessException(org.springframework.http.HttpStatus.FORBIDDEN, "账号已被禁言");
+        if (user.getStatus() != null && user.getStatus() == 2) {
+            throw new BusinessException(org.springframework.http.HttpStatus.FORBIDDEN, "账号已被注销");
         }
         user.setLastLoginAt(LocalDateTime.now());
         userMapper.updateById(user);
@@ -102,19 +111,97 @@ public class PublicAuthService {
      * 口径与后台 {@code JwtAuthFilter} 一致：不设置身份，降级为游客，而非抛 401。
      */
     public PublicUser resolveFromHeader(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
+        String token = stripBearer(authorization);
+        if (token == null) {
             return null;
         }
         try {
             Claims claims = Jwts.parser().verifyWith(key).build()
-                    .parseSignedClaims(authorization.substring(7)).getPayload();
+                    .parseSignedClaims(token).getPayload();
+            // 已退出登录：与「已过期」同等对待，直接降级为游客
+            if (revokedTokens.isRevoked(sha256Hex(token))) {
+                return null;
+            }
             PublicUser user = userMapper.selectById(Long.valueOf(claims.getSubject()));
-            if (user == null || user.getStatus() == null || user.getStatus() == 0) {
+            if (user == null || user.getStatus() == null || user.getStatus() == 2) {
                 return null;
             }
             return user;
         } catch (JwtException | IllegalArgumentException e) {
             return null;
+        }
+    }
+
+    /**
+     * 只验签取 userId，<b>不查库</b>。
+     * <p>
+     * 供 {@code RateLimitFilter} 在限流阶段用：它排在 {@code PublicUserAuthFilter} 之前
+     * （见 {@code SecurityConfig} 的「限流 → 认人」），此刻 SecurityContext 还是空的。
+     * 而 {@link #resolveFromHeader} 会 {@code selectById} 查一次库 —— 为了一个 userId
+     * 让每个匿名请求都查库，正是「限流要放最前」要避免的事。
+     * <p>
+     * <b>不查库意味着不判 status</b>：被封禁的用户这里仍能取出 userId。这没问题——
+     * 限流只管"准不准发"，能不能用是 {@code @RequireSiteUser} 的事。
+     *
+     * @return userId；无 token / 签名不对 / 已过期返回 {@link Optional#empty()}
+     */
+    public Optional<Long> parseUserId(String authorization) {
+        String token = stripBearer(authorization);
+        if (token == null) {
+            return Optional.empty();
+        }
+        try {
+            Claims claims = Jwts.parser().verifyWith(key).build()
+                    .parseSignedClaims(token).getPayload();
+            return Optional.of(Long.valueOf(claims.getSubject()));
+        } catch (JwtException | IllegalArgumentException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * 退出登录：把当前 token 记入 Redis 撤销名单。
+     * <p>
+     * <b>幂等</b>：无 token / token 非法 / 已过期都静默返回成功 —— "本来就没登录"不该是错误，
+     * 前端也不必为此区分处理。
+     * <p>
+     * 只撤销<b>当前这一个</b> token，不动其它设备：前台没有 refresh token 体系，
+     * 做不到后台那种"按 userId 批量清令牌"（{@code AuthService.logout} 的多端下线）。
+     */
+    public void logout(String authorization) {
+        String token = stripBearer(authorization);
+        if (token == null) {
+            return;
+        }
+        try {
+            Claims claims = Jwts.parser().verifyWith(key).build()
+                    .parseSignedClaims(token).getPayload();
+            // TTL 取剩余有效期：token 自然过期后名单条目自动消失，不需要清理任务
+            Duration ttl = Duration.ofMillis(claims.getExpiration().getTime() - System.currentTimeMillis());
+            revokedTokens.revoke(sha256Hex(token), ttl);
+        } catch (JwtException | IllegalArgumentException e) {
+            // 签名不对 / 已过期的 token 本来就用不了，没有撤销的必要
+            log.debug("退出登录收到无效 token，跳过撤销: {}", e.getMessage());
+        }
+    }
+
+    /** 从 Authorization 头剥出 token；不是 Bearer 格式或为空返回 null。 */
+    private static String stripBearer(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            return null;
+        }
+        return authorization.substring(7);
+    }
+
+    /** token 指纹：撤销名单的键用它，避免把可直接使用的凭证写进 Redis。 */
+    private static String sha256Hex(String token) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(token.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException e) {
+            // JDK 规范要求 SHA-256 必有，缺了说明运行环境坏了，不能降级
+            throw new IllegalStateException("SHA-256 不可用", e);
         }
     }
 

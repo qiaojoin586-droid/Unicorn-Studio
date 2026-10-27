@@ -1,8 +1,11 @@
 -- ==========================================================================
 -- Unicorn Studio · 服务器端全量建库脚本（01-schema-full.sql）
 -- --------------------------------------------------------------------------
--- 生成方式：backend/sql/tools/gen_merged_schema.py
---   由 mysql-init.sql（V1-V7 基线）+ mysql-migration-v8..v18 + 权限乱码修复合并。
+-- 生成方式（历史沿革）：由 backend/sql/tools/gen_merged_schema.py 合并
+--   mysql-init.sql（V1-V7 基线）+ mysql-migration-v8..v19 + 权限乱码修复。
+--   ⚠️ 该生成脚本从未入库，源迁移文件也已在提交 552fce1 中被删除
+--     ⇒ 无法再「改源脚本 → 重新生成」。本文件现在是【唯一的建库来源】，
+--       表结构变更请直接改这里（新表按本文件既有范式追加到末尾的 V 段中）。
 --
 -- 特性：
 --   * 幂等：可重复执行。表用 IF NOT EXISTS、种子数据用 INSERT IGNORE、
@@ -173,7 +176,15 @@ CREATE TABLE IF NOT EXISTS public_user (
   ban_until     DATETIME COMMENT 'NULL=永久禁言',
   register_ip   VARCHAR(45),
   last_login_at DATETIME,
-  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- V19：前台 AI 使用权限。这是「前台 AI 改为登录后可用」这个需求第一次产生的维度，
+  --      独立于禁言 status —— 禁言仍由 status=0 表达，两者互不影响（禁言用户照样能用 AI）。
+  --      为什么不复用 status：status 已被「登录封禁校验 / 评论拦截 / 前台身份解析」三处依赖，
+  --      把 AI 语义塞进去会把那三处的语义一起搅乱，故独立成列。
+  --      ★ 本列必须排在 created_at 之后：V19 是 ALTER TABLE ADD COLUMN 且不带 AFTER，
+  --        实录库的 ORDINAL_POSITION 即为「追加在末尾」。若在此处前置，
+  --        脚本建出的库与实录库列顺序不一致（列名集合相同、顺序不同）。
+  ai_enabled    TINYINT NOT NULL DEFAULT 1 COMMENT '1允许使用AI助手 0禁止（独立于禁言 status）'
 );
 SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
   WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'public_user' AND INDEX_NAME = 'idx_public_user_status');
@@ -1464,6 +1475,141 @@ PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 -- ============================================================
 
 -- ##########################################################################
+-- 以下来自 mysql-migration-v19-ai-memory.sql
+-- ##########################################################################
+
+-- ============================================================
+-- V19 迁移：AI 记忆模块（会话表 ai_conversation / 消息表 ai_message）
+--          + 前台 AI 使用权限列 public_user.ai_enabled
+-- 背景：前台 AI 由「匿名可用」改为「登录后可用」后，问答必须落库才能支持多轮记忆
+--       （设计方案 §3.2 登录门禁 / §5.3 记忆模块）。ai_enabled 是本次需求新增的维度。
+--       不复用 status 的原因：status 已被「登录封禁校验 / 评论拦截 / 前台身份解析」三处依赖，
+--       把 AI 语义塞进去会把那三处的语义一起搅乱，故独立成列；禁言用户照样能用 AI。
+-- 向后兼容：仅新增表 / 新增列 / 新增索引，不改动、不删除任何现有表结构与数据。
+-- 幂等：表用 IF NOT EXISTS；列与索引（含唯一键）一律走 information_schema 判存块 ——
+--       因为表已存在时 CREATE TABLE IF NOT EXISTS 会整条跳过，写在表内的索引补不上
+--       （MySQL 8 的 CREATE INDEX 没有 IF NOT EXISTS）。
+-- 非破坏：无 DROP / DELETE / TRUNCATE。
+-- 执行方式：随本文件一起执行；亦可用于已初始化库的增量重跑
+--          （原为 mysql-migration-v19-ai-memory.sql，该文件从未入库）。
+-- ============================================================
+SET NAMES utf8mb4;
+
+-- 1. public_user 补列 ai_enabled（存在则跳过，写法同 V8 的 learning_resources 补列）
+SET @add_ai_enabled := (
+  SELECT IF(
+    EXISTS(SELECT 1 FROM information_schema.COLUMNS
+           WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'public_user' AND COLUMN_NAME = 'ai_enabled'),
+    'SELECT 1',
+    'ALTER TABLE public_user ADD COLUMN ai_enabled TINYINT NOT NULL DEFAULT 1 COMMENT ''1允许使用AI助手 0禁止（独立于禁言 status）'''
+  )
+);
+PREPARE stmt FROM @add_ai_enabled; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 2. 会话表（新表）
+--    id 用 ULID（26 字符定长 VARCHAR）：有序（相邻会话聚簇在一起）+ 不可猜（不暴露会话总量）。
+--    user_id 由 R6 决定不会为 NULL，故不建外键 —— 本库业务表一律不建外键，
+--    全库仅 sys_user_role / sys_role_permission 两张纯关系表有（共 4 个）。
+CREATE TABLE IF NOT EXISTS ai_conversation (
+  id             VARCHAR(26) NOT NULL COMMENT 'ULID（有序、不可猜）',
+  user_id        BIGINT      NOT NULL COMMENT 'public_user.id；R6 决定不会为 NULL',
+  title          VARCHAR(60) NOT NULL COMMENT '取首条用户消息，超长截断加省略号',
+  message_count  INT         NOT NULL DEFAULT 0 COMMENT '含被删除的消息（用于列表展示与统计）',
+  last_active_at DATETIME    NOT NULL COMMENT '最后一条消息时间；列表排序依据',
+  created_at     DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+);
+
+-- 3. 会话表索引
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_conversation' AND INDEX_NAME = 'idx_ai_conv_user_active');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_conv_user_active ON `ai_conversation` (user_id, last_active_at DESC)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_conversation' AND INDEX_NAME = 'idx_ai_conv_active');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_conv_active ON `ai_conversation` (last_active_at)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 会话表索引用途备查：
+--   idx_ai_conv_user_active (user_id, last_active_at DESC)  「我的会话列表」= 按用户查 + 按活跃时间倒序
+--     ⚠️ 复合索引遵循最左前缀：(user_id, last_active_at) 服务不了「不带 user_id 条件」的查询，
+--        故下面必须另建单列 idx_ai_conv_active 兜底，两者不能互相替代。
+--     ⚠️ DESC 索引需 MySQL 8.0+ 才真正生效（5.7 会静默忽略当 ASC），线上库务必 8.0 以上。
+--   idx_ai_conv_active (last_active_at)                      全局按最近活跃排序（如后台会话总览）
+
+-- 4. 消息表（新表）
+--    content 用 MEDIUMTEXT（与 work.content 同档）。⚠️ 因此所有「读消息」的查询必须做列投影，
+--    禁止 SELECT * —— 字段是在 SQL 层被读出来的，在 VO 里丢掉它不省任何开销（前车之鉴 B-09）。
+CREATE TABLE IF NOT EXISTS ai_message (
+  id               BIGINT      NOT NULL AUTO_INCREMENT,
+  conversation_id  VARCHAR(26) NOT NULL COMMENT 'ai_conversation.id',
+  user_id          BIGINT      NOT NULL COMMENT '冗余存储：所有查询都要校验归属，避免 JOIN',
+  role             VARCHAR(16) NOT NULL COMMENT 'user / assistant',
+  content          MEDIUMTEXT  NOT NULL COMMENT '消息正文（assistant 可为空串）',
+  status           VARCHAR(16) NOT NULL DEFAULT 'completed' COMMENT 'completed/interrupted/empty/blocked',
+  client_msg_id    VARCHAR(40) NULL COMMENT '前端生成，用于幂等去重（仅 user 消息有值）',
+  blocked_word     VARCHAR(64) NULL COMMENT '命中敏感词时记录原词（合规复核用）',
+  token_usage      INT         NULL COMMENT 'assistant 消息的 token 用量；流式可能拿不到，允许 NULL',
+  context_eligible TINYINT     NOT NULL DEFAULT 1 COMMENT '是否参与记忆模块的上下文（工具消息=0）',
+  deleted_at       DATETIME    NULL COMMENT '用户软删除标记（R11）',
+  created_at       DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  -- ⚠️ MySQL 唯一索引对 NULL 不去重：assistant 行的 client_msg_id 恒为 NULL，
+  --    所以同会话的多条 assistant 消息不会互相冲突，只有 user 行（有值）参与去重。
+  --    这是本设计成立的前提 —— 因此给 client_msg_id 写值时绝不能写空字符串：
+  --    '' = '' 成立，同一会话第二条 assistant 消息就会撞唯一键、插不进去。
+  --    改 client_msg_id 的写入规则前必须重看这条。
+  --    下面第 5 节仍会单独再建一次：表已存在时本条不生效，两处互为兜底，勿删其中任一处。
+  UNIQUE KEY uk_ai_msg_client (conversation_id, client_msg_id)
+);
+
+-- 5. 消息表索引（含唯一键，理由见上）
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_message' AND INDEX_NAME = 'uk_ai_msg_client');
+SET @sql := IF(@exists = 0,
+  'CREATE UNIQUE INDEX uk_ai_msg_client ON `ai_message` (conversation_id, client_msg_id)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_message' AND INDEX_NAME = 'idx_ai_msg_session');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_msg_session ON `ai_message` (conversation_id, id)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_message' AND INDEX_NAME = 'idx_ai_msg_user_created');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_msg_user_created ON `ai_message` (user_id, created_at)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_message' AND INDEX_NAME = 'idx_ai_msg_created');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_msg_created ON `ai_message` (created_at)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_message' AND INDEX_NAME = 'idx_ai_msg_blocked');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_msg_blocked ON `ai_message` (status, created_at)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 消息表索引用途备查（与设计方案 §5.3 的索引表一一对应）：
+--   uk_ai_msg_client        (conversation_id, client_msg_id)  幂等去重：前端重发不产生重复消息
+--   idx_ai_msg_session      (conversation_id, id)             读某会话的消息，按 id 顺序翻页
+--   idx_ai_msg_user_created (user_id, created_at)             按用户维度审计 / 统计
+--   idx_ai_msg_created      (created_at)                      全局按时间清理（数据保留策略）
+--   idx_ai_msg_blocked      (status, created_at)              捞出被拦截的消息（合规复核）
+--
+-- ⚠️ 待与设计方确认一处：文档称 idx_ai_msg_session (conversation_id, id)「带 user_id 时走覆盖」，
+--    但该索引里没有 user_id 列，严格讲做不到覆盖（仍要回表取 user_id）。
+--    已按文档原样落地，此处仅作备注，未擅改设计。
+
+-- ##########################################################################
 -- 以下来自 mysql-fix-permission-mojibake.sql（历史乱码修复，幂等）
 -- ##########################################################################
 
@@ -1492,6 +1638,110 @@ UPDATE sys_permission SET name = '招收方向列表', module = '主要招收方
 UPDATE sys_permission SET name = '新增招收方向', module = '主要招收方向' WHERE code = 'service:create';
 UPDATE sys_permission SET name = '编辑招收方向', module = '主要招收方向' WHERE code = 'service:edit';
 UPDATE sys_permission SET name = '删除招收方向', module = '主要招收方向' WHERE code = 'service:delete';
+
+-- ==========================================================================
+-- V20 迁移：AI 工具层（工具配置表 ai_tool_config / 调用审计表 ai_tool_invocation）
+-- ==========================================================================
+-- 背景：设计方案 §11.1 P4 要求工具调用可观测（原先日志与审计都是零），
+--       §11.2 定义工具配置表；二期 MCP 才用的 ai_mcp_server 本期不建。
+-- 向后兼容：仅新增表，不改动、不删除任何现有表结构与数据；两张新表都不建外键
+--       （本库业务表一律不建外键，见 V19 的说明）。
+-- 幂等：表用 IF NOT EXISTS；索引一律走 information_schema 判存块 ——
+--       因为表已存在时 CREATE TABLE IF NOT EXISTS 会整条跳过，表内索引补不上。
+-- 非破坏：无 DROP / DELETE / TRUNCATE。
+-- 执行方式：随本文件一起执行；亦可用于已初始化库的增量重跑。
+-- ============================================================
+SET NAMES utf8mb4;
+
+-- 1. 工具配置表
+--    ⚠️ scope 是 v1.2 定下的三态，建表前必须定死：原设计只有 tool_type=builtin/api/mcp，
+--    没有「前台能不能用」这个维度，按原文实施会发现前台一个工具都装不上（§11.4 明确指出该矛盾）。
+--    enabled 默认 0（保守），但【内置工具同步入库时置 1】—— 它的描述来自本项目代码、
+--    不存在「被外部篡改」这条路径；让管理员逐个点确认只会导致升级后新工具集体静默不生效。
+CREATE TABLE IF NOT EXISTS ai_tool_config (
+  id             BIGINT       NOT NULL AUTO_INCREMENT,
+  tool_name      VARCHAR(64)  NOT NULL COMMENT '模型看到的工具名（全局唯一）',
+  tool_type      VARCHAR(16)  NOT NULL COMMENT 'builtin / api / mcp',
+  display_name   VARCHAR(64)  NOT NULL,
+  description    VARCHAR(500) NOT NULL COMMENT '【模型路由依据】模型据此判断何时调用，必填',
+  http_method    VARCHAR(8)   NULL COMMENT 'api 类型：GET/POST',
+  http_url       VARCHAR(500) NULL COMMENT 'api 类型：目标地址（受 §11.4 SSRF 防护约束）',
+  http_headers   VARCHAR(1000) NULL COMMENT 'api 类型：JSON；敏感值加密存储',
+  http_body_tmpl VARCHAR(1000) NULL COMMENT 'api 类型：请求体模板',
+  param_schema   VARCHAR(2000) NULL COMMENT 'JSON Schema（P2 改造后由工具声明或后台填写）',
+  mcp_server_id  BIGINT       NULL COMMENT 'mcp 类型（§11.3 二期才建 ai_mcp_server，本期恒为 NULL）',
+  enabled        TINYINT      NOT NULL DEFAULT 0 COMMENT '0禁用 1启用；新行默认禁用（保守）。内置工具同步入库时置 1——其描述来自代码、无被外部篡改的可能',
+  scope          VARCHAR(16)  NOT NULL DEFAULT 'admin' COMMENT '可见范围三态：public=内置只读工具，前台可装配；admin=仅后台管理员；mcp=恒仅后台',
+  priority       INT          NOT NULL DEFAULT 100 COMMENT '越小越优先；用于单轮装配上限的取舍',
+  timeout_ms     INT          NOT NULL DEFAULT 5000 COMMENT '单工具超时（R18 默认 5s）',
+  fingerprint    CHAR(64)     NOT NULL COMMENT '名称+描述+参数Schema 的 SHA-256，用于变更需确认',
+  confirmed_at   DATETIME     NULL COMMENT '管理员确认当前 fingerprint 的时间；内置工具直接写 NOW()',
+  created_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ai_tool_name (tool_name),
+  KEY idx_ai_tool_scope_enabled (scope, enabled, priority)
+);
+
+-- 2. 工具调用审计表（§11.7 R16）
+--    ⚠️ args_digest 只存【截断 + 脱敏】后的参数摘要，绝不存返回值全文 ——
+--    返回值可能含正文，几 KB 一条会让本表膨胀成第二个 sys_operation_log（§11.7 六条硬约束第 1 条）。
+--    ⚠️ message_id 的处置（§11.7 v1.2）：流式下工具调用发生在 assistant 消息落库【之前】，
+--    写入时必然为 NULL。本期保留该列并【留待 ⑧ 落库后回填】——
+--    文档给的另一条路是直接删列，但两者都必须选一个；保留而不回填会让人误判成「关联失败」。
+--    ⚠️ 本表必须纳入保留期清理（§7.4 v1.2）：它是「每次工具调用一行」的表，
+--    放任不管就是第二个 sys_operation_log。清理挂在 RetentionService 上（复用后台的 7/15/30/90 天档位）。
+CREATE TABLE IF NOT EXISTS ai_tool_invocation (
+  id              BIGINT       NOT NULL AUTO_INCREMENT,
+  conversation_id VARCHAR(26)  NULL COMMENT 'ai_conversation.id；后台助手为 NULL',
+  message_id      BIGINT       NULL COMMENT '关联的 assistant 消息。流式下写入时必然为 NULL，⑧ 落库后回填',
+  invoker_type    VARCHAR(16)  NOT NULL COMMENT 'site_user / admin；配额与越权排查都依赖它',
+  invoker_id      BIGINT       NOT NULL COMMENT 'public_user.id 或 sys_user.id',
+  tool_name       VARCHAR(64)  NOT NULL,
+  args_digest     VARCHAR(500) NULL COMMENT '参数摘要（截断 500 字符 + 脱敏），绝不存全文',
+  result_status   VARCHAR(16)  NOT NULL COMMENT 'ok / empty / invalid_argument / timeout / upstream_error / forbidden',
+  result_bytes    INT          NULL COMMENT '返回体大小（用于观测大返回值）',
+  duration_ms     INT          NOT NULL,
+  created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id)
+);
+
+-- 2. 工具配置表索引
+--    ⚠️ 表内已写了 UNIQUE / KEY，为什么下面还要再来一遍判存块？
+--    因为表已存在时 CREATE TABLE IF NOT EXISTS 是【整条跳过】的（不是"只跳表体"），
+--    写在括号里的索引一个都不会被创建；而 MySQL 8 的 CREATE INDEX 又没有 IF NOT EXISTS，
+--    裸写会在重跑时抛 Duplicate key name 并中断后续语句。
+--    写法与 V19 段（ai_conversation / ai_message 的 7 个索引）保持一致。
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_tool_config' AND INDEX_NAME = 'uk_ai_tool_name');
+SET @sql := IF(@exists = 0,
+  'CREATE UNIQUE INDEX uk_ai_tool_name ON `ai_tool_config` (tool_name)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_tool_config' AND INDEX_NAME = 'idx_ai_tool_scope_enabled');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_tool_scope_enabled ON `ai_tool_config` (scope, enabled, priority)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+-- 3. 审计表索引（同样理由：表已存在时上面的 CREATE TABLE IF NOT EXISTS 会整条跳过，索引补不上）
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_tool_invocation' AND INDEX_NAME = 'idx_ai_tool_inv_user');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_tool_inv_user ON `ai_tool_invocation` (invoker_id, created_at)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_tool_invocation' AND INDEX_NAME = 'idx_ai_tool_inv_name');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_tool_inv_name ON `ai_tool_invocation` (tool_name, created_at)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @exists := (SELECT COUNT(*) FROM information_schema.STATISTICS
+  WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_tool_invocation' AND INDEX_NAME = 'idx_ai_tool_inv_created');
+SET @sql := IF(@exists = 0,
+  'CREATE INDEX idx_ai_tool_inv_created ON `ai_tool_invocation` (created_at)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- ==========================================================================
 -- 完成。执行 03-verify.sql 校验结构，再导入 02-data.sql。

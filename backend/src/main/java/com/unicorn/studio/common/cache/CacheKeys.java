@@ -156,6 +156,17 @@ public final class CacheKeys {
         return USER_TOKENS_PREFIX + userId;
     }
 
+    // ---- 前台 token 撤销名单：退出登录用 ----
+    // 键里放 token 的 SHA-256 而不是原文：① 原文 200+ 字符，键过长；
+    // ② 名单要落 Redis 磁盘，放原文等于把一份可直接使用的凭证留在磁盘上；
+    // ③ SHA-256 单向，从键无法反推 token。
+
+    public static final String REVOKED_PUBLIC_PREFIX = "cache:public:revoked:";
+
+    public static String revokedPublic(String tokenHash) {
+        return REVOKED_PUBLIC_PREFIX + tokenHash;
+    }
+
     // ---- 后台聚合（B11）：仪表盘短 TTL ----
 
     public static String dashboardSummary(int days) {
@@ -168,5 +179,44 @@ public final class CacheKeys {
 
     public static String rate(String dimension, String subject) {
         return RATE_PREFIX + dimension + ":" + subject;
+    }
+
+    // ---- AI 会话读缓存（§5.3：Redis 只做读缓存，MySQL 是唯一权威）----
+
+    /** AI 会话删除时用的缓存键 */
+    /**
+     * 缓存键必须带 size：缓存里存的是"本次请求那几条"，而同一个用户可能用不同
+     * pageSize 打开列表（抽屉默认 20、其它入口可能 50）。不带 size 就会在第二次
+     * 用另一个 size 请求时命中上次那份长度不对的列表。
+     */
+    public static String aiSessions(Long userId, int size) {
+        return "cache:ai:sessions:" + userId + ":" + size;
+    }
+
+    public static String aiMessages(String conversationId) {
+        return "cache:ai:msgs:" + conversationId;
+    }
+
+    /** 清空对话时失效该用户全部 size 变体的会话列表缓存（读写键带 size，只能按模式删） */
+    public static String aiSessionsPattern(Long userId) {
+        return "cache:ai:sessions:" + userId + ":*";
+    }
+
+    /** 清空对话时失效该会话的全部消息缓存（size 有多种变体，只能按模式删） */
+    public static String aiMessagesPattern(String conversationId) {
+        return "cache:ai:msgs:" + conversationId + ":*";
+    }
+
+    // ---- AI 问答配额（文档 §9.3）----
+    // 日期段由调用方格式化传入：过期时间要按自然日/自然月对齐，键名必须自带窗口类型，
+    // 否则 "202610"（月）与 "20261010"（日）在同一用户下无法区分
+    /** AI 会话每日配额 */
+    public static String aiQuotaDaily(Long userId, String yyyyMMdd){
+        return "chat:quota:" + userId + ":day:" + yyyyMMdd;
+    }
+
+    /** AI 会话月度配额 */
+    public static String aiQuotaMonthly(Long userId, String yyyyMM){
+        return "chat:quota:" + userId + ":month:" + yyyyMM;
     }
 }

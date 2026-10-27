@@ -14,5 +14,14 @@ import jakarta.validation.constraints.Size;
 public record ChatRequest(
         @NotBlank(message = "消息不能为空")
         @Size(max = 2000, message = "消息长度不能超过 2000 字")
-        String message) {
+        String message,
+
+        /** 会话 id；为空时后端自动建一个（兼容老前端） */
+        String sessionId,
+
+        /** 前端生成的幂等键，必填。crypto.randomUUID() 即可 */
+        @NotBlank(message = "clientMsgId 缺失")
+        @Size(max = 40)
+        String clientMsgId
+) {
 }
