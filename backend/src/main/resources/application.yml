@@ -148,6 +148,14 @@ mybatis-plus:
       update-strategy: ignored
 
 app:
+  site:
+    # 站点对外的完整地址（协议 + 域名），如 https://unicorn-studio.top
+    # ⚠️ 工具返回给访客的页面地址必须用完整地址 —— 相对路径（/works）在回答里没法点，
+    #    访客复制到地址栏也是错的。
+    # ⚠️ 为什么不用请求的 Host 头：Host / X-Forwarded-Host 是客户端可控的，
+    #    用它拼给访客的链接等于允许伪造出一个指向别处的地址（钓鱼）。基址必须服务端自己定。
+    # ⚠️ 留空时工具会回落到相对路径（并在服务端记 WARN），绝不会自己编一个域名。
+    base-url: ${SITE_BASE_URL:}
   cors:
     # 前台 dev 5173 / 后台 dev 5174 / 前台 Node 生产服务 3000（含 localhost 与 127.0.0.1 两种写法，
     # 二者在浏览器中属不同 Origin，缺一即返回 403 Invalid CORS request）
@@ -269,8 +277,13 @@ app:
     guest-comment-per-hour: 10
     message-per-hour: 5
     stats-per-minute: 60
-    # AI 对话（/api/ai/chat）：每次调用产生真实外部 API 费用，按 IP 限流（§3.4 C6①）
-    ai-per-minute: 5
+    # AI 对话（/api/ai/chat）：每次调用产生真实外部 API 费用，按 §3.4 C6① 限流。
+    # ⚠️ 这是【用户维度】的上限（按 userId 计），IP 维度是它的 3 倍（见 RateLimitFilter）。
+    #   用户维度 15 次/分：正常人一分��问 15 个问题已经远超实际使用量，
+    #   挡的是「连点/脚本」而不是「正常提问」——限流太紧会被正常用户投诉。
+    #   IP 维度 45 次/分：兜底挡批量注册的小号（同一 IP 下多账号狂刷）。
+    # ⚠️ 分钟级限流只挡瞬时刷爆，长期消耗要看 app.ai.quota 的日/月配额（当前默认关闭）。
+    ai-per-minute: 15
   cache:
     # V15 Redis 缓存方案（docs/Redis缓存设计设计方案.md 附录 A）
     # enabled=false 必须能一键回到「全部直读 MySQL」—— 灰度上线与故障应急的生命线。

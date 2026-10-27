@@ -4,6 +4,7 @@ import com.unicorn.studio.AIWorker.config.AiConfigProvider;
 import com.unicorn.studio.AIWorker.config.AiRuntimeConfig;
 import com.unicorn.studio.AIWorker.entity.AiMessage;
 import com.unicorn.studio.AIWorker.entity.AiToolInvocation;
+import com.unicorn.studio.AIWorker.tool.AiToolCaller;
 import com.unicorn.studio.AIWorker.tool.AiToolRegistry;
 import com.unicorn.studio.AIWorker.tool.ToolCallBudget;
 import com.unicorn.studio.common.BusinessException;
@@ -141,7 +142,7 @@ public class AiChatService {
         // 下一轮自然是另一个对象 ⇒ 不用清理、不会串轮。
         ToolCallBudget budget = new ToolCallBudget(toolMaxCallsPerRound, toolMaxDurationMillis);
         ToolCallback[] tools = toolRegistry.callbacks(
-                new AiToolRegistry.Caller(AiToolInvocation.INVOKER_SITE_USER, userId, conversationId), budget);
+                AiToolCaller.siteUser(userId, conversationId), budget);
         // §11.7 第 6 条：装配清单也要有落点，否则无法区分「工具没生效」与「模型没选它」
         // （前者查配置/代码，后者改描述措辞，两类故障修法完全不同）。
         // 这行只含工具名与调用者 id，不含任何用户消息内容，与 §9.2 不冲突。

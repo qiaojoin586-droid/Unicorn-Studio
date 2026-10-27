@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.AIWorker.entity.AiToolConfig;
 import com.unicorn.studio.AIWorker.entity.AiToolInvocation;
-import com.unicorn.studio.AIWorker.mapper.AiToolInvocationMapper;
+import com.unicorn.studio.AIWorker.tool.support.AiToolSupport;
 import com.unicorn.studio.AIWorker.tool.guard.ToolUrlGuard;
 import com.unicorn.studio.common.crypto.CryptoService;
 import lombok.NonNull;
@@ -71,21 +71,18 @@ public class ApiToolInvoker {
     private static final int DEFAULT_TIMEOUT_MS = 5000;
 
     /** 参数与请求头里需要脱敏的键名（比较时统一转小写）。 */
-    private static final Set<String> SECRET_KEYS = Set.of(
-            "password", "passwd", "pwd", "token", "secret", "apikey", "api_key", "api-key", "authorization");
+    /** 敏感键名集合：与审计参数脱敏共用同一份（见 {@link AiToolSupport#SECRET_KEYS}）。 */
+    private static final Set<String> SECRET_KEYS = AiToolSupport.SECRET_KEYS;
 
     private final ToolUrlGuard urlGuard;
     private final ToolCircuitBreaker breaker;
-    private final AiToolInvocationMapper auditMapper;
     private final CryptoService crypto;
     private final ObjectMapper mapper;
 
     public ApiToolInvoker(ToolUrlGuard urlGuard, ToolCircuitBreaker breaker,
-                          AiToolInvocationMapper auditMapper, CryptoService crypto,
-                          ObjectMapper mapper) {
+                          CryptoService crypto, ObjectMapper mapper) {
         this.urlGuard = urlGuard;
         this.breaker = breaker;
-        this.auditMapper = auditMapper;
         this.crypto = crypto;
         this.mapper = mapper;
     }
@@ -103,10 +100,8 @@ public class ApiToolInvoker {
     public String invoke(AiToolConfig config, String argumentsJson,
                          String conversationId, String invokerType, Long invokerId) {
         long start = System.currentTimeMillis();
-        String argsDigest = digest(argumentsJson);
         String status = AiToolInvocation.OK;
         String resultJson;
-        int resultBytes = 0;
 
         try {
             // ① SSRF：不合格直接拒绝，一个字节都不发
@@ -115,7 +110,6 @@ public class ApiToolInvoker {
             Fetched fetched = send(config, argumentsJson);
             // 记【原始大小】而不是已读字节数：result_bytes 这一列的用途是
             // 「观测哪个工具返回了超大 body」（§11.7），记 8193 就完全失去了意义。
-            resultBytes = fetched.originalBytes();
             // ③ 截断标记 + 统一包装
             resultJson = wrap(fetched.body(), fetched.truncated());
             breaker.onSuccess(config.getToolName());
@@ -164,8 +158,9 @@ public class ApiToolInvoker {
             log.warn("API 工具请求失败 tool={} invokerId={} type={}",
                     config.getToolName(), invokerId, status, e);
         } finally {
-            audit(config, conversationId, invokerType, invokerId, argsDigest, status,
-                    resultBytes, (int) (System.currentTimeMillis() - start));
+            // ⚠️ 审计已挪到 BudgetedToolCallback：那里是【所有工具唯一的公共出口】，
+            // 内置工具不走本类，写在这里的话内置工具的调用轨迹就查不到（§11.7 要求"每次调用一行"）。
+            // 在这里写会与装饰器重复写两行，所以本类不再写。
         }
         return resultJson;
     }
@@ -213,18 +208,15 @@ public class ApiToolInvoker {
     /**
      * 一次 HTTP 调用的结果。truncated 表示"读满上限就停"，不是"完整读完再截"。
      * <p>
-     * ⚠️ <b>{@code originalBytes} 与 {@code readBytes} 必须分开</b>：{@code result_bytes} 列的
-     * 文档语义是「返回体大小（用于观测"大返回值"）」，要的是<b>上游原本有多大</b>；
-     * 而我们限量读，<b>只能知道自己读了多少</b>。两者混为一谈的话，这一列永远记着 8193，
-     * 完全看不出"哪个工具返回了 300KB"。原始大小从响应头 {@code Content-Length} 取；
-     * 上游用 chunked 编码（没有 Content-Length）时才退回已读字节数。
+     * ⚠️ 这里【只记读了多少字节】，不取上游的 Content-Length：审计的 {@code result_bytes}
+     * 记的是"模型实际收到多少"（那才是影响 token 成本的大小），已挪到装饰器统一记。
+     * 上游原本有多大，由返回给模型的 JSON 里的 {@code truncated} 标记体现。
      *
-     * @param body         响应体（已截断）
-     * @param truncated    是否被截断
-     * @param readBytes    实际读了多少字节
-     * @param originalBytes 上游原本的返回体大小（Content-Length；无则等于 readBytes）
+     * @param body      响应体（已截断）
+     * @param truncated 是否被截断
+     * @param totalBytes 实际读了多少字节
      */
-    private record Fetched(String body, boolean truncated, int readBytes, int originalBytes) {
+    private record Fetched(String body, boolean truncated, int totalBytes) {
     }
 
     /**
@@ -293,20 +285,8 @@ public class ApiToolInvoker {
             //因为buf长度是MAX_RESULT_BYTES+1，所以如果total>MAX_RESULT_BYTES，说明输出被截断了
             boolean truncated = total > MAX_RESULT_BYTES;
             int keep = Math.min(total, MAX_RESULT_BYTES);
-            // 原始大小取 Content-Length：限量读之后我们只知道"读了多少"，
-            // 而 result_bytes 这一列要的是"上游原本返回了多大"（§11.7：用于观测大返回值）。
-            // 没有 Content-Length（chunked 编码）时退回已读字节数 —— 此时无法得知原始大小。
-            int original = total;
-            String contentLength = resp.headers().firstValue("content-length").orElse(null);
-            if (contentLength != null) {
-                try {
-                    original = (int) Long.parseLong(contentLength.trim());
-                } catch (NumberFormatException ignored) {
-                    // 头格式异常：保留已读字节数
-                }
-            }
             //响应体参数：响应体字节数组，起始位置，读取长度，字符编码
-            return new Fetched(new String(buf, 0, keep, StandardCharsets.UTF_8), truncated, total, original);
+            return new Fetched(new String(buf, 0, keep, StandardCharsets.UTF_8), truncated, total);
         }
     }
 
@@ -484,75 +464,5 @@ public class ApiToolInvoker {
         }
     }
 
-    /**
-     * 参数摘要（§11.7 硬约束第 1 条：截断 + 脱敏，<b>绝不存全文</b>）。
-     * <p>
-     * ⚠️ 参数里可能有用户输入的密码/手机号，返回值可能含作品正文——
-     * 全文入库会让审计表本身变成二次泄露点，且体积失控。
-     * <p>
-     * 用<b>解析成 JSON 再按键脱敏</b>，而不是正则替换：正则处理不了嵌套结构、
-     * 也说不清键名是不是恰好出现在某个字符串值里；按键判断更可控。
-     */
-    private String digest(String argumentsJson) {
-        if (argumentsJson == null || argumentsJson.isBlank()) {
-            return null;
-        }
-        String masked;
-        // 尝试将参数 JSON 解析成对象，再按键脱敏
-        try {
-            masked = maskNode(mapper.readTree(argumentsJson)).toString();
-        } catch (Exception notJson) {
-            // 参数本身不是 JSON：原样截断存（比丢弃更有排查价值）
-            masked = argumentsJson;
-        }
-        return masked.length() > 500 ? masked.substring(0, 500) + "…" : masked;
-    }
 
-    /** 递归脱敏：命中敏感键名就替换成 ***，否则原样递归。 */
-    private JsonNode maskNode( JsonNode node) {
-        if (node.isObject()) {
-            var out = mapper.createObjectNode();
-            node.fields().forEachRemaining(e -> {
-                if (SECRET_KEYS.contains(e.getKey().toLowerCase())) {
-                    out.put(e.getKey(), "***");
-                } else {
-                    out.set(e.getKey(), maskNode(e.getValue()));
-                }
-            });
-            return out;
-        }
-        if (node.isArray()) {
-            var out = mapper.createArrayNode();
-            node.forEach(child -> out.add(maskNode(child)));
-            return out;
-        }
-        return node;
-    }
-
-    /**
-     * 写审计。⚠️ <b>放在 finally</b>：工具失败也要留痕，否则"为什么没调用/为什么失败"无从查证。
-     * <p>
-     * 审计写失败只记 ERROR、不影响主流程——审计是"锦上添花"；
-     * 但用 error 而非 warn：审计丢一条是<b>可观测性缺口</b>，不该和普通告警同级。
-     */
-    private void audit(AiToolConfig config, String conversationId, String invokerType, Long invokerId,
-                       String argsDigest, String status, int resultBytes, int durationMs) {
-        try {
-            AiToolInvocation row = new AiToolInvocation();
-            row.setConversationId(conversationId);
-            row.setInvokerType(invokerType);
-            row.setInvokerId(invokerId);
-            row.setToolName(config.getToolName());
-            row.setArgsDigest(argsDigest);
-            row.setResultStatus(status);
-            row.setResultBytes(resultBytes);
-            row.setDurationMs(durationMs);
-            // ⚠️ message_id 留空：流式下工具调用发生在 assistant 消息落库【之前】，拿不到 id。
-            // 文档 §11.7 第 4 条要求「落库后回填」——由 AiSessionService.finishAssistantMessage 之后执行。
-            auditMapper.insert(row);
-        } catch (Exception e) {
-            log.error("工具审计写入失败 tool={}（该次调用将无法在后台追溯）：{}",
-                    config.getToolName(), e.getMessage(), e);
-        }
-    }
 }

@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.AIWorker.entity.AiToolConfig;
 import com.unicorn.studio.AIWorker.mapper.AiToolConfigMapper;
+import com.unicorn.studio.AIWorker.mapper.AiToolInvocationMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.ToolCallback;
@@ -58,18 +59,21 @@ public class AiToolRegistry {
     private final ApiToolInvoker apiInvoker;
     private final ToolCircuitBreaker breaker;
     private final ObjectMapper mapper;
+    private final AiToolInvocationMapper auditMapper;
 
     public AiToolRegistry(List<AiTool> candidates,
                           @Value("${app.ai.tools.enabled:false}") boolean toolsEnabled,
                           AiToolConfigMapper configMapper,
                           ApiToolInvoker apiInvoker,
                           ToolCircuitBreaker breaker,
-                          ObjectMapper mapper) {
+                          ObjectMapper mapper,
+                          AiToolInvocationMapper auditMapper) {
         this.toolsEnabled = toolsEnabled;
         this.configMapper = configMapper;
         this.apiInvoker = apiInvoker;
         this.breaker = breaker;
         this.mapper = mapper;
+        this.auditMapper = auditMapper;
         if (candidates != null) {
             for (AiTool tool : candidates) {
                 if (!tool.enabled()) {
@@ -87,18 +91,6 @@ public class AiToolRegistry {
                 candidates == null ? 0 : candidates.size(), tools.size(), toolsEnabled);
     }
 
-    /**
-     * 本轮对话的调用者上下文。
-     * <p>
-     * ⚠️ 做成 record 而不是散成方法参数：这几个值要一路带进每个工具的闭包里，
-     * 参数一多就容易传错顺序（都是 Long/String，传错编译器不报错）。
-     *
-     * @param invokerType    site_user / admin
-     * @param invokerId      调用者 id
-     * @param conversationId 关联会话（后台助手为 null）
-     */
-    public record Caller(String invokerType, Long invokerId, String conversationId) {
-    }
 
     /** 已注册的内置工具名列表（供后台/诊断查看）。 */
     public List<String> registeredNames() {
@@ -120,7 +112,7 @@ public class AiToolRegistry {
      * @param caller 本轮调用者（决定 scope 过滤与审计归属）
      * @param budget 本轮共享的预算对象（由 {@code AiChatService.stream()} 创建，天然按轮隔离）
      */
-    public ToolCallback[] callbacks(Caller caller, ToolCallBudget budget) {
+    public ToolCallback[] callbacks(AiToolCaller caller, ToolCallBudget budget) {
         if (!toolsEnabled) {
             return new ToolCallback[0];
         }
@@ -166,7 +158,7 @@ public class AiToolRegistry {
                         toolName, breaker.remainingSeconds(toolName));
                 continue;
             }
-            callbacks.add(new BudgetedToolCallback(c.callback(), budget, breaker, mapper));
+            callbacks.add(new BudgetedToolCallback(c.callback(), budget, breaker, mapper, auditMapper, caller));
         }
         return callbacks.toArray(new ToolCallback[0]);
     }
@@ -191,7 +183,7 @@ public class AiToolRegistry {
      * 不是后台管理列表（要分页、要各种筛选）。项目铁律是"mapper 零查询方法"，
      * 而这张表目前唯一的读者就是本类 —— 为它单开一个 Service 属于过度分层。
      */
-    private List<Candidate> apiCandidates(Caller caller) {
+    private List<Candidate> apiCandidates(AiToolCaller caller) {
         List<Candidate> result = new ArrayList<>();
         try {
             LambdaQueryWrapper<AiToolConfig> wrapper = new LambdaQueryWrapper<AiToolConfig>()
@@ -221,7 +213,7 @@ public class AiToolRegistry {
     }
 
     /** API 工具的回调：闭包捕获配置与调用者，执行交给 {@link ApiToolInvoker}。 */
-    private ToolCallback apiCallback(AiToolConfig cfg, Caller caller) {
+    private ToolCallback apiCallback(AiToolConfig cfg, AiToolCaller caller) {
         return new ToolCallback() {
             @Override
             public ToolDefinition getToolDefinition() {

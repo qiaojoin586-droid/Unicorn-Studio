@@ -1,7 +1,12 @@
 package com.unicorn.studio.AIWorker.tool;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.unicorn.studio.AIWorker.entity.AiToolInvocation;
+import com.unicorn.studio.AIWorker.mapper.AiToolInvocationMapper;
+import com.unicorn.studio.AIWorker.tool.support.AiToolSupport;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 
@@ -22,27 +27,35 @@ import java.util.Map;
  * ⚠️ <b>为什么这些判断不能放在 {@code AiTool.invoke()} 里</b>：那是工具实现自己的代码，
  * 每个工具都得写一遍、且新人加工具时极易漏。放在装饰器里是<b>一次接线、全局生效</b>。
  */
-@Slf4j
 public class BudgetedToolCallback implements ToolCallback {
+
+    private static final Logger log = LoggerFactory.getLogger(BudgetedToolCallback.class);
 
     private final ToolCallback delegate;
     private final ToolCallBudget budget;
     private final ToolCircuitBreaker breaker;
     private final ObjectMapper mapper;
+    private final AiToolInvocationMapper auditMapper;
+    private final AiToolCaller caller;
 
     /**
      * 每个工具一个装饰器实例，但<b>共享同一轮的 budget</b>——这是"单轮"的实现关键。
      *
-     * @param delegate 真实工具回调
-     * @param budget   本轮共享的预算对象（由 AiChatService.stream() 创建）
-     * @param breaker  熔断器（Spring 单例）
+     * @param delegate    真实工具回调
+     * @param budget      本轮共享的预算对象（由 AiChatService.stream() 创建）
+     * @param breaker     熔断器（Spring 单例）
+     * @param auditMapper 审计写入（{@code ai_tool_invocation}）
+     * @param caller      调用者上下文（审计要记"谁调的"）
      */
     public BudgetedToolCallback(ToolCallback delegate, ToolCallBudget budget,
-                                ToolCircuitBreaker breaker, ObjectMapper mapper) {
+                                ToolCircuitBreaker breaker, ObjectMapper mapper,
+                                AiToolInvocationMapper auditMapper, AiToolCaller caller) {
         this.delegate = delegate;
         this.budget = budget;
         this.breaker = breaker;
         this.mapper = mapper;
+        this.auditMapper = auditMapper;
+        this.caller = caller;
     }
 
     /**
@@ -63,37 +76,58 @@ public class BudgetedToolCallback implements ToolCallback {
     @Override
     public String call(String argumentsJson) {
         String toolName = delegate.getToolDefinition().name();
+        long start = System.currentTimeMillis();
+        // ⚠️ 审计记在【本装饰器】而不是执行器：内置工具不走 ApiToolInvoker，
+        // 写在执行器里的话内置工具的调用轨迹就完全查不到（文档 §11.7 要求"每次工具调用一行"）。
+        // 这里是所有工具唯一的公共出口 ⇒ 内置与 API 工具都覆盖，且不会写两遍。
+        String status;
+        String result;
 
         // ① 熔断：该工具近期连续失败，先摘掉，别让模型在一个坏接口上耗预算
         if (breaker.isOpen(toolName)) {
             // ⚠️ 这条必须留日志：后台只看得到 result_status，
             // 没有这行就分不清「被熔断摘了」和「被预算拦了」——两者修法完全不同
             log.warn("AI 工具 [{}] 处于熔断状态，本轮不再执行", toolName);
-            return error(toolName, "circuit_open",
+            // ⚠️ 审计里映射成 upstream_error：熔断本身就是"上游连续失败"的结果，
+            // 它不是 invalid_argument（用法问题）也不是 internal（代码 bug）。
+            // 文档 §11.7 的六个值里没有 circuit_open ⇒ 归到最接近的那个，不新增值（表 COMMENT 是定稿的）
+            status = AiToolInvocation.UPSTREAM_ERROR;
+            result = error(toolName, "circuit_open",
                     "该工具近期连续失败，暂时不可用，请改用其他方式回答", true);
+            audit(toolName, argumentsJson, status, result.length(), start);
+            return result;
         }
         // ② 次数预算
         if (!budget.tryConsume()) {
             log.warn("AI 工具 [{}] 本轮调用次数已用完（上限 {} 次），不再执行", toolName, budget.maxCalls());
-            return error(toolName, "budget_exhausted",
+            // ⚠️ 映射成 empty：这次调用【没有产生任何结果】，字面意思就是"结果为空"。
+            // 不能记 ok（会让人以为工具正常跑过），也不能记 internal（不是代码 bug）
+            status = AiToolInvocation.EMPTY;
+            result = error(toolName, "budget_exhausted",
                     "本轮工具调用次数已用完（上限 " + budget.maxCalls()
                             + " 次），请基于已有信息直接作答，不要再请求工具", false);
+            audit(toolName, argumentsJson, status, result.length(), start);
+            return result;
         }
         // ③ 累计耗时预算
         if (budget.durationExceeded()) {
             log.warn("AI 工具 [{}] 本轮对话已超工具调用时间预算，不再执行", toolName);
-            return error(toolName, "budget_exhausted",
+            status = AiToolInvocation.EMPTY;
+            result = error(toolName, "budget_exhausted",
                     "本轮对话已超过工具调用时间预算，请基于已有信息直接作答，不要再请求工具", false);
+            audit(toolName, argumentsJson, status, result.length(), start);
+            return result;
         }
 
         // ④ 真执行。⚠️ 兜住"工具自己抛的"，但放过程序错误
         try {
-            String result = delegate.call(argumentsJson);
+            result = delegate.call(argumentsJson);
             breaker.onSuccess(toolName);
-            return result;
+            status = statusOf(result);
         } catch (ToolGuardException e) {
             // 契约化异常：码已定好，直接转 JSON，且不计入熔断（用法问题 ≠ 接口坏了）
-            return error(toolName, e.errorCode(), e.getMessage(), false, e.field());
+            status = e.errorCode();
+            result = error(toolName, e.errorCode(), e.getMessage(), false, e.field());
         } catch (IllegalArgumentException | ClassCastException | IndexOutOfBoundsException
                  | NullPointerException codeBug) {
             // ⚠️ 编程错误：不是工具"坏了"，是代码有 bug。计入熔断会把工具误伤5 分钟，
@@ -101,12 +135,87 @@ public class BudgetedToolCallback implements ToolCallback {
             // 但【不计入熔断】——熔断是给"上游故障"用的。
             log.error("AI 工具 [{}] 出现编程错误（非上游故障），请检查实现：{}", toolName, codeBug.getMessage(),
                     codeBug);
-            return error(toolName, "internal", "工具内部错误，请基于已有信息作答", false);
+            // ⚠️ 记 upstream_error：枚举里没有 internal（§11.7 定稿的只有六个值），
+            // 编程错误的真正定位靠上面那条带堆栈的 ERROR 日志
+            status = AiToolInvocation.UPSTREAM_ERROR;
+            result = error(toolName, "internal", "工具内部错误，请基于已有信息作答", false);
         } catch (RuntimeException e) {
             breaker.onFailure(toolName);
-            return error(toolName, "internal", "工具执行异常，请基于已有信息作答", true);
+            // ⚠️ 同上：枚举里没有 internal，暂归 upstream_error
+            status = AiToolInvocation.UPSTREAM_ERROR;
+            result = error(toolName, "internal", "工具执行异常，请基于已有信息作答", true);
         }
+        audit(toolName, argumentsJson, status, result.length(), start);
+        return result;
+    }
 
+    /**
+     * 从工具返回的 JSON 里判断结果状态。
+     * <p>
+     * ⚠️ 契约化的错误 JSON 里有 {@code error} 字段，成功返回里没有 ⇒ 靠它区分成功/失败。
+     * 失败时直接用那个错误码（invalid_argument / timeout / upstream_error / forbidden
+     * 与审计表的枚举同源），成功则记 ok。
+     * <p>
+     * ⚠️ 内置工具"查到了但没有数据"（返回 {@code found:false}）记的是 ok ——
+     * 工具<b>正常执行了</b>，只是结果里没有内容，这与"被预算拦下压根没执行"（empty）不是一回事。
+     */
+    private String statusOf(String resultJson) {
+        if (resultJson == null || resultJson.isBlank()) {
+            return AiToolInvocation.EMPTY;
+        }
+        try {
+            var node = mapper.readTree(resultJson);
+            var err = node.get("error");
+            if (err != null && !err.isNull() && err.isTextual()) {
+                String code = err.asText();
+                // ⚠️ 只认审计表枚举里有的值，避免把 circuit_open / budget_exhausted / internal
+                // 这类不在枚举里的码直接写进 result_status（列的 COMMENT 是定稿的六个值）
+                return switch (code) {
+                    case AiToolInvocation.INVALID_ARGUMENT, AiToolInvocation.TIMEOUT,
+                         AiToolInvocation.UPSTREAM_ERROR, AiToolInvocation.FORBIDDEN -> code;
+                    // ⚠️ 其余（含 internal / circuit_open / budget_exhausted）统一归 upstream_error：
+                    // 文档 §11.7 定稿的枚举里没有 internal ⇒ "编程错误"只能先记成 upstream_error。
+                    // 真正的定位不靠这张表 —— 那类错误同时会打一条带完整堆栈的 ERROR 日志。
+                    default -> AiToolInvocation.UPSTREAM_ERROR;
+                };
+            }
+        } catch (Exception ignored) {
+            // 不是 JSON：算异常结果
+            return AiToolInvocation.UPSTREAM_ERROR;
+        }
+        return AiToolInvocation.OK;
+    }
+
+    /**
+     * 写一行审计（{@code ai_tool_invocation}）。
+     * <p>
+     * ⚠️ <b>审计写失败绝不能影响主流程</b>：工具已经执行完、结果已经要发给模型了，
+     * 不能因为一行审计写不进去就让整轮对话失败。失败只记 ERROR 日志。
+     * <p>
+     * ⚠️ {@code message_id} 留空：流式下工具调用发生在 assistant 消息落库之前，
+     * 那时拿不到 id ⇒ 由 {@code AiSessionService.finishAssistantMessage} 之后回填。
+     */
+    private void audit(String toolName, String argumentsJson, String status, int resultBytes, long start) {
+        if (auditMapper == null || caller == null) {
+            return;
+        }
+        try {
+            AiToolInvocation row = new AiToolInvocation();
+            row.setConversationId(caller.conversationId());
+            row.setInvokerType(caller.invokerType());
+            row.setInvokerId(caller.invokerId());
+            row.setToolName(toolName);
+            row.setArgsDigest(AiToolSupport.digest(argumentsJson, mapper));
+            row.setResultStatus(status);
+            // ⚠️ 记【模型实际收到的长度】而不是上游原始大小：这一列的用途是
+            // 观测"大返回值"（§11.7），而大返回值影响的是 token 成本，
+            // 也就是模型实际吃进去多少字节。上游原始大小由返回 JSON 里的 truncated 标记体现。
+            row.setResultBytes(resultBytes);
+            row.setDurationMs((int) (System.currentTimeMillis() - start));
+            auditMapper.insert(row);
+        } catch (Exception e) {
+            log.error("AI 工具 [{}] 审计写入失败（该次调用将无法在后台追溯）：{}", toolName, e.getMessage(), e);
+        }
     }
 
     /**
