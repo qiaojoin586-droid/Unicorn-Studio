@@ -41,4 +41,18 @@ public class PublicAuthController {
     public ApiResponse<Map<String, Object>> login(@RequestBody LoginRequest request) {
         return ApiResponse.ok(publicAuthService.login(request.email(), request.password()));
     }
+
+    /**
+     * 退出登录：撤销当前 token（记入 Redis 撤销名单）。
+     * <p>
+     * 参数从 Authorization 头取而不是从 SecurityContext 取：前台没有
+     * {@code SecurityUtils.currentUser()}（它只返回后台 {@code SysUser}），
+     * 且本接口要能在 token 已失效时也能安全调用（幂等，见 {@code PublicAuthService#logout}）。
+     */
+    @PostMapping("/logout")
+    public ApiResponse<Void> logout(
+            @RequestHeader(value = "Authorization", required = false) String authorization) {
+        publicAuthService.logout(authorization);
+        return ApiResponse.ok();
+    }
 }
