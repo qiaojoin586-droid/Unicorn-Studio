@@ -45,6 +45,16 @@
           <div class="flex items-center gap-2" @pointerdown.stop>
             <button type="button" class="dialog-control" @click="resetToDefault" aria-label="重置对话框位置" title="重置位置"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 10a8 8 0 1 1 1.8 7M4 4v6h6" stroke="currentColor" stroke-width="1.5" /></svg></button>
             <button
+              @click="store.drawerOpen ? store.closeDrawer() : openHistory()"
+              class="dialog-control"
+              title="历史对话"
+              aria-label="历史对话"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </button>
+            <button
               v-if="store.hasMessages"
               @click="store.clearMessages()"
               class="dialog-control"
@@ -67,6 +77,12 @@
             </button>
           </div>
         </div>
+
+        <!-- 抽屉 + 消息区并排（§8.2：打开抽屉时对话框整体不变形，输入框始终可用）。
+             ⚠️ 这一层横向 flex 是抽屉能「并排」而不是「盖住」的前提（§8.2），
+                挪到别处会让抽屉脱离拖动/缩放坐标系。 -->
+        <div class="flex-1 min-h-0 flex">
+          <AiHistoryDrawer v-if="store.drawerOpen" @close="store.closeDrawer()" />
 
         <!-- Messages area -->
         <div
@@ -138,6 +154,8 @@
         <p class="sr-only" role="status">{{ store.isLoading ? '正在生成回复' : store.hasMessages ? '回复已完成' : '' }}</p>
         <ChatInput @send="handleSend" :disabled="store.isLoading" />
 
+        </div>
+
         <!-- 拉伸把手（八向）：四条边 + 四个角。
              边把手平时透明、hover 才显出一道浅色条；角把手常驻淡色斜纹（沿用改造前
              左下角那枚视觉），hover 高亮。角把手 DOM 在后 ⇒ 叠在边把手之上。
@@ -192,9 +210,10 @@ import { renderMarkdown, hardenLinks } from '@/composables/useMarkdown'
 import { useResizablePanel } from '@/composables/useResizablePanel'
 import ChatMessage from './ChatMessage.vue'
 import ChatInput from './ChatInput.vue'
+import AiHistoryDrawer from './AiHistoryDrawer.vue'
 
 const store = useAiChatStore()
-const { streamChat, stopStream } = useAiChat()
+const { streamChat, stopStream, openHistory } = useAiChat()
 const messagesContainer = ref(null)
 const streamingBody = ref(null)
 const dialogPanel = ref(null)
@@ -214,6 +233,19 @@ function scrollToLatest() {
   const el = messagesContainer.value
   if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
 }
+
+// 切换会话 / 重新打开面板时把消息区滚到底。
+// ⚠️ stickToBottom 表示「用户此刻是否停在底部」，上翻看旧消息后它是 false；
+//   而上面那个滚动 watch 的条件正是 stickToBottom ⇒ 不重置的话，
+//   加载完历史也不会滚，表现为「重新打开对话停在最上面的那条」。
+// ⚠️ 面板是 v-if ⇒ 打开时整棵子树重建，必须等 DOM 更新完再滚（nextTick）。
+watch(
+  () => [store.sessionId, store.isOpen],
+  async () => {
+    await nextTick()
+    scrollToLatest()
+  },
+)
 
 // 布局（位置 + 尺寸）由 useResizablePanel 统一管理，并与对话图标共享**同一份单例状态**：
 //   · panelStyle —— 对话框定位（left/top）。拖动图标或拖动本面板的表头，两边一起位移；

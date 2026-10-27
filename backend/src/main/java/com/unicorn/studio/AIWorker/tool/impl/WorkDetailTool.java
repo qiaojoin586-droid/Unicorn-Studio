@@ -5,8 +5,8 @@ import com.unicorn.studio.AIWorker.tool.AiTool;
 import com.unicorn.studio.AIWorker.tool.AiToolDefinition;
 import com.unicorn.studio.AIWorker.tool.support.AiToolSupport;
 import com.unicorn.studio.common.SlugValidator;
-import com.unicorn.studio.model.Work;
 import com.unicorn.studio.service.WorkService;
+import com.unicorn.studio.vo.WorkDetailVO;
 import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
@@ -56,7 +56,8 @@ public class WorkDetailTool implements AiTool {
             return AiToolSupport.error(mapper, "invalid_argument",
                     "slug 形如 unicorn-portal（只含小写字母、数字和连字符）", "slug", false);
         }
-        Optional<Work> found = workService.findPublishedBySlug(slug);
+        // ⚠️ 现在返回详情 VO（正文在里面）而不是实体
+        Optional<WorkDetailVO> found = workService.findPublishedBySlug(slug);
         if (found.isEmpty()) {
             // ⚠️ found:false 明确告诉模型"确实没有"，防止它拿到空结果自己编一个作品
             // （这是最常见的幻觉形态，§4 P0-3 第 ④ 条）
@@ -65,18 +66,18 @@ public class WorkDetailTool implements AiTool {
             data.put("reason", "not_found");
             return AiToolSupport.ok(mapper, data);
         }
-        Work w = found.get();
-        String plain = AiToolSupport.toPlainText(w.getContent());
+        WorkDetailVO w = found.get();
+        String plain = AiToolSupport.toPlainText(w.content());
         boolean truncated = plain.length() > MAX_CONTENT;
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("found", true);
-        data.put("slug", w.getSlug());
-        data.put("title", w.getTitle());
-        data.put("summary", w.getSummary());
+        data.put("slug", w.slug());
+        data.put("title", w.title());
+        data.put("summary", w.summary());
         data.put("content", AiToolSupport.truncate(plain, MAX_CONTENT));
         data.put("truncated", truncated);
-        if (w.getExternalLink() != null && !w.getExternalLink().isBlank()) {
-            data.put("externalLink", w.getExternalLink());
+        if (w.externalLink() != null && !w.externalLink().isBlank()) {
+            data.put("externalLink", w.externalLink());
         }
         // ⚠️ 刻意不返回 clientName（客户名）：可能涉及保密，且访客问"你们做过什么"用不上。
         // 也不返回正文里的原始 HTML：模型只吃纯文本（AiToolSupport.toPlainText 已转好）

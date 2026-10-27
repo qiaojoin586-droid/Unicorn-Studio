@@ -11,6 +11,11 @@
         </router-link>
       </nav>
       <router-link to="/join" class="header-join">一起创造<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 19 19 5M5 5h14v14" stroke="currentColor" stroke-width="1.5" /></svg></router-link>
+      <!-- 登录 / 退出入口（前台站点用户体系，与后台管理员完全独立） -->
+      <button v-if="!userStore.isLoggedIn" class="header-auth" type="button" @click="openLogin">登录</button>
+      <button v-else class="header-auth" type="button" @click="onLogout">
+        退出（{{ userStore.displayName }}）
+      </button>
       <button ref="menuTrigger" class="menu-trigger" type="button" :aria-expanded="mobileMenuOpen" aria-controls="mobile-nav" :aria-label="mobileMenuOpen ? '关闭导航菜单' : '打开导航菜单'" @click="mobileMenuOpen = !mobileMenuOpen">
         <span>{{ mobileMenuOpen ? '关闭' : '菜单' }}</span><span class="menu-lines" aria-hidden="true"><i></i><i></i></span>
       </button>
@@ -21,6 +26,8 @@
           <router-link v-for="(item, index) in [...navItems, { label: '加入我们', path: '/join' }]" :key="item.path" :to="item.path" :aria-current="isCurrent(item.path) ? 'page' : undefined" @click="closeMenu()">
             <span class="menu-index">0{{ index + 1 }}</span><span>{{ item.label }}</span><span aria-hidden="true">↗</span>
           </router-link>
+          <button v-if="!userStore.isLoggedIn" class="mobile-nav a" type="button" @click="openLogin">登录</button>
+          <button v-else class="mobile-nav a" type="button" @click="onLogout">退出登录</button>
           <p>保持好奇，一起创造。<span>STAY CURIOUS. MAKE THINGS.</span></p>
         </div>
       </nav>
@@ -32,7 +39,30 @@ import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import BrandMark from './BrandMark.vue'
 import { useSiteSettings } from '@/composables/useSiteSettings'
+import { useAiChatStore } from '@/stores/aiChat'
+import { useUserStore } from '@/stores/user'
+import { useApi } from '@/composables/useApi'
 const { siteName, slogan } = useSiteSettings()
+const aiChatStore = useAiChatStore()
+const userStore = useUserStore()
+const { logout } = useApi()
+
+/** 未登录点「登录」：只弹登录框，不改别的 */
+function openLogin() {
+  aiChatStore.openLoginPrompt()
+}
+
+/**
+ * 退出登录。
+ * ⚠️ 退出后要把 AI 助手这边一起收干净：会话列表清空、面板关掉 ——
+ * 否则退出后屏幕上还留着上一个账号的会话标题。
+ */
+function onLogout() {
+  logout(userStore.token)
+  userStore.clearSession()
+  aiChatStore.startNewSession()
+  aiChatStore.closeDrawer()
+}
 const route = useRoute()
 const scrolled = ref(false)
 const mobileMenuOpen = ref(false)
@@ -79,6 +109,10 @@ onBeforeUnmount(() => {
 .header-join:hover { background: var(--color-accent); border-color: var(--color-accent); }
 .header-join svg { width: 15px; height: 15px; transition: transform var(--duration-ui); }
 .header-join:hover svg { transform: translate(2px, -2px); }
+/* 登录/退出入口：与旁边「一起创造」同一套视觉（同边框/圆角/悬停填充），
+   只因文案更短而收窄了左右内边距 */
+.header-auth { font-size: 13px; display: inline-flex; align-items: center; border: 1px solid #ffffff36; padding: 0 14px; min-height: 44px; border-radius: 3px; color: #c0c0c2; transition: background var(--duration-ui), border-color var(--duration-ui), color var(--duration-ui); }
+.header-auth:hover { background: var(--color-accent); border-color: var(--color-accent); color: white; }
 .menu-trigger { display: none; align-items: center; gap: 12px; min-height: 44px; min-width: 64px; font-size: 12px; }
 .menu-lines { width: 22px; display: grid; gap: 5px; }
 .menu-lines i { display: block; height: 1px; background: currentColor; transition: transform var(--duration-ui); }

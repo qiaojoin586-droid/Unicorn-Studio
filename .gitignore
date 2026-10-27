@@ -46,5 +46,11 @@ Thumbs.db
 # 设计方案文件夹（本地个人，不入库）
 docs/
 
+# 助手临时工作目录（构建产物/日志/临时源码副本）
+.workbuddy-tmp/
+
+# 个人笔记目录（本地，不入库）
+notes/
+
 # 忽略 Docker 相关文件夹
 backend/docker/

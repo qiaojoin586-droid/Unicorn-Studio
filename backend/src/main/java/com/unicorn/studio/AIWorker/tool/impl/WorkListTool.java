@@ -5,7 +5,6 @@ import com.unicorn.studio.AIWorker.tool.AiTool;
 import com.unicorn.studio.AIWorker.tool.AiToolDefinition;
 import com.unicorn.studio.AIWorker.tool.support.AiToolSupport;
 import com.unicorn.studio.AIWorker.tool.support.SiteUrls;
-import com.unicorn.studio.model.Work;
 import com.unicorn.studio.service.WorkService;
 import com.unicorn.studio.vo.WorkCardVO;
 import org.springframework.stereotype.Component;
@@ -56,26 +55,23 @@ public class WorkListTool implements AiTool {
         boolean featuredOnly = "true".equalsIgnoreCase(AiToolSupport.stringArg(args, "featured"));
         int limit = AiToolSupport.intArg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT);
 
-        // ⚠️ WorkService.findPublished 里 featured 优先、category 会被忽略，
-        // 所以这里只把 category 传下去，featured 自己在内存里过滤 ——
-        // 否则模型同时传两个参数时，分类条件会被悄悄丢掉。
-        //获取已发布的作品列表
-        List<Work> source = workService.findPublished(category, null);
+        // 获取已发布的作品列表。
+        // ⚠️ WorkService.findPublished 现在返回【卡片 VO】而不是实体（学长把实体收敛到 VO 层了），
+        // 这样正文（MEDIUMTEXT）不会随列表查询整列进内存。
+        // ⚠️ Service 里 featured 优先、category 会被忽略 ⇒ 两个条件都传时以 featured 为准，
+        //    所以这里按「有没有 featured」二选一，不把两个都塞进去（否则分类条件会被悄悄丢掉）。
+        List<WorkCardVO> source = featuredOnly
+                ? workService.findPublished(null, 1)
+                : workService.findPublished(category, null);
         List<Map<String, Object>> items = new ArrayList<>();
         int matched = 0;
-        for (Work w : source) {
-            // 过滤掉非精选作品
-            if (featuredOnly && !Integer.valueOf(1).equals(w.getFeatured())) {
-                continue;
-            }
+        for (WorkCardVO card : source) {
             matched++;
             // ⚠️ 这里必须 continue 不能 break：break 会让后面的作品不再参与计数，
             // total 就变成了"本页条数"而不是"匹配到的总数"（模型会答错"一共有多少个"）
             if (items.size() >= limit) {
                 continue;
             }
-            //为什么要用 WorkCardVO.from(w)？因为 WorkCardVO 只包含前端需要的字段
-            WorkCardVO card = WorkCardVO.from(w);
             Map<String, Object> item = new LinkedHashMap<>();
             // ⚠️ 返回 slug 不返回 id：前台作品详情路由是 /works/:slug，
             // slug 可直接用于下一步 work_detail 或给出可点击链接
@@ -85,7 +81,11 @@ public class WorkListTool implements AiTool {
             //   两个都留：slug 给模型继续调用，url 给模型写进回答让访客点开。
             item.put("url", siteUrls.absolute("/works/" + card.slug()));
             item.put("title", card.title());
-            item.put("category", w.getCategory());
+            // ⚠️ 卡片 VO 刻意不暴露 category（前台不展示它）⇒ 这里给 tagType 而不是 category：
+            //   tagType 是 WorkTags.resolve 兜底后的徽章（award/paper/project/other），
+            //   与真实分类（竞赛/论文）不是一回事 ⇒ 换个字段名，别让模型当成分类去回答。
+            //   真实分类在 work_detail 里才有（WorkDetailVO 带 category）。
+            item.put("tagType", card.tagType());
             item.put("summary", AiToolSupport.truncate(card.summary(), 80));
             item.put("authors", card.authors());
             item.put("dateLabel", card.dateLabel());

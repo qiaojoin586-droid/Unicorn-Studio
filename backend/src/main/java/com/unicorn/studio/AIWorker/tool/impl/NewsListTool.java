@@ -4,8 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.AIWorker.tool.AiTool;
 import com.unicorn.studio.AIWorker.tool.AiToolDefinition;
 import com.unicorn.studio.AIWorker.tool.support.AiToolSupport;
-import com.unicorn.studio.model.News;
 import com.unicorn.studio.service.NewsService;
+import com.unicorn.studio.vo.NewsCardVO;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -53,24 +53,25 @@ public class NewsListTool implements AiTool {
         int limit = AiToolSupport.intArg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT);
 
         // 获取新闻列表
-        List<News> source = newsService.findPublished(category);
+        // ⚠️ 现在返回卡片 VO（同样是不让 MEDIUMTEXT 正文随列表整列进内存）
+        List<NewsCardVO> source = newsService.findPublished(category);
         // 构建返回数据
         List<Map<String, Object>> items = new ArrayList<>();
         int matched = 0;
-        for (News n : source) {
+        for (NewsCardVO n : source) {
             matched++;
             // ⚠️ continue 不能 break：break 会让后面的不再计数，total 就变成"本页条数"了
             if (items.size() >= limit) {
                 continue;
             }
             Map<String, Object> item = new LinkedHashMap<>();
-            item.put("slug", n.getSlug());
-            item.put("title", n.getTitle());
-            item.put("category", n.getCategory());
-            item.put("summary", AiToolSupport.truncate(n.getSummary(), 80));
+            item.put("slug", n.slug());
+            item.put("title", n.title());
+            item.put("category", n.category());
+            item.put("summary", AiToolSupport.truncate(n.summary(), 80));
             // ⚠️ 转成 ISO 字符串而不是直接塞 LocalDateTime：直接序列化的话格式由全局配置决定
             // （可能是时间戳数组），模型读不懂
-            item.put("publishedAt", n.getPublishedAt() == null ? null : n.getPublishedAt().toString());
+            item.put("publishedAt", n.publishedAt() == null ? null : n.publishedAt().toString());
             items.add(item);
         }
         Map<String, Object> data = new LinkedHashMap<>();
