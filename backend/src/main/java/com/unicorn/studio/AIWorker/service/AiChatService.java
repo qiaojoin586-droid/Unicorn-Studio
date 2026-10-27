@@ -4,6 +4,8 @@ import com.unicorn.studio.AIWorker.config.AiConfigProvider;
 import com.unicorn.studio.AIWorker.config.AiRuntimeConfig;
 import com.unicorn.studio.AIWorker.entity.AiMessage;
 import com.unicorn.studio.AIWorker.entity.AiToolInvocation;
+import com.unicorn.studio.AIWorker.memory.ChatMessage;
+import com.unicorn.studio.AIWorker.memory.ChatMemoryProvider;
 import com.unicorn.studio.AIWorker.tool.AiToolCaller;
 import com.unicorn.studio.AIWorker.tool.AiToolRegistry;
 import com.unicorn.studio.AIWorker.tool.ToolCallBudget;
@@ -50,6 +52,7 @@ public class AiChatService {
     private final AiConfigProvider configProvider;
     private final ChatClientFactory clientFactory;
     private final AiToolRegistry toolRegistry;
+    private final ChatMemoryProvider memoryProvider;
     private final AiSessionService aisessionService;
     private final AiQuotaService aiquotaService;
     private final SensitiveWordService sensitiveWordService;
@@ -63,6 +66,7 @@ public class AiChatService {
     public AiChatService(AiConfigProvider configProvider,
                          ChatClientFactory clientFactory,
                          AiToolRegistry toolRegistry,
+                         ChatMemoryProvider memoryProvider,
                          AiSessionService aisessionService,
                          AiQuotaService aiquotaService,
                          SensitiveWordService sensitiveWordService,
@@ -71,6 +75,7 @@ public class AiChatService {
         this.configProvider = configProvider;
         this.clientFactory = clientFactory;
         this.toolRegistry = toolRegistry;
+        this.memoryProvider = memoryProvider;
         this.aisessionService = aisessionService;
         this.aiquotaService = aiquotaService;
         this.sensitiveWordService = sensitiveWordService;
@@ -119,11 +124,14 @@ public class AiChatService {
                     conversationId, clientMsgId);
         }
 
-        // ② 历史上下文（正序）。注意元素类型是 Spring AI 的 Message，不是本项目的 AiMessage 实体
-        List<Message> history = aisessionService.loadContext(conversationId, userId).stream()
-                .map(m -> "user".equals(m.getRole())
-                        ? (Message) new UserMessage(m.getContent())
-                        : (Message) new AssistantMessage(m.getContent()))
+        // ② 历史上下文（正序）。⚠️ 走 ChatMemoryProvider 而不是直接调 SessionService：
+        //   记忆的截断策略将来可插拔（换实现类即可），这里只负责映射成框架的 Message。
+        //   ⚠️ 映射这一步留在本层：记忆层的自有类型 ChatMessage 不依赖模型框架，
+        //   将来换模型框架时只有这一行要动。
+        List<Message> history = memoryProvider.loadContext(conversationId, userId).stream()
+                .map(m -> ChatMessage.ROLE_USER.equals(m.role())
+                        ? (Message) new UserMessage(m.content())
+                        : (Message) new AssistantMessage(m.content()))
                 .toList();
 
         // ③ assistant 占位行

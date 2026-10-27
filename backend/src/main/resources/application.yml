@@ -165,6 +165,12 @@ app:
     allowed-origin-patterns: ${APP_CORS_ORIGIN_PATTERNS:http://localhost:[*],http://127.0.0.1:[*]}
   ai:
     # ==================== AI 助手（com.unicorn.studio.AIWorker，基于 Spring AI）====================
+    # 记忆（§10 预留契约）：带入模型的历史轮数。
+    # ⚠️ 这是【上下文窗口】不是【历史】：历史全量落库（90 天清理），记忆只取最近几轮，
+    #    两者长度独立、互不影响。轮数直接决定每次调用的 input token 成本。
+    # ⚠️ 默认 10 轮 = 20 条消息，与功能②落地时的硬编码值一致 ⇒ 行为不变。
+    memory:
+      max-turns: ${AI_MEMORY_MAX_TURNS:10}
     # 运行时配置（API Key / API 地址 / 模型 / 提示词 / 采样参数）自 V16 起统一存
     # site_settings 的 ai 组，由后台「AI 配置」页（/admin/ai-config）维护，
     # 保存后即时生效、无需重启；此处仅保留部署级开关。

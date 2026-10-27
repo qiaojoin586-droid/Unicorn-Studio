@@ -41,7 +41,6 @@ public class AiSessionService {
     /**会话标题最大长度*/
     private static final int TITLE_MAX = 60;
     /**会话内容最大长度*/
-    private static final int CONTEXT_LIMIT = 20;
 
     /**设置会话缓存时间*/
     private static final Duration SESSION_CACHE_TTL = Duration.ofMinutes(5);
@@ -274,9 +273,19 @@ public class AiSessionService {
         touchConversation(conversationId);
     }
 
-    // 加载会话上下文
-    public List<AiMessage> loadContext(String conversationId, Long userId){
-        List<AiMessage> desc = messageMapper.recentForContext(conversationId, userId, CONTEXT_LIMIT);
+    /**
+     * 加载会话上下文，条数由调用方决定。
+     * <p>
+     * ⚠️ <b>条数上限不再有默认值</b>：原先写死在一个常量里（20），
+     * 而记忆层的截断策略要可配置（{@code app.ai.memory.max-turns}），
+     * 写死就意味着改配置得改代码。
+     * ⇒ 「取多少」由记忆层说了算，本类只负责「按条数取」——
+     * <b>不留两参重载</b>，否则将来有人直接调它就绕过了记忆层的配置（配置形同虚设）。
+     *
+     * @param limit 最多取多少条（正序返回）
+     */
+    public List<AiMessage> loadContext(String conversationId, Long userId, int limit){
+        List<AiMessage> desc = messageMapper.recentForContext(conversationId, userId, limit);
         // 复制成一个可变的 ArrayList
         ArrayList<AiMessage> aiMessages = new ArrayList<>(desc);
         //原地反转，默认新的在前，所以要翻转
