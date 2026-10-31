@@ -80,7 +80,11 @@ public class ViewCountService {
      * 脏索引里的条目已是陈旧项，正该清掉。
      */
     private static final DefaultRedisScript<String> DRAIN_AND_UNMARK = new DefaultRedisScript<>(
-            "local v = redis.call('GETDEL', KEYS[2]) " +
+            // ⚠️ 不能用 GETDEL：那是 Redis 6.2+ 才有的命令，本项目用的 3.2 会报
+            //    「ERR unknown command 'GETDEL'」⇒ 浏览量增量永远回写不进去（数据一直在丢）。
+            // ⚠️ 改成 GET + DEL：Lua 脚本本身是原子执行的，所以这两条等价于 GETDEL。
+            "local v = redis.call('GET', KEYS[2]) " +
+            "if v then redis.call('DEL', KEYS[2]) end " +
             "redis.call('SREM', KEYS[1], KEYS[2]) " +
             "return v", String.class);
 

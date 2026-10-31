@@ -229,6 +229,78 @@ public class ApiToolInvoker {
      * ⚠️ <b>不跟随重定向</b>：{@code Redirect.NEVER}。SSRF 校验是对"管理员填的那个地址"
      * 做的，若跟随 302 到内网就等于绕过了防护。
      */
+    /**
+     * 连通性探测（§6.5 接口 9：后台「测试」按钮）。
+     * <p>
+     * ⚠️ <b>为什么单独一个方法而不直接调 {@link #invoke}</b>：
+     * <ul>
+     *   <li>{@code invoke} 会<b>写一行审计</b>（{@code ai_tool_invocation}）⇒
+     *       管理员点一次「测试」就多一条"工具调用"记录 ⇒ 后台统计会被污染；</li>
+     *   <li>{@code invoke} 的参数来自模型，测试时<b>没有模型参数</b>（body 模板填不了）。</li>
+     * </ul>
+     * ⚠️ SSRF 防护同样适用（§11.4）：填 URL 本身就是高风险操作，
+     * 测试按钮不能成为绕过校验的通道。
+     *
+     * @return 探测结果（成功/失败、状态码、耗时、错误原因）
+     */
+    public ProbeResult probe(AiToolConfig config) {
+        long start = System.currentTimeMillis();
+        try {
+            urlGuard.validate(config.getHttpUrl());
+            Fetched fetched = send(config, "{}");
+            return ProbeResult.ok((int) fetched.totalBytes(),
+                    (int) (System.currentTimeMillis() - start));
+        } catch (ToolGuardException e) {
+            // 被 SSRF 校验拦下：这是配置问题，不是"目标不可达"
+            return ProbeResult.fail(e.errorCode(), e.getMessage(),
+                    (int) (System.currentTimeMillis() - start));
+        } catch (UpstreamStatusException e) {
+            // ⚠️ 4xx/5xx 也要算【可达】：拿到 HTTP 响应就说明"地址能访问"，
+            //    只是路径/参数不对（404）或服务报错（500）—— 这两件事的修法完全不同，
+            //    混成"不可达"会让人以为网络或白名单有问题。
+            return ProbeResult.reachable("http_" + e.statusCode(), e.statusCode(),
+                    "目标接口返回 HTTP " + e.statusCode(),
+                    (int) (System.currentTimeMillis() - start));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return ProbeResult.fail("interrupted", "探测被中断",
+                    (int) (System.currentTimeMillis() - start));
+        } catch (IOException e) {
+            return ProbeResult.fail("io_error", e.getMessage() == null ? e.toString() : e.getMessage(),
+                    (int) (System.currentTimeMillis() - start));
+        } catch (RuntimeException e) {
+            return ProbeResult.fail("internal", e.getMessage() == null ? e.toString() : e.getMessage(),
+                    (int) (System.currentTimeMillis() - start));
+        }
+    }
+
+    /**
+     * 探测结果。
+     *
+     * @param reachable  是否连通（拿到 HTTP 响应即算连通，4xx/5xx 也算"地址能通"）
+     * @param status     状态标记：ok / timeout / upstream_error / forbidden / invalid_argument …
+     * @param httpStatus 上游 HTTP 状态码（没拿到响应时为 null）
+     * @param bytes      读到的字节数
+     * @param elapsedMs  耗时
+     * @param message    失败原因（成功时为 null）
+     */
+    public record ProbeResult(boolean reachable, String status, Integer httpStatus,
+                              int bytes, int elapsedMs, String message) {
+
+        public static ProbeResult ok(int bytes, int elapsedMs) {
+            return new ProbeResult(true, "ok", null, bytes, elapsedMs, null);
+        }
+
+        /** 拿到了 HTTP 响应但状态码不对：地址能通，问题在路径或对方服务 */
+        public static ProbeResult reachable(String status, int httpStatus, String message, int elapsedMs) {
+            return new ProbeResult(true, status, httpStatus, 0, elapsedMs, message);
+        }
+
+        public static ProbeResult fail(String status, String message, int elapsedMs) {
+            return new ProbeResult(false, status, null, 0, elapsedMs, message);
+        }
+    }
+
     private Fetched send(AiToolConfig config, String argumentsJson)
             throws IOException, InterruptedException {
         int timeoutMs = config.getTimeoutMs() == null || config.getTimeoutMs() <= 0

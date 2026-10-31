@@ -147,3 +147,92 @@ export const aiAdminApi = {
   /** 手动触发清理；dryRun=true 只统计不删除（dryRun 走 query 参数，后端是 @RequestParam） */
   cleanup: (dryRun: boolean) => http.post<AiCleanupReport>('/api/admin/ai/cleanup', undefined, { params: { dryRun } }),
 }
+
+/* ==================== AI 工具后台（§6.5 接口 6~9） ==================== */
+
+/** 工具列表项（对应后端 AdminToolVO） */
+export interface AdminTool {
+  id: number
+  /** 模型调用时引用的工具名（全局唯一） */
+  toolName: string
+  /** builtin / api / mcp */
+  toolType: string
+  displayName: string
+  /** 用途描述（模型据此判断是否调用） */
+  description: string
+  /** public / admin / mcp */
+  scope: string
+  enabled: boolean
+  /** 单轮装配优先级，越小越优先 */
+  priority: number
+  /** 超时（毫秒） */
+  timeoutMs: number
+  /** 目标地址（编辑弹窗回填用） */
+  httpUrl: string | null
+  /** 参数 JSON Schema（编辑弹窗回填用） */
+  paramSchema: string | null
+  fingerprint: string
+  /** 描述已变更、待人工确认（仅 api/mcp 可能为 true） */
+  pendingConfirm: boolean
+  /** 熔断剩余秒数，0 表示未熔断 */
+  circuitRemainingSeconds: number
+  confirmedAt: string | null
+  updatedAt: string | null
+}
+
+/** 工具配置表单（对应后端 ToolFormVO） */
+export interface ToolForm {
+  toolName: string
+  displayName: string
+  description: string
+  httpMethod?: string
+  httpUrl?: string
+  httpHeaders?: string
+  httpBodyTmpl?: string
+  paramSchema?: string
+  enabled?: number
+  scope?: string
+  priority?: number
+  timeoutMs?: number
+}
+
+/** 连通性探测结果（对应后端 ApiToolInvoker.ProbeResult） */
+export interface ToolProbeResult {
+  /** 是否连通（拿到 HTTP 响应即算连通，4xx/5xx 也算地址能通） */
+  reachable: boolean
+  /** ok / timeout / upstream_error / forbidden / invalid_argument / http_xxx … */
+  status: string
+  httpStatus: number | null
+  bytes: number
+  elapsedMs: number
+  /** 失败原因（成功时为 null） */
+  message: string | null
+}
+
+export const aiToolApi = {
+  /** 工具列表（含熔断倒计时与待确认标记） */
+  list: () => http.get<AdminTool[]>('/api/admin/ai/tools'),
+
+  /** 新建 API 工具（新建后处于「待确认」，确认后才可用） */
+  create: (data: ToolForm) => http.post<number>('/api/admin/ai/tools', data),
+
+  /** 改 API 工具（改完描述/参数会重新计算指纹 ⇒ 需再次确认） */
+  update: (id: number, data: ToolForm) => http.put<void>(`/api/admin/ai/tools/${id}`, data),
+
+  /** 删 API 工具 */
+  remove: (id: number) => http.delete<void>(`/api/admin/ai/tools/${id}`),
+
+  /** 确认当前 fingerprint：描述变更后恢复可用 */
+  confirm: (id: number) => http.post<void>(`/api/admin/ai/tools/${id}/confirm`),
+
+  /** 连通性测试：只发一次探测请求，SSRF 防护同样适用 */
+  test: (id: number) => http.post<ToolProbeResult>(`/api/admin/ai/tools/${id}/test`),
+
+  /**
+   * 启用 / 停用工具（内置与 API 都可用）。
+   * ⚠️ 内置工具的描述与参数由代码维护（编辑会被拒绝），但「要不要用它」是运营决策，
+   *   所以停用单独走这个接口。
+   */
+  toggleEnabled: (id: number, enabled: boolean) =>
+    http.post<void>(`/api/admin/ai/tools/${id}/enabled`, { enabled }),
+}

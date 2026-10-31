@@ -13,6 +13,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -45,6 +46,18 @@ public class AiToolRegistry {
 
     /** 单轮装配上限（§11.4：单轮装配 ≤12，按 priority 显式取舍）。 */
     private static final int MAX_PER_ROUND = 12;
+
+    /**
+     * 分层配额（§11.4「工具数量分层配额」）。
+     * <p>
+     * ⚠️ <b>为什么 API 工具要限 5 个</b>：每个工具的描述都会进模型上下文，
+     * 工具越多模型选错的概率越高、每次调用的 token 成本也越高。
+     * <p>
+     * ⚠️ <b>为什么内置要限 15 个</b>：内置工具由代码维护，数量可控，但"以后有人加 20 个内置工具"
+     * 就会把上下文撑爆 ⇒ 留一道防线（超了只记日志，不静默丢）。
+     */
+    private static final int MAX_BUILTIN = 15;
+    private static final int MAX_API = 5;
 
     /** 内置工具的默认优先级，与表里的默认值一致（100）。 */
     private static final int DEFAULT_PRIORITY = 100;
@@ -118,11 +131,39 @@ public class AiToolRegistry {
         }
         // ① 收集两路来源，统一成「候选」再走同一套过滤/排序/上限逻辑
         List<Candidate> candidates = new ArrayList<>();
+        // ⚠️ 内置工具在表里的配置一次查完（每个工具查一次表 ⇒ 每轮 6~7 次多余查询）
+        Map<String, AiToolConfig> builtinCfg = builtinConfig();
         for (AiTool tool : tools.values()) {
-            candidates.add(new Candidate(tool.definition(), AiToolConfig.SCOPE_PUBLIC,
-                    DEFAULT_PRIORITY, adapt(tool)));
+            AiToolDefinition def = tool.definition();
+            AiToolConfig cfg = builtinCfg.get(def.name());
+            // ⚠️ 表里的 enabled 也要生效：管理员在后台停用了某个内置工具 ⇒ 后端就不该再装配它。
+            // ⚠️ 以前这里没判 ⇒ 后台的开关改了没反应（表里的 enabled 对内置工具是摆设）。
+            // ⚠️ 表里没有这一行（同步没跑过 / 表被清空）⇒ 默认启用（代码为准），
+            //    否则一次查表失败就让所有内置工具集体消失。
+            if (cfg != null && cfg.getEnabled() != null && cfg.getEnabled() != 1) {
+                log.info("AI 工具 [{}] 已被后台停用（ai_tool_config.enabled=0），本轮不装配", def.name());
+                continue;
+            }
+            // ⚠️ priority 也读表里的：运营在后台调优先级对内置工具也要有效
+            int priority = cfg != null && cfg.getPriority() != null ? cfg.getPriority() : DEFAULT_PRIORITY;
+            candidates.add(new Candidate(def, AiToolConfig.SCOPE_PUBLIC, priority, adapt(tool)));
         }
-        candidates.addAll(apiCandidates(caller));
+        if (candidates.size() > MAX_BUILTIN) {
+            log.warn("AI 内置工具数量 {} 超过配额 {}（§11.4），本轮只装配前 {} 个",
+                    candidates.size(), MAX_BUILTIN, MAX_BUILTIN);
+            candidates = new ArrayList<>(candidates.subList(0, MAX_BUILTIN));
+        }
+        List<Candidate> apiList = apiCandidates(caller);
+        if (apiList.size() > MAX_API) {
+            // ⚠️ API 工具超配额 ⇒ 按 priority 取前 N 个，并明确告知管理员
+            // （不静默丢：被丢掉的工具在后台列表里仍能看到，但本轮没装配）
+            log.warn("AI API 工具数量 {} 超过配额 {}（§11.4），本轮只装配前 {} 个：被截断的工具：{}",
+                    apiList.size(), MAX_API, MAX_API,
+                    apiList.subList(MAX_API, apiList.size()).stream()
+                            .map(c -> c.definition().name()).toList());
+            apiList = new ArrayList<>(apiList.subList(0, MAX_API));
+        }
+        candidates.addAll(apiList);
 
         // ② scope 过滤（§11.4：外部工具永不给前台）
         List<Candidate> visible = new ArrayList<>();
@@ -194,6 +235,16 @@ public class AiToolRegistry {
                     // 内置工具不走这条路径（描述在代码里，不存在被改）。
                     .isNotNull(AiToolConfig::getConfirmedAt);
             for (AiToolConfig cfg : configMapper.selectList(wrapper)) {
+                // ⚠️ 「改过描述但还没点确认」也要挡住（§11.2 的「自动禁用」）：
+                //   上面那个 isNotNull 只挡「从没确认过」，挡不住「确认过、后来又改了描述」——
+                //   那时 confirmed_at 还是旧值，工具照样装配 ⇒ 改描述这个动作就等于没审批。
+                //   判据与后台列表的「待确认」一致：最后修改时间晚于最后确认时间。
+                if (cfg.getConfirmedAt() != null && cfg.getUpdatedAt() != null
+                        && cfg.getUpdatedAt().isAfter(cfg.getConfirmedAt())) {
+                    log.info("API 工具 [{}] 的描述/参数已变更且未确认，本轮不装配（§11.2 自动禁用）",
+                            cfg.getToolName());
+                    continue;
+                }
                 String schema = cfg.getParamSchema();
                 if (schema == null || schema.isBlank()) {
                     // 没写 Schema ⇒ 退化成"接受任意参数"，否则模型传什么都解析不了
@@ -213,6 +264,25 @@ public class AiToolRegistry {
     }
 
     /** API 工具的回调：闭包捕获配置与调用者，执行交给 {@link ApiToolInvoker}。 */
+    /**
+     * 内置工具在表里的配置（工具名 → 配置行），一次查完。
+     * <p>
+     * ⚠️ <b>查表失败就当没配</b>（而不是"查不到就不装配"）：查表失败不该让所有内置工具集体消失。
+     */
+    private Map<String, AiToolConfig> builtinConfig() {
+        try {
+            Map<String, AiToolConfig> map = new HashMap<>();
+            for (AiToolConfig cfg : configMapper.selectList(new LambdaQueryWrapper<AiToolConfig>()
+                    .eq(AiToolConfig::getToolType, AiToolConfig.TYPE_BUILTIN))) {
+                map.put(cfg.getToolName(), cfg);
+            }
+            return map;
+        } catch (Exception e) {
+            log.error("读取内置工具配置失败，本轮按全部启用处理：{}", e.getMessage(), e);
+            return Map.of();
+        }
+    }
+
     private ToolCallback apiCallback(AiToolConfig cfg, AiToolCaller caller) {
         return new ToolCallback() {
             @Override

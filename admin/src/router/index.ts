@@ -186,12 +186,20 @@ export const permissionRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/settings/AiConfigView.vue'),
         meta: { title: 'AI 配置', icon: 'ChatDotSquare', permission: 'ai:view' },
       },
-      {
-        path: 'ai-console',
-        name: 'AiConsole',
-        component: () => import('@/views/ai/AiConsoleView.vue'),
-        meta: { title: 'AI 会话', icon: 'ChatLineSquare', permission: 'ai:view' },
-      },
+        {
+          path: 'ai-console',
+          name: 'AiConsole',
+          component: () => import('@/views/ai/AiConsoleView.vue'),
+          meta: { title: 'AI 会话', icon: 'ChatLineSquare', permission: 'ai:view' },
+        },
+        {
+          path: 'ai-tools',
+          name: 'AiTools',
+          component: () => import('@/views/ai/AiToolsView.vue'),
+          // ⚠️ 菜单可见只要求 view；改与调由页面里的 v-permission 分别控制
+          // （ai:tool:edit 仅 SUPER_ADMIN，ai:tool:use 消耗外部额度）
+          meta: { title: 'AI 工具', icon: 'Connection', permission: 'ai:tool:view' },
+        },
       {
         path: 'logs',
         name: 'Logs',

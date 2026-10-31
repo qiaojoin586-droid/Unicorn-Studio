@@ -1743,6 +1743,26 @@ SET @sql := IF(@exists = 0,
   'CREATE INDEX idx_ai_tool_inv_created ON `ai_tool_invocation` (created_at)', 'SELECT 1');
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+-- 4. AI 工具管理权限码（§6.5 接口 6~9 的后台工具配置页）
+--    ⚠️ 独立成码，不复用 ai:edit：ai:edit 只影响"模型参数"，
+--    而 ai:tool:edit 影响"后端会向哪里发请求"—— 两者风险等级不同
+--    （与 ai:test 独立成码是同一逻辑：消耗真实外部额度需要分权）。
+--    ⚠️ 授予范围（v1.1 已确认）：ai:tool:view 给 EDITOR + SUPER_ADMIN；
+--    ai:tool:edit 仅 SUPER_ADMIN；ai:tool:use SUPER_ADMIN（可再授权他人）。
+INSERT IGNORE INTO sys_permission (code, name, module, type, sort_order) VALUES
+  ('ai:tool:view', '查看 AI 工具', 'AI 工具', 'MENU',   121),
+  ('ai:tool:edit', '编辑 AI 工具', 'AI 工具', 'BUTTON', 122),
+  ('ai:tool:use',  '调用 AI 工具', 'AI 工具', 'BUTTON', 123);
+
+-- 内容小编（EDITOR）只拿 view，不拿 edit/use：
+-- ⚠️ 填 URL = 决定后端向何处发起请求（SSRF 面），权限必须高于 ai:edit。
+--    若将来确有需要放开，正确做法是先做工具 URL 白名单收敛（§11.4 的 SSRF 防护）。
+INSERT IGNORE INTO sys_role_permission (role_id, permission_id)
+SELECT r.id, p.id FROM sys_role r, sys_permission p
+WHERE r.code = 'EDITOR' AND p.code IN ('ai:tool:view');
+-- SUPER_ADMIN 走代码级全量加载（AdminPermissionService 对 SUPER_ADMIN 取全表权限码），
+-- 因此不需要为它插入关联行 —— 这与 ai:test 的处置完全一致。
+
 -- ==========================================================================
 -- 完成。执行 03-verify.sql 校验结构，再导入 02-data.sql。
 -- ==========================================================================
