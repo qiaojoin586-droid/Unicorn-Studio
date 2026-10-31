@@ -164,7 +164,7 @@ onBeforeUnmount(() => { requestVersion++ })
   margin: 0 0 64px;
   border-radius: 4px;
   overflow: hidden;
-  background: #e7e5df;
+  background: var(--surface-soft, #e7e5df);
 }
 .reading-cover img {
   width: 100%;
@@ -295,7 +295,7 @@ onBeforeUnmount(() => { requestVersion++ })
   display: block;
   width: 90%;
   height: 34px;
-  background: #dfddd7;
+  background: var(--surface-soft, #dfddd7);
   margin: 16px 0;
   animation: reading-pulse 1.8s ease-in-out infinite;
 }

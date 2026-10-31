@@ -27,7 +27,7 @@
           role="alertdialog"
           aria-modal="true"
           aria-labelledby="ai-clear-title"
-          class="relative w-full max-w-[380px] overflow-hidden rounded-2xl border border-white/10 bg-gray-900/95 shadow-2xl shadow-black/50 backdrop-blur-xl"
+          class="relative w-full max-w-[380px] overflow-hidden rounded-2xl border border-[var(--ai-panel-line)] bg-gray-900/95 shadow-2xl shadow-black/50 backdrop-blur-xl"
         >
           <!-- 顶部一条红→透明细线：不用更多颜色就点明"这是个不可逆操作" -->
           <div class="h-[3px] w-full bg-gradient-to-r from-red-500/80 via-red-500/25 to-transparent"></div>
@@ -43,8 +43,8 @@
                 </svg>
               </span>
               <div class="min-w-0 flex-1 pt-0.5">
-                <h4 id="ai-clear-title" class="text-[15px] font-semibold text-white">清空这段对话？</h4>
-                <p class="mt-1 truncate text-[13px] leading-relaxed text-gray-400" :title="targetTitle">
+                <h4 id="ai-clear-title" class="text-[15px] font-semibold text-[var(--ai-panel-text)]">清空这段对话？</h4>
+                <p class="mt-1 truncate text-[13px] leading-relaxed text-[var(--ai-panel-muted)]" :title="targetTitle">
                   {{ targetTitle }}
                 </p>
               </div>
@@ -64,7 +64,7 @@
             <div class="mt-5 flex justify-end gap-2">
               <button
                 type="button"
-                class="rounded-full border border-white/15 px-4 py-1.5 text-[13px] text-gray-300 transition hover:bg-white/10"
+                class="rounded-full border border-white/15 px-4 py-1.5 text-[13px] text-[var(--ai-panel-muted)] transition hover:bg-white/10"
                 @click="store.closeConfirm()"
               >
                 取消
@@ -72,7 +72,7 @@
               <button
                 type="button"
                 :disabled="store.clearing"
-                class="rounded-full bg-red-500/90 px-4 py-1.5 text-[13px] font-medium text-white transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                class="rounded-full bg-red-500/90 px-4 py-1.5 text-[13px] font-medium text-[var(--ai-panel-text)] transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
                 @click="onConfirm"
               >
                 {{ store.clearing ? '清空中…' : '确认清空' }}

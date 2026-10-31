@@ -141,7 +141,7 @@ onMounted(loadResources)
   border-bottom: 1px solid transparent;
   background: none;
   font-size: 13px;
-  color: #6a6b70;
+  color: var(--text-on-paper, #6a6b70);
   cursor: pointer;
   transition: color 180ms,border-color 180ms;
 }
@@ -180,7 +180,7 @@ onMounted(loadResources)
 }
 .resource-number {
   font: 12px ui-monospace,monospace;
-  color: #7b7b73;
+  color: var(--text-on-paper, #7b7b73);
 }
 .resource-category {
   font-size: 12px;
@@ -251,7 +251,7 @@ onMounted(loadResources)
   display: block;
   height: 12px;
   width: 23%;
-  background: #dfddd7;
+  background: var(--surface-soft, #dfddd7);
   margin-bottom: 45px;
 }
 .resource-skeleton>span:nth-child(2) {
@@ -274,7 +274,7 @@ onMounted(loadResources)
 .library-end>span {
   font: 10px ui-monospace,monospace;
   letter-spacing: .1em;
-  color: #6a6b70;
+  color: var(--text-on-paper, #6a6b70);
 }
 .library-end a {
   font-size: 14px;
@@ -291,7 +291,7 @@ onMounted(loadResources)
 }
 @media(hover:hover) {
   .resource-card:hover {
-    background: #eceae4;
+    background: var(--surface-soft, #eceae4);
     border-color: #aaa79e;
   }
   .resource-card:hover .resource-card__bottom {

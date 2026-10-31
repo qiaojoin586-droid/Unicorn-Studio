@@ -1,21 +1,23 @@
 <template>
   <div class="flex gap-3" :class="isUser ? 'flex-row-reverse' : ''">
-    <!-- Avatar -->
+    <!-- Avatar：助手用独角兽标志（跟页头/对话框左上角同一个）；
+         用户侧保留「我」字样的红色圆点 —— 那是"人"的标识，不是品牌标识。 -->
     <div
       class="w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5"
       :class="isUser
-        ? 'bg-[#C92D3B] text-white'
-        : 'bg-white/10 text-white'"
+        ? 'bg-[#C92D3B] text-[var(--ai-panel-text)]'
+        : 'bg-[var(--ai-panel-hover)] text-[var(--ai-panel-text)]'"
     >
-      <span aria-hidden="true">{{ isUser ? '我' : 'AI' }}</span>
+      <BrandMark v-if="!isUser" aria-hidden="true" />
+      <span v-else aria-hidden="true">我</span>
     </div>
 
     <!-- Bubble -->
     <div
       class="rounded-2xl px-4 py-3 max-w-[85%] min-w-0"
       :class="isUser
-        ? 'bg-[#C92D3B] text-white rounded-tr-sm'
-        : 'bg-white/5 border border-white/10 text-gray-200 rounded-tl-sm'"
+        ? 'bg-[#C92D3B] text-[var(--ai-panel-text)] rounded-tr-sm'
+        : 'bg-[var(--ai-field-bg)] border border-[var(--ai-panel-line)] text-gray-200 rounded-tl-sm'"
     >
       <!--
         Markdown 渲染：html 来自 useMarkdown（marked 解析 + DOMPurify 消毒），

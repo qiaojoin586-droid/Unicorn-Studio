@@ -4,7 +4,7 @@
 @tailwind components;
 @tailwind utilities;
 
-html { background: var(--color-ink); scroll-padding-top: calc(var(--header-height) + 20px); scrollbar-gutter: stable; }
+html { background: var(--header-bg); scroll-padding-top: calc(var(--header-height) + 20px); scrollbar-gutter: stable; }
 body { margin: 0; color: var(--color-ink); background: var(--color-paper); font-family: var(--font-sans); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 ::selection { background: var(--color-accent); color: white; }
 :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 5px; }
@@ -52,7 +52,7 @@ body.ai-modal-open { overflow: hidden; }
 /* 富文本正文排版（后台 wangeditor 产出的 HTML，经后端 HtmlSanitizer 消毒后 v-html 注入）。
    作品详情、学习资料详情共用，故收敛到全局样式，避免依赖路由懒加载顺序。 */
 .rich-content {
-  color: #37383e;
+  color: var(--text-on-paper, #37383e);
   font-size: clamp(16px, 1.3vw, 18px);
   line-height: 1.9;
   overflow-wrap: anywhere;
@@ -125,7 +125,7 @@ body.ai-modal-open { overflow: hidden; }
 }
 .rich-content table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin-block: 24px; }
 .rich-content th, .rich-content td { border: 1px solid var(--color-line); padding: 12px 16px; text-align: left; min-width: 110px; }
-.rich-content th { background: #e9e6df; color: var(--color-ink); }
+.rich-content th { background: var(--surface-soft, #e9e6df); color: var(--color-ink); }
 .rich-content hr { border: 0; border-top: 1px solid var(--color-line); margin-block: 40px; }
 
 /* 深色面板里的滚动条：浏览器默认给的是亮白竖条，在 gray-900 底上非常刺眼。
@@ -304,3 +304,6 @@ body.ai-modal-open { overflow: hidden; }
 .md-body.is-user h6 { color: #fff; border-left-color: rgba(255, 255, 255, 0.6); }
 .md-body.is-user blockquote { color: rgba(255, 255, 255, 0.85); border-left-color: rgba(255, 255, 255, 0.6); }
 .md-body.is-user a { color: #e0e7ff; }
+
+/* 翻转后的深色正文区域使用浅红链接，按钮仍保持品牌红。 */
+[data-theme='light'] .rich-content a { color: var(--accent-on-paper); }

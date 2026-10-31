@@ -175,7 +175,7 @@ usePageMeta(() => ({ title: page.title === DEFAULTS.title ? '加入我们' : pag
 
 <style scoped>
 .qr-unavailable { min-height: 220px; display: grid; place-items: center; padding: 28px; color: #62636a; font-size: 14px; line-height: 1.8; text-align: center; }
-.join-page { color: var(--color-paper, #f4f2ec); background: var(--color-ink, #121316); }
+.join-page { color: var(--feature-text); background: var(--feature-bg); }
 .join-section { padding-block: clamp(48px, 6vw, 88px) 0; }
 .join-overline { display: flex; justify-content: space-between; align-items: center; gap: 24px; padding-bottom: 28px; border-bottom: 1px solid #ffffff25; margin-bottom: 64px; }
 .join-overline .eyebrow { display: flex; align-items: center; gap: 10px; margin: 0; color: #a7a8af; }
@@ -250,4 +250,23 @@ usePageMeta(() => ({ title: page.title === DEFAULTS.title ? '加入我们' : pag
   .qr-card-heading { font-size: 8px; letter-spacing: .025em; }
 }
 @media (prefers-reduced-motion: reduce) { .join-contact-link, .group-copy { transition: none; } }
+:global([data-theme='light'] .join-overline .eyebrow) ,
+:global([data-theme='light'] .join-edition) ,
+:global([data-theme='light'] .join-paragraphs p) ,
+:global([data-theme='light'] .join-topics span) ,
+:global([data-theme='light'] .join-contact-label) ,
+:global([data-theme='light'] .join-phone-help p) ,
+:global([data-theme='light'] .join-load-status) ,
+:global([data-theme='light'] .join-bottom-note) { color: var(--feature-muted); }
+:global([data-theme='light'] .join-subtitle) ,
+:global([data-theme='light'] .join-contact-link) ,
+:global([data-theme='light'] .join-bottom-note a) { color: var(--feature-text); }
+:global([data-theme='light'] .join-contact-link:hover) ,
+:global([data-theme='light'] .join-bottom-note a:hover) ,
+:global([data-theme='light'] .qr-save-link) ,
+:global([data-theme='light'] .join-load-status button) { color: var(--feature-accent); }
+:global([data-theme='light'] .join-overline) ,
+:global([data-theme='light'] .join-topics span) ,
+:global([data-theme='light'] .join-contact) ,
+:global([data-theme='light'] .join-bottom-note) { border-color: var(--feature-line); }
 </style>

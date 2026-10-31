@@ -25,3 +25,59 @@
 @media (max-width: 767px) {
   :root { --header-height: 72px; }
 }
+
+/* ==========================================================================
+   AI 助手面板专用变量
+   ⚠️ 为什么单独一组：面板本身是【深色面】，而站点主题切换会改变 --color-ink /
+      --color-paper 的明暗 ⇒ 若面板直接用它们，浅色主题下会变成"深底深字"。
+      ⇒ 给面板自己一组固定值 ⇒ 两个主题下面板都是深底浅字，不用为每个主题各写一遍。
+   ========================================================================== */
+:root {
+  /* 页头（底色用 --color-ink，会随主题翻转）⇒ 文字与描边必须跟着变，否则浅色主题下白字看不见 */
+  --header-bg: var(--color-ink);
+  --feature-bg: var(--color-ink);
+  --feature-raised-bg: var(--color-surface-dark);
+  --feature-text: var(--color-paper);
+  --feature-muted: var(--color-muted-dark);
+  --feature-accent: var(--color-accent-on-dark);
+  --feature-line: #ffffff25;
+  --header-text: #eceae4;
+  --header-text-dim: #c0c0c2;
+  --header-line: #ffffff36;
+  --header-line-soft: #ffffff1a;
+
+  --ai-panel: #1c1d22;
+  --ai-panel-raised: #26272e;
+  --ai-panel-text: #eceae4;
+  --ai-panel-muted: #a7a8af;
+  --ai-panel-line: #ffffff1a;
+  --ai-panel-line-strong: #ffffff2e;
+  --ai-panel-hover: #ffffff0f;
+  --ai-field-bg: #ffffff08;
+  --ai-field-border: #ffffff26;
+}
+
+/* 翻转配色：原深色面变浅，原浅色面变深，文字与所在表面同步。 */
+:root[data-theme='light'] {
+  --color-ink: #efede7;
+  --color-paper: #222428;
+  --color-surface-dark: #f8f6f1;
+  --color-muted-light: #b9bbc2;
+  --color-muted-dark: #555b64;
+  --color-line: #555860;
+  --surface-soft: #303238;
+  --text-on-paper: #b9bbc2;
+  --accent-on-paper: #ff9ca4;
+
+  --header-bg: var(--color-ink);
+  --header-text: #24272c;
+  --header-text-dim: #4c535c;
+  --header-line: #24272c38;
+  --header-line-soft: #24272c1c;
+  --feature-bg: var(--color-ink);
+  --feature-raised-bg: var(--color-surface-dark);
+  --feature-text: var(--color-paper);
+  --feature-muted: var(--color-muted-dark);
+  --feature-accent: #ab2431;
+  --feature-line: #24272c26;
+}

@@ -1,23 +1,18 @@
 <template>
-  <!--
-    历史抽屉（文档 §8.2）。挂在 AiChatDialog 内部，作为「左侧栏」与消息区并排 ——
-    不是覆盖层，打开时对话框整体不变形、输入框始终可用。
-    ⚠️ 不能移出 AiChatDialog：那边根节点带 overflow-hidden 与 transform，
-       移出去会脱离拖动/缩放坐标系；这里保持同一棵子树。
-  -->
+  <!-- 历史栏保留在对话框内，较窄时覆盖消息区，底部输入框保持可用。 -->
   <div
-    class="flex h-full flex-shrink-0"
-    :class="isNarrow ? 'absolute inset-0 z-20' : 'w-[260px] border-r border-white/10'"
+    class="flex flex-shrink-0 bg-[var(--ai-panel)]"
+    :class="isNarrow ? 'absolute inset-x-0 top-0 bottom-[69px] z-20' : 'h-full w-[260px] border-r border-[var(--ai-panel-line)]'"
   >
     <div class="flex h-full w-full flex-col">
       <!-- 头部 -->
-      <div class="flex items-center justify-between px-3 py-3 border-b border-white/10 flex-shrink-0">
+      <div class="flex items-center justify-between px-3 py-3 border-b border-[var(--ai-panel-line)] flex-shrink-0">
         <div class="flex items-center gap-2 min-w-0">
-          <!-- 手机端是全屏覆盖层，需要返回按钮（§8.2） -->
+          <!-- 窄屏历史栏可直接返回对话。 -->
           <button
             v-if="isNarrow"
             type="button"
-            class="text-gray-400 hover:text-white transition p-1"
+            class="text-[var(--ai-panel-muted)] hover:text-white transition p-1"
             title="返回对话"
             aria-label="返回对话"
             @click="emit('close')"
@@ -26,11 +21,11 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
-          <h4 class="text-white text-sm font-medium truncate">历史对话</h4>
+          <h4 class="text-[var(--ai-panel-text)] text-sm font-medium truncate">历史对话</h4>
         </div>
         <button
           type="button"
-          class="text-gray-500 hover:text-gray-300 transition p-1"
+          class="text-[var(--ai-panel-muted)] hover:text-gray-300 transition p-1"
           title="关闭"
           aria-label="关闭历史对话"
           @click="emit('close')"
@@ -66,7 +61,7 @@
         <!-- 空态：不显示骨架屏（§8.2） -->
         <p
           v-if="!store.hasSessions && !store.historyLoading"
-          class="px-4 py-8 text-center text-gray-500 text-xs"
+          class="px-4 py-8 text-center text-[var(--ai-panel-muted)] text-xs"
         >
           还没有历史对话
         </p>
@@ -75,7 +70,7 @@
           v-for="s in store.sessions"
           :key="s.id"
           class="group px-2 py-1"
-          :class="s.id === store.sessionId ? 'bg-white/5' : ''"
+          :class="s.id === store.sessionId ? 'bg-[var(--ai-field-bg)]' : ''"
         >
           <div class="flex items-start gap-1">
             <!-- 点击：载入该会话最近一页，并继续在它里面对话（§8.2） -->
@@ -85,14 +80,14 @@
               @click="onPick(s)"
             >
               <p class="text-gray-200 text-xs truncate" :title="s.title">{{ shortTitle(s.title) }}</p>
-              <p class="mt-0.5 text-[11px] text-gray-500 truncate">
+              <p class="mt-0.5 text-[11px] text-[var(--ai-panel-muted)] truncate">
                 {{ s.messageCount }} 条 · {{ relativeTime(s.lastActiveAt) }}
               </p>
             </button>
             <!-- 清空：悬浮出现，点击走二次确认（§8.2 + §7.1 文案要求） -->
             <button
               type="button"
-              class="opacity-0 group-hover:opacity-100 focus:opacity-100 transition p-1.5 text-gray-500 hover:text-red-400"
+              class="opacity-0 group-hover:opacity-100 focus:opacity-100 transition p-1.5 text-[var(--ai-panel-muted)] hover:text-red-400"
               title="清空对话"
               aria-label="清空对话"
               @click.stop="onAskClear(s)"
@@ -104,7 +99,7 @@
           </div>
         </div>
 
-        <p v-if="store.historyLoading" class="px-4 py-3 text-center text-gray-500 text-xs">加载中…</p>
+        <p v-if="store.historyLoading" class="px-4 py-3 text-center text-[var(--ai-panel-muted)] text-xs">加载中…</p>
         <p
           v-else-if="store.hasSessions && !store.hasMoreSessions"
           class="px-4 py-3 text-center text-gray-600 text-[11px]"
@@ -114,10 +109,10 @@
       </div>
 
       <!-- 新对话 -->
-      <div class="px-2 py-2 border-t border-white/10 flex-shrink-0">
+      <div class="px-2 py-2 border-t border-[var(--ai-panel-line)] flex-shrink-0">
         <button
           type="button"
-          class="w-full rounded-lg border border-white/10 px-3 py-2 text-xs text-gray-300 transition hover:bg-white/5"
+          class="w-full rounded-lg border border-[var(--ai-panel-line)] px-3 py-2 text-xs text-[var(--ai-panel-muted)] transition hover:bg-white/5"
           @click="onNewChat"
         >
           + 新对话
@@ -138,19 +133,25 @@ const { loadSessions, loadHistoryMessages } = useAiChat()
 const emit = defineEmits(['close'])
 const listContainer = ref(null)
 
-/** 手机端（<640px）抽屉改为全屏覆盖层，带返回按钮（§8.2） */
+/** 对话框较窄时使用覆盖层，避免侧栏挤压消息和输入区。 */
 const isNarrow = ref(false)
+let panelObserver
 function syncViewport() {
-  isNarrow.value = window.innerWidth < 640
+  const panel = listContainer.value?.closest('[data-ai-panel]')
+  isNarrow.value = (panel?.clientWidth || window.innerWidth) < 640
 }
-
 onMounted(() => {
   syncViewport()
+  const panel = listContainer.value?.closest('[data-ai-panel]')
+  if (panel) {
+    panelObserver = new ResizeObserver(syncViewport)
+    panelObserver.observe(panel)
+  }
   window.addEventListener('resize', syncViewport)
   loadSessions(1)
 })
-
 onBeforeUnmount(() => {
+  panelObserver?.disconnect()
   window.removeEventListener('resize', syncViewport)
 })
 

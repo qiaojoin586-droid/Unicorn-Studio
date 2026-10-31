@@ -122,7 +122,7 @@ usePageMeta(() => ({ title: page.title === DEFAULTS.title ? '关于独角兽工�
 .about-heading-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 64px; align-items: end; }
 .about-title { font-size: clamp(40px, 5.5vw, 76px); line-height: 1.2; letter-spacing: -.055em; font-weight: 650; margin: 0; max-width: 10em; overflow-wrap: anywhere; text-wrap: balance; }
 .about-subtitle { font-size: clamp(16px, 1.3vw, 18px); line-height: 1.9; color: var(--color-muted-light, #62636a); margin: 0 0 4px; max-width: 29em; }
-.about-rule { display: flex; justify-content: space-between; gap: 20px; margin-top: 52px; padding-block: 18px; border-top: 1px solid #12131625; color: #62636a; font-size: 12px; }
+.about-rule { display: flex; justify-content: space-between; gap: 20px; margin-top: 52px; padding-block: 18px; border-top: 1px solid #12131625; color: var(--text-on-paper, #62636a); font-size: 12px; }
 .about-rule span:last-child { font: 10px/1.5 ui-monospace, monospace; letter-spacing: .07em; }
 .about-story { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(40px, 7vw, 112px); align-items: center; padding-block: 48px 112px; }
 .about-visual { min-width: 0; margin: 0; aspect-ratio: 1 / 1.08; background: #080808; color: #f4f2ec; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
@@ -136,26 +136,26 @@ usePageMeta(() => ({ title: page.title === DEFAULTS.title ? '关于独角兽工�
 .about-visual-caption { position: absolute; bottom: 0; left: 0; right: 0; padding: 28px 24px 20px; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font-size: 11px; background: linear-gradient(transparent, #080808d9); }
 .about-visual-caption span:last-child { font: 9px/1.5 ui-monospace, monospace; letter-spacing: .07em; }
 .about-story-copy { min-width: 0; padding-block: 16px; }
-.about-story-label { margin: 0 0 32px; color: #62636a; }
+.about-story-label { margin: 0 0 32px; color: var(--text-on-paper, #62636a); }
 .about-paragraphs p { font-size: clamp(16px, 1.35vw, 19px); line-height: 1.95; margin: 0 0 24px; overflow-wrap: anywhere; }
 .about-paragraphs p + p { color: var(--color-muted-light, #62636a); }
 .about-stats { display: flex; flex-wrap: wrap; gap: 24px 40px; margin: 36px 0; padding-top: 28px; border-top: 1px solid #12131625; }
 .about-stats > div { min-width: 72px; }
 .about-stats dd { font-size: clamp(28px, 3vw, 44px); font-weight: 600; letter-spacing: -.04em; margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.about-stats dt { color: #62636a; font-size: 12px; margin-top: 8px; }
+.about-stats dt { color: var(--text-on-paper, #62636a); font-size: 12px; margin-top: 8px; }
 .about-text-link { display: inline-flex; min-height: 44px; align-items: center; gap: 32px; margin-top: 16px; font-size: 14px; font-weight: 600; border-bottom: 1px solid #121316; transition: color 160ms, gap 180ms; }
 .about-text-link:hover { color: var(--color-accent, #c92d3b); gap: 40px; }
 .about-text-link span { font-size: 23px; }
-.about-source-status { font-size: 12px; color: #62636a; margin-top: 20px; }
+.about-source-status { font-size: 12px; color: var(--text-on-paper, #62636a); margin-top: 20px; }
 .about-source-status button { text-decoration: underline; text-underline-offset: 4px; min-height: 44px; padding-inline: 8px; }
-.about-practice { background: #eae8e1; padding-block: clamp(64px, 7vw, 112px); }
+.about-practice { background: var(--surface-soft, #eae8e1); padding-block: clamp(64px, 7vw, 112px); }
 .about-practice-heading { display: grid; grid-template-columns: .8fr 1.2fr; gap: 32px; align-items: start; margin-bottom: 56px; }
 .about-practice-heading .eyebrow { margin: 10px 0 0; }
 .about-practice-heading .section-title { margin: 0; }
 .practice-item { display: grid; grid-template-columns: .18fr .82fr 1fr; gap: 32px; align-items: baseline; border-top: 1px solid #12131625; padding-block: 28px; }
 .practice-number { font: 12px/1.6 ui-monospace, monospace; color: var(--color-accent, #c92d3b); }
 .practice-item h3 { margin: 0; font-size: clamp(18px, 1.7vw, 24px); font-weight: 600; letter-spacing: -.025em; }
-.practice-item p { margin: 0; font-size: 15px; line-height: 1.9; color: #62636a; max-width: 31em; }
+.practice-item p { margin: 0; font-size: 15px; line-height: 1.9; color: var(--text-on-paper, #62636a); max-width: 31em; }
 .about-invitation { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; padding-block: clamp(72px, 8vw, 128px); }
 .about-invitation .eyebrow { margin: 0 0 24px; }
 .about-invitation h2 { margin: 0; font-size: clamp(32px, 4.5vw, 60px); line-height: 1.25; font-weight: 600; letter-spacing: -.045em; }

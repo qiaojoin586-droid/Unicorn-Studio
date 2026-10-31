@@ -52,7 +52,7 @@ watch(() => props.coverUrl, () => { imgFailed.value = false })
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: #e7e5df;
+  background: var(--surface-soft, #e7e5df);
   color: #b9b6ae;
 }
 .work-card__arc {
@@ -69,7 +69,7 @@ watch(() => props.coverUrl, () => { imgFailed.value = false })
   bottom: 10%;
   font: 500 11px/1.7 ui-monospace,monospace;
   letter-spacing: .14em;
-  color: #62636a;
+  color: var(--text-on-paper, #62636a);
 }
 .work-card__placeholder-dot {
   position: absolute;

@@ -36,7 +36,7 @@
 
         <!-- ── 左栏：窄屏整栏隐藏 ── -->
         <div
-          class="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-slate-400 via-slate-500 to-slate-600 p-8 text-white md:flex"
+          class="relative hidden flex-col justify-between overflow-hidden bg-gradient-to-br from-slate-400 via-slate-500 to-slate-600 p-8 text-[var(--ai-panel-text)] md:flex"
         >
           <!-- 网格纹理 + 两个光斑（纯装饰，不参与交互） -->
           <div

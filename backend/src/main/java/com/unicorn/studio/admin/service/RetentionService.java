@@ -3,6 +3,7 @@ package com.unicorn.studio.admin.service;
 import com.alibaba.druid.stat.DruidStatManagerFacade;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.AIWorker.service.AiToolInvocationCleaner;
 import com.unicorn.studio.mapper.SysOperationLogMapper;
 import com.unicorn.studio.model.SysOperationLog;
 import org.slf4j.Logger;
@@ -87,6 +88,8 @@ public class RetentionService {
     private static final Pattern DATE_DIR = Pattern.compile("\\d{4}-\\d{2}-\\d{2}");
 
     private final SysOperationLogMapper logMapper;
+    /** 工具调用审计（ai_tool_invocation）的保留期清理（§7.4） */
+    private final AiToolInvocationCleaner toolInvocationCleaner;
     private final SiteSettingsService settingsService;
     private final DruidStatManagerFacade statManager = DruidStatManagerFacade.getInstance();
 
@@ -95,11 +98,13 @@ public class RetentionService {
     private final Path logRoot;
 
     public RetentionService(SysOperationLogMapper logMapper,
+                            AiToolInvocationCleaner toolInvocationCleaner,
                            SiteSettingsService settingsService,
                            @Value("${app.retention.cron:0 30 3 * * *}") String cron,
                            @Value("${app.retention.max-delete-per-run:50000}") int maxDeletePerRun,
                            @Value("${logging.file.path:./logs}") String logPath) {
         this.logMapper = logMapper;
+        this.toolInvocationCleaner = toolInvocationCleaner;
         this.settingsService = settingsService;
         this.cron = cron;
         this.maxDeletePerRun = Math.max(BATCH_SIZE, maxDeletePerRun);
@@ -239,6 +244,12 @@ public class RetentionService {
             log.warn("审计日志清理达到单轮上限 {} 条，剩余数据待下次清理", maxDeletePerRun);
         }
 
+        // ---- 1.5 工具调用审计（DB）：分批物理删除（§7.4 / §11.7）
+        //   这张表"每次工具调用一行"，随使用量线性增长，没有别的清理入口 ⇒ 必须纳入本清理。
+        //   保留期与审计日志同一个口径（后台可配的 7/15/30/90 天档位）。
+        AiToolInvocationCleaner.CleanupOutcome toolOutcome =
+                toolInvocationCleaner.deleteExpired(cutoff, BATCH_SIZE, maxDeletePerRun);
+
         // ---- 2. SQL 监控（内存）：按保留期节流整体重置 ----
         boolean sqlReset = false;
         LocalDateTime lastReset = parseDateTime(settingsService.getValue(KEY_SQL_LAST_RESET));
@@ -269,6 +280,8 @@ public class RetentionService {
 
         String message = "已删除审计日志 " + deleted + " 条（" + batches + " 批）"
                 + (capped ? "（达单轮上限，剩余待下次）" : "")
+                + "，工具调用审计 " + toolOutcome.deleted() + " 条"
+                + (toolOutcome.capped() ? "（达单轮上限，剩余待下次）" : "")
                 + "，SQL 监控统计" + (sqlReset ? "已重置" : "未到重置周期")
                 + "，裁剪审计文件目录 " + deletedDirs + " 个";
         log.info("数据保留清理完成: trigger={} cutoff={} deleted={} batches={} sqlReset={} dirs={}",

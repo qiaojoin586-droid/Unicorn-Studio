@@ -37,9 +37,11 @@ import { ref, reactive, computed, onBeforeUnmount } from 'vue'
 
 /** 尺寸/持久化的默认配置。两处调用点共用同一份，避免「谁先 mount 谁定配置」的不确定性。 */
 export const AI_PANEL_OPTIONS = {
-  storageKey: 'unicorn.aiChat.panelSize',
-  defaultWidth: 384, // 与改造前的 w-96 保持一致
-  defaultHeight: 500,
+  // 更新尺寸版本，让已有访问者也能使用新的初始布局；之后仍保存手动调整。
+  storageKey: 'unicorn.aiChat.panelSize.v3',
+  // 桌面端为消息阅读和底部输入区预留足够空间。
+  defaultWidth: 480,
+  defaultHeight: 600,
   minWidth: 320,
   minHeight: 320,
   maxWidth: 900,
@@ -260,6 +262,10 @@ function ensureInit() {
   const saved = load()
   if (Number.isFinite(saved?.width)) layout.width = saved.width
   if (Number.isFinite(saved?.height)) layout.height = saved.height
+  else {
+    // 较矮的视口要同时容纳面板和下方的入口，避免首次打开时顶部越界。
+    layout.height = Math.min(opts.defaultHeight, Math.max(opts.minHeight, defaultIconY() - PAIR_GAP - EDGE))
+  }
   normalize()
 
   // 兼容旧存档：早期只存 {width, height}，没有坐标 —— 此时按默认位置摆放

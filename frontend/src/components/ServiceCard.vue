@@ -35,7 +35,7 @@ const iconPath = computed(() => {
 
 <style scoped>
 .service-card { --card-ink: var(--color-ink, #121316); --card-muted: var(--color-muted-light, #62636a); --card-line: #12131625; color: var(--card-ink); background: var(--color-paper, #f4f2ec); padding: 28px 0 12px; border-top: 1px solid var(--card-line); min-width: 0; }
-.service-card--dark { --card-ink: var(--color-paper, #f4f2ec); --card-muted: var(--color-muted-dark, #a7a8af); --card-line: #ffffff30; background: var(--color-ink, #121316); }
+.service-card--dark { --card-ink: var(--feature-text); --card-muted: var(--feature-muted); --card-line: var(--feature-line); background: var(--feature-bg); }
 .service-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 32px; }
 .service-card-mark { display: block; width: 34px; height: 34px; }
 .service-card-mark svg { width: 100%; height: 100%; }

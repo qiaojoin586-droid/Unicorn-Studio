@@ -99,4 +99,9 @@ onBeforeUnmount(() => {
 @media (max-width: 767px) { .brand-visual { width: 100%; margin-left: 0; } .brand-visual__label { font-size: 6px; } .brand-visual__coordinate { font-size: 8px; } .brand-visual__annotation { font-size: 10px; } .brand-visual__annotation small { font-size: 6px; } .brand-visual__preview { bottom: 9%; right: 4%; width: 34%; padding: 7px; } .brand-visual__preview-top { font-size: 5px; padding-bottom: 6px; } .brand-visual__preview p { font-size: 7px; margin-top: 6px; } }
 @media (prefers-reduced-motion: no-preference) { .brand-visual__sculpture { animation: sculpture-arrive 900ms cubic-bezier(.16, 1, .3, 1) both; } @keyframes sculpture-arrive { from { transform: translateY(14px) rotate(-3deg); opacity: .6; } to { transform: translateY(0) rotate(0); opacity: 1; } } }
 @media (prefers-reduced-motion: reduce) { .brand-visual__stage { transform: none; transition: none; } }
+:global([data-theme='light'] .brand-visual__sculpture) { filter: invert(1) hue-rotate(180deg); }
+:global([data-theme='light'] .brand-visual__label),
+:global([data-theme='light'] .brand-visual__coordinate),
+:global([data-theme='light'] .brand-visual__annotation),
+:global([data-theme='light'] .brand-visual__annotation small) { color: var(--feature-muted); }
 </style>

@@ -21,7 +21,7 @@ watch(() => [props.mode, props.items], () => { index.value = 0; imageFailed.valu
 watch(index, () => { imageFailed.value = false })
 </script>
 <style scoped>
-.studio-media { position: absolute; right: 0; bottom: 4%; width: 40%; max-width: 250px; min-width: 160px; padding: 12px; background: #202125; border: 1px solid #ffffff38; color: var(--color-paper); border-radius: 4px; box-shadow: 0 12px 35px #0003; }
+.studio-media { position: absolute; right: 0; bottom: 4%; width: 40%; max-width: 250px; min-width: 160px; padding: 12px; background: #202125; border: 1px solid #ffffff38; color: #f4f2ec; border-radius: 4px; box-shadow: 0 12px 35px #0003; }
 .media-art { display: block; width: 100%; aspect-ratio: 16/10; object-fit: cover; }
 .media-art img { width: 100%; height: 100%; object-fit: cover; }
 .media-caption { padding-top: 10px; }

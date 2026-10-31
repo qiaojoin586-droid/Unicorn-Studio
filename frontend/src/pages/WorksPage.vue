@@ -131,7 +131,7 @@ onMounted(loadWorks)
 .archive-index {
   display: block;
   margin-bottom: 40px;
-  color: #77766f;
+  color: var(--text-on-paper, #77766f);
   font: 12px ui-monospace,monospace;
   letter-spacing: .1em;
 }
@@ -166,7 +166,7 @@ onMounted(loadWorks)
   background: transparent;
   border: 0;
   padding: 8px 0;
-  color: #6a6b70;
+  color: var(--text-on-paper, #6a6b70);
   font-size: 14px;
   cursor: pointer;
   border-bottom: 1px solid transparent;
@@ -178,7 +178,7 @@ onMounted(loadWorks)
 }
 .archive-filters button span {
   font: 10px ui-monospace,monospace;
-  color: #6a6b70;
+  color: var(--text-on-paper, #6a6b70);
   align-self: flex-start;
   padding-top: 2px;
 }
@@ -210,7 +210,7 @@ onMounted(loadWorks)
 }
 .archive-skeleton>div {
   aspect-ratio: 16/10;
-  background: #e2e0da;
+  background: var(--surface-soft, #e2e0da);
   border-radius: 4px;
   animation: archive-pulse 1.8s ease-in-out infinite;
 }
@@ -218,7 +218,7 @@ onMounted(loadWorks)
   display: block;
   height: 13px;
   width: 60%;
-  background: #e2e0da;
+  background: var(--surface-soft, #e2e0da);
   margin-top: 22px;
 }
 .archive-skeleton>span:last-child {
@@ -237,7 +237,7 @@ onMounted(loadWorks)
 .archive-end>span {
   font: 10px ui-monospace,monospace;
   letter-spacing: .1em;
-  color: #6a6b70;
+  color: var(--text-on-paper, #6a6b70);
 }
 .archive-end a {
   font-size: 14px;

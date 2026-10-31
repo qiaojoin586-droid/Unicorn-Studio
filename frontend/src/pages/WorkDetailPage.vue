@@ -150,7 +150,7 @@ onBeforeUnmount(() => { requestVersion++ })
 .detail-tags>span+span:before {
   content: '/';
   margin-right: 18px;
-  color: #a7a69e;
+  color: var(--text-on-paper, #a7a69e);
 }
 .detail-intro h1 {
   max-width: 1050px;
@@ -197,7 +197,7 @@ onBeforeUnmount(() => { requestVersion++ })
   margin: 0 0 64px;
   border-radius: 4px;
   overflow: hidden;
-  background: #e7e5df;
+  background: var(--surface-soft, #e7e5df);
 }
 .detail-cover img {
   width: 100%;
@@ -303,7 +303,7 @@ onBeforeUnmount(() => { requestVersion++ })
   display: block;
   width: 90%;
   height: 34px;
-  background: #dfddd7;
+  background: var(--surface-soft, #dfddd7);
   margin: 16px 0;
   animation: detail-pulse 1.8s ease-in-out infinite;
 }
