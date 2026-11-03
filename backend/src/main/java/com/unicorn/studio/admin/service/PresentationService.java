@@ -10,9 +10,7 @@ import jakarta.validation.ConstraintViolation;
 import jakarta.validation.Validator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
-import java.io.*;
 import java.net.*;
 import java.util.*;
 
@@ -26,20 +24,10 @@ public class PresentationService {
     private static final Set<String> URL_FIELDS = Set.of("primaryUrl", "secondaryUrl", "invitationUrl", "noteLinkUrl", "joinUrl");
     private final SiteSettingsService settings;
     private final Validator validator;
-    private final ObjectNode defaults;
 
     public PresentationService(SiteSettingsService settings, Validator validator) {
         this.settings = settings;
         this.validator = validator;
-        try (InputStream input = new ClassPathResource("presentation-defaults.json").getInputStream()) {
-            JsonNode root = JSON.readTree(input);
-            if (!(root instanceof ObjectNode object)) throw new IllegalStateException("Presentation defaults must be an object");
-            defaults = object;
-            validate(convert(defaults.get("home"), PresentationVO.Home.class));
-            validate(convert(defaults.get("about"), PresentationVO.About.class));
-            validate(convert(defaults.get("footer"), PresentationVO.Footer.class));
-            validate(convert(defaults.get("join"), PresentationVO.Join.class));
-        } catch (IOException e) { throw new IllegalStateException("Unable to load presentation-defaults.json", e); }
     }
     public PresentationVO load() {
         Map<String,String> values = settings.listGroup(GROUP);
@@ -56,7 +44,7 @@ public class PresentationService {
     public PresentationVO.Join saveJoin(PresentationVO.Join form) { return save("join", form, PresentationVO.Join.class); }
 
     private <T> T read(String section, Class<T> type, Map<String,String> values) {
-        ObjectNode base = defaultsFor(section);
+        ObjectNode base = emptySection(type);
         String stored = values.get(KEY_PREFIX + section);
         if (stored == null || stored.isBlank()) return convert(base, type);
         try {
@@ -66,8 +54,8 @@ public class PresentationService {
             validate(value);
             return value;
         } catch (JsonProcessingException | IllegalArgumentException | BusinessException e) {
-            log.warn("页面展示配置格式无效，使用默认值: section={}", section);
-            return convert(defaultsFor(section), type);
+            log.warn("页面展示配置格式无效，返回空内容，请在管理端重新保存: section={}", section);
+            return convert(emptySection(type), type);
         }
     }
     private <T> T save(String section, T form, Class<T> type) {
@@ -81,10 +69,16 @@ public class PresentationService {
         } catch (JsonProcessingException e) { throw BusinessException.badRequest("页面展示配置格式不正确"); }
         return value;
     }
-    private ObjectNode defaultsFor(String section) {
-        JsonNode value = defaults.get(section);
-        if (!(value instanceof ObjectNode object)) throw new IllegalStateException("Missing presentation section: " + section);
-        return object.deepCopy();
+    /** Keep the public field contract stable without inventing content when settings are absent. */
+    private ObjectNode emptySection(Class<?> type) {
+        ObjectNode fields = JSON.createObjectNode();
+        for (var field : type.getRecordComponents()) {
+            if (field.getType() == String.class) fields.put(field.getName(), "");
+            else if (List.class.isAssignableFrom(field.getType())) fields.putArray(field.getName());
+            else if (field.getType() == Boolean.class) fields.put(field.getName(), false);
+            else fields.putNull(field.getName());
+        }
+        return fields;
     }
     /** Iterate known contract properties only. Arrays replace as a unit, including an explicit []. */
     private ObjectNode mergeKnown(ObjectNode base, JsonNode patch) {

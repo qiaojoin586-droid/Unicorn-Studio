@@ -113,7 +113,10 @@ const capabilitiesError = ref('')
 const services = ref([])
 const servicesLoading = ref(true)
 const servicesError = ref('')
-const featuredWorks = computed(() => works.value.slice(0, Math.min(6, Math.max(1, Number(home.value.featuredLimit) || 3))))
+const featuredWorks = computed(() => {
+  const limit = home.value.featuredLimit
+  return Number.isInteger(limit) && limit >= 1 && limit <= 6 ? works.value.slice(0, limit) : []
+})
 const baseUrl = import.meta.env.VITE_API_BASE || ''
 
 function mediaUrl(url) {

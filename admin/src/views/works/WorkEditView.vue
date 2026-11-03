@@ -108,7 +108,7 @@
       </el-form>
     </el-card>
     <aside class="work-preview-panel">
-      <section class="placement-panel" aria-labelledby="placement-title"><div class="placement-heading"><h2 id="placement-title">首页展示位置</h2><button type="button" :disabled="slotsLoading" @click="loadSlots">{{ slotsLoading ? '核验中…' : '刷新核验' }}</button></div><p class="placement-current">{{ currentPlacement }}</p><p>{{ plannedPlacement }}</p><p class="placement-footnote">首页当前展示 {{ featuredLimit }} 件，推荐标记不会因超额而自动取消。{{ usingDefaultLimit ? '展示数量暂按共享默认值，公开配置恢复后将重新核验。' : '展示数量来自主站公开配置。' }}</p></section>
+      <section class="placement-panel" aria-labelledby="placement-title"><div class="placement-heading"><h2 id="placement-title">首页展示位置</h2><button type="button" :disabled="slotsLoading" @click="loadSlots">{{ slotsLoading ? '核验中…' : '刷新核验' }}</button></div><p class="placement-current">{{ currentPlacement }}</p><p>{{ plannedPlacement }}</p><p class="placement-footnote">{{ featuredLimit == null ? '首页展示数量尚未核验。' : '首页当前展示 ' + featuredLimit + ' 件。' }}推荐标记不会因超额而自动取消。</p></section>
       <SitePreview kind="work" :payload="{ work: publicWork }" :public-path="savedPublicPath" title="作品 · 主站真实模板" />
     </aside>
     </div>
@@ -124,7 +124,6 @@ import Editor from '@/components/Editor.vue'
 import ImageUpload from '@/components/ImageUpload.vue'
 import SitePreview from '@/components/SitePreview.vue'
 import { publicSiteUrl } from '@/utils/site'
-import presentationDefaults from '@/generated/presentation-defaults.json'
 
 const route = useRoute()
 const router = useRouter()
@@ -138,10 +137,9 @@ const savedMessage = ref('')
 const savedSnapshot = ref('')
 const savedWork = ref<any>(null)
 const publicCandidates = ref<any[]>([])
-const featuredLimit = ref(presentationDefaults.home.featuredLimit)
+const featuredLimit = ref<number | null>(null)
 const slotsLoading = ref(false)
 const slotsError = ref('')
-const usingDefaultLimit = ref(true)
 const form = reactive<any>({
   title: '',
   slug: '',
@@ -172,7 +170,7 @@ const currentPlacement = computed(() => {
   if (slotsError.value) return slotsError.value
   const index = publicCandidates.value.findIndex(work => Number(work.id) === Number(savedWork.value.id))
   if (index < 0) return '当前公开推荐列表暂未包含此作品，请保存后刷新核验。'
-  if (usingDefaultLimit.value) return '当前公开推荐排序第 ' + (index + 1) + ' 位，首页实际展示数量待核验。'
+  if (featuredLimit.value == null) return '当前公开推荐排序第 ' + (index + 1) + ' 位，首页实际展示数量待核验。'
   return index < featuredLimit.value ? '当前线上：首页第 ' + (index + 1) + ' 位。' : '当前线上：推荐候选，公开排序第 ' + (index + 1) + ' 位，超出展示数量。'
 })
 const plannedPlacement = computed(() => !form.featured ? '当前表单：未勾选首页推荐。' : form.status !== 'published' ? '当前表单：保存为' + (form.status === 'offline' ? '下线' : '草稿') + '状态，不在主站展示。' : '当前表单：已加入推荐候选；保存后按排序重新计算，不预估未保存内容的精确位置。')
@@ -190,8 +188,8 @@ async function loadSlots() {
   const results = await Promise.allSettled([readPublic('/api/works?featured=true'), readPublic('/api/site/presentation')])
   if (results[0].status === 'fulfilled' && Array.isArray(results[0].value?.list)) publicCandidates.value = results[0].value.list
   else slotsError.value = '当前线上位置未能核验，请稍后刷新。'
-  if (results[1].status === 'fulfilled' && Number.isInteger(results[1].value?.home?.featuredLimit)) { featuredLimit.value = results[1].value.home.featuredLimit; usingDefaultLimit.value = false }
-  else usingDefaultLimit.value = true
+  const limit = results[1].status === 'fulfilled' ? results[1].value?.home?.featuredLimit : null
+  featuredLimit.value = Number.isInteger(limit) && limit >= 1 && limit <= 6 ? limit : null
   slotsLoading.value = false
 }
 

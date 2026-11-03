@@ -1766,3 +1766,89 @@ WHERE r.code = 'EDITOR' AND p.code IN ('ai:tool:view');
 -- ==========================================================================
 -- 完成。执行 03-verify.sql 校验结构，再导入 02-data.sql。
 -- ==========================================================================
+
+-- ==========================================================================
+-- V21: Store presentation content in site_settings; remove runtime JSON defaults.
+-- Existing non-null fields (including empty strings, false and []) are retained.
+-- Missing fields receive the previously displayed content once, during migration.
+-- Run this section before deploying the application without the defaults resource.
+-- ==========================================================================
+SET NAMES utf8mb4;
+START TRANSACTION;
+
+SET @presentation_seed := '{"eyebrow":"UNICORN STUDIO / 独角兽工作室","title":"让好奇心，\\n长出作品。","description":"围绕 AI、软件开发与真实项目，一起学习、实验，把想法做成可以体验的成果。","primaryLabel":"探索作品","primaryUrl":"/works","secondaryLabel":"加入我们","secondaryUrl":"/join","mediaMode":"carousel","featuredLimit":3,"worksEyebrow":"SELECTED WORKS","worksTitle":"想法的下一步，\\n是把它做出来。","worksDescription":"项目、竞赛与研究。\\n每一份成果，都是一次探索的回响。","capabilitiesEyebrow":"THE WAY WE GROW","capabilitiesTitle":"把问题拆开，\\n把可能性\\n做出来。","capabilitiesDescription":"在真实项目中学习，也在学习中创造。\\n让每一次探索都有回应，\\n让一起成长有一些具体。","directionsEyebrow":"FIND YOUR DIRECTION","directionsTitle":"好奇，\\n可以有很多方向。","directionsDescription":"找到你想深入的领域，\\n和一群有想法的人，一起向前。","invitationEyebrow":"YOUR NEXT CHAPTER","invitationTitle":"下一件作品，\\n与你有关。","invitationDescription":"带上你的好奇心。\\n我们期待和你一起，创造一点新东西。","invitationLabel":"一起开始","invitationUrl":"/join"}';
+SET @presentation_stored := (SELECT setting_value FROM site_settings WHERE group_name = 'content' AND setting_key = 'content.presentation.home' LIMIT 1);
+SET @presentation_stored := IF(JSON_VALID(@presentation_stored), IF(JSON_TYPE(@presentation_stored) = 'OBJECT', @presentation_stored, JSON_OBJECT()), JSON_OBJECT());
+INSERT INTO site_settings (group_name, setting_key, setting_value)
+VALUES ('content', 'content.presentation.home', JSON_OBJECT(
+  'eyebrow', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.eyebrow'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.eyebrow')),
+  'title', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.title'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.title')),
+  'description', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.description'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.description')),
+  'primaryLabel', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.primaryLabel'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.primaryLabel')),
+  'primaryUrl', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.primaryUrl'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.primaryUrl')),
+  'secondaryLabel', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.secondaryLabel'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.secondaryLabel')),
+  'secondaryUrl', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.secondaryUrl'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.secondaryUrl')),
+  'mediaMode', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.mediaMode'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.mediaMode')),
+  'featuredLimit', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.featuredLimit'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.featuredLimit')),
+  'worksEyebrow', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.worksEyebrow'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.worksEyebrow')),
+  'worksTitle', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.worksTitle'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.worksTitle')),
+  'worksDescription', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.worksDescription'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.worksDescription')),
+  'capabilitiesEyebrow', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.capabilitiesEyebrow'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.capabilitiesEyebrow')),
+  'capabilitiesTitle', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.capabilitiesTitle'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.capabilitiesTitle')),
+  'capabilitiesDescription', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.capabilitiesDescription'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.capabilitiesDescription')),
+  'directionsEyebrow', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.directionsEyebrow'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.directionsEyebrow')),
+  'directionsTitle', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.directionsTitle'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.directionsTitle')),
+  'directionsDescription', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.directionsDescription'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.directionsDescription')),
+  'invitationEyebrow', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.invitationEyebrow'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.invitationEyebrow')),
+  'invitationTitle', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.invitationTitle'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.invitationTitle')),
+  'invitationDescription', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.invitationDescription'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.invitationDescription')),
+  'invitationLabel', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.invitationLabel'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.invitationLabel')),
+  'invitationUrl', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.invitationUrl'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.invitationUrl'))
+))
+ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value);
+
+SET @presentation_seed := '{"principlesEyebrow":"02 / 我们相信","principlesTitle":"好的想法，\\n值得亲手实现。","principles":[{"title":"先有问题，再找答案。","description":"从真实的需要出发。理解一个问题，也是在寻找值得投入的方向。"},{"title":"把想法放进实践。","description":"让代码、设计与研究彼此连接。在动手尝试中，看见想法的形状。"},{"title":"让经验继续生长。","description":"把探索中的思考留下来。一次分享，也可能成为另一个人的起点。"}],"invitationTitle":"下一次探索，\\n一起出发。","invitationDescription":"带着好奇而来，让想法在这里相遇。","invitationLabel":"加入我们","invitationUrl":"/join"}';
+SET @presentation_stored := (SELECT setting_value FROM site_settings WHERE group_name = 'content' AND setting_key = 'content.presentation.about' LIMIT 1);
+SET @presentation_stored := IF(JSON_VALID(@presentation_stored), IF(JSON_TYPE(@presentation_stored) = 'OBJECT', @presentation_stored, JSON_OBJECT()), JSON_OBJECT());
+INSERT INTO site_settings (group_name, setting_key, setting_value)
+VALUES ('content', 'content.presentation.about', JSON_OBJECT(
+  'principlesEyebrow', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.principlesEyebrow'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.principlesEyebrow')),
+  'principlesTitle', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.principlesTitle'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.principlesTitle')),
+  'principles', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.principles'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.principles')),
+  'invitationTitle', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.invitationTitle'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.invitationTitle')),
+  'invitationDescription', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.invitationDescription'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.invitationDescription')),
+  'invitationLabel', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.invitationLabel'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.invitationLabel')),
+  'invitationUrl', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.invitationUrl'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.invitationUrl'))
+))
+ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value);
+
+SET @presentation_seed := '{"inheritBrand":false,"inheritContact":false,"brandTagline":"IN GOOD COMPANY. IN THE MAKING.","noteEyebrow":"KEEP THE CURIOSITY.","noteTitle":"把下一次好奇，\\n变成下一件作品。","noteLinkLabel":"和我们一起创造","noteLinkUrl":"/join","wordmark":"UNICORN"}';
+SET @presentation_stored := (SELECT setting_value FROM site_settings WHERE group_name = 'content' AND setting_key = 'content.presentation.footer' LIMIT 1);
+SET @presentation_stored := IF(JSON_VALID(@presentation_stored), IF(JSON_TYPE(@presentation_stored) = 'OBJECT', @presentation_stored, JSON_OBJECT()), JSON_OBJECT());
+INSERT INTO site_settings (group_name, setting_key, setting_value)
+VALUES ('content', 'content.presentation.footer', JSON_OBJECT(
+  'inheritBrand', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.inheritBrand'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.inheritBrand')),
+  'inheritContact', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.inheritContact'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.inheritContact')),
+  'brandTagline', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.brandTagline'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.brandTagline')),
+  'noteEyebrow', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.noteEyebrow'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.noteEyebrow')),
+  'noteTitle', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.noteTitle'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.noteTitle')),
+  'noteLinkLabel', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.noteLinkLabel'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.noteLinkLabel')),
+  'noteLinkUrl', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.noteLinkUrl'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.noteLinkUrl')),
+  'wordmark', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.wordmark'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.wordmark'))
+))
+ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value);
+
+SET @presentation_seed := '{"platform":"QQ","groupNumber":"","joinUrl":"","phoneHelp":"","invitationText":"带上你的好奇，\\n我们从一个想法开始。"}';
+SET @presentation_stored := (SELECT setting_value FROM site_settings WHERE group_name = 'content' AND setting_key = 'content.presentation.join' LIMIT 1);
+SET @presentation_stored := IF(JSON_VALID(@presentation_stored), IF(JSON_TYPE(@presentation_stored) = 'OBJECT', @presentation_stored, JSON_OBJECT()), JSON_OBJECT());
+INSERT INTO site_settings (group_name, setting_key, setting_value)
+VALUES ('content', 'content.presentation.join', JSON_OBJECT(
+  'platform', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.platform'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.platform')),
+  'groupNumber', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.groupNumber'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.groupNumber')),
+  'joinUrl', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.joinUrl'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.joinUrl')),
+  'phoneHelp', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.phoneHelp'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.phoneHelp')),
+  'invitationText', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.invitationText'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.invitationText'))
+))
+ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value);
+
+COMMIT;

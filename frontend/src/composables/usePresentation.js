@@ -1,24 +1,13 @@
 import { inject, reactive, onMounted } from 'vue'
-import defaults from '@/generated/presentation-defaults.json'
+import { createPresentation, mergePresentation } from '../../../shared/presentation-contract.js'
 import { useApi } from './useApi'
 
-const clone = value => JSON.parse(JSON.stringify(value))
-const state = reactive(clone(defaults))
+const state = reactive(createPresentation())
 let pending = null
 let lastLoaded = 0
 let listening = false
 
-export function mergePresentation(value = {}) {
-  const result = clone(defaults)
-  for (const section of Object.keys(defaults)) {
-    const incoming = value?.[section]
-    if (!incoming || typeof incoming !== 'object') continue
-    for (const key of Object.keys(defaults[section])) {
-      if (Object.prototype.hasOwnProperty.call(incoming, key) && incoming[key] !== null) result[section][key] = incoming[key]
-    }
-  }
-  return result
-}
+export { mergePresentation }
 
 async function refresh(force = false) {
   if (pending || (!force && Date.now() - lastLoaded < 30000)) return pending

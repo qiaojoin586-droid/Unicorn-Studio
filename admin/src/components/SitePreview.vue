@@ -13,7 +13,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { publicSiteUrl } from '@/utils/site'
-import defaults from '@/generated/presentation-defaults.json'
+import { presentationFields } from '../../../shared/presentation-contract.js'
 import { http } from '@/utils/request'
 const props = defineProps<{ kind: 'home' | 'work' | 'about' | 'join' | 'footer' | 'learning'; payload: Record<string, unknown>; publicPath?: string; title?: string }>()
 const frame = ref<HTMLIFrameElement>()
@@ -55,7 +55,7 @@ async function sendPayload() {
   const raw = JSON.parse(JSON.stringify(props.payload))
   const select = (value: any, keys: string[]) => Object.fromEntries(keys.filter(key => value && Object.prototype.hasOwnProperty.call(value, key)).map(key => [key, value[key]]))
   const payload: Record<string, unknown> = {}
-  if (raw.presentation) payload.presentation = Object.fromEntries(Object.entries(defaults).filter(([key]) => raw.presentation[key]).map(([key, section]) => [key, select(raw.presentation[key], Object.keys(section))]))
+  if (raw.presentation) payload.presentation = Object.fromEntries(Object.entries(presentationFields).filter(([key]) => raw.presentation[key]).map(([key, fields]) => [key, select(raw.presentation[key], fields)]))
   if (raw.work) payload.work = select(raw.work, ['title','slug','summary','coverUrl','content','tagType','category','authors','dateLabel','externalLink'])
   if (raw.about) payload.about = select(raw.about, ['eyebrow','title','subtitle','content','imageUrl','stats'])
   if (raw.join) payload.join = select(raw.join, ['eyebrow','title','subtitle','paragraphs','qrImage','qrCaption'])

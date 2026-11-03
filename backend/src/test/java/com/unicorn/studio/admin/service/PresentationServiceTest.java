@@ -28,6 +28,9 @@ class PresentationServiceTest {
     @BeforeEach void setup() {
         settings = mock(SiteSettingsService.class);
         stored = new HashMap<>();
+        stored.put("content.presentation.home", "{\"title\":\"已保存标题\",\"worksTitle\":\"作品标题\",\"capabilitiesTitle\":\"能力标题\",\"directionsTitle\":\"方向标题\",\"invitationTitle\":\"邀请标题\",\"mediaMode\":\"carousel\",\"featuredLimit\":3,\"primaryLabel\":\"已保存入口\"}");
+        stored.put("content.presentation.about", "{\"principlesTitle\":\"已保存理念\",\"invitationTitle\":\"已保存邀请\",\"principles\":[]}");
+        stored.put("content.presentation.join", "{\"invitationText\":\"已保存邀请\"}");
         when(settings.listGroup("content")).thenAnswer(ignored -> new HashMap<>(stored));
         doAnswer(invocation -> {
             List<SiteSettingsService.KeyValueRequest> items = invocation.getArgument(0);
@@ -36,26 +39,32 @@ class PresentationServiceTest {
         }).when(settings).updateAll(anyList());
         service = new PresentationService(settings, validationFactory.getValidator());
     }
-    @Test void generatedDefaultsMatchPublicContract() throws Exception {
-        JsonNode expected;
-        try (var input = getClass().getResourceAsStream("/presentation-defaults.json")) { expected = JSON.readTree(input); }
-        assertEquals(expected, JSON.valueToTree(service.load()));
+    @Test void missingConfigurationReturnsEmptySectionsWithoutLoadingAResource() {
+        stored.clear();
+        var result = service.load();
+        assertEquals("", result.home().title());
+        assertNull(result.home().featuredLimit());
+        assertTrue(result.about().principles().isEmpty());
+        assertEquals(false, result.footer().inheritBrand());
+        assertEquals("", result.join().invitationText());
         verify(settings).listGroup("content");
+        verify(settings, never()).updateAll(anyList());
     }
-    @Test void partialStoredFieldsMergeDefaultsWhileEmptyAndUnknownFieldsRemainSafe() throws Exception {
-        stored.put("content.presentation.home", "{\"title\":\"真实标题\",\"description\":\"\",\"adminSecret\":\"hidden\"}");
+    @Test void storedFieldsAreWhitelistedAndMissingOptionalFieldsStayEmpty() throws Exception {
+        storePatch("home", "{\"title\":\"真实标题\",\"description\":\"\",\"adminSecret\":\"hidden\"}");
         var home = service.loadHome();
         assertEquals("真实标题", home.title());
         assertEquals("", home.description());
-        assertEquals("探索作品", home.primaryLabel());
+        assertEquals("已保存入口", home.primaryLabel());
+        assertEquals("", home.secondaryLabel());
         assertFalse(JSON.valueToTree(home).has("adminSecret"));
     }
-    @Test void explicitEmptyPrinciplesAreNotReplacedByDefaults() {
-        stored.put("content.presentation.about", "{\"principles\":[]}");
+    @Test void explicitEmptyPrinciplesAreRetained() throws Exception {
+        storePatch("about", "{\"principles\":[]}");
         assertTrue(service.loadAbout().principles().isEmpty());
     }
     @Test void partialSavePreservesPriorOptionalFieldsAndUsesOnlyDedicatedKey() throws Exception {
-        stored.put("content.presentation.home", "{\"primaryLabel\":\"已保存入口\"}");
+        storePatch("home", "{\"primaryLabel\":\"已保存入口\"}");
         var result = service.saveHome(JSON.readValue("{\"title\":\"新的标题\",\"description\":\"\"}", PresentationVO.Home.class));
         assertEquals("已保存入口", result.primaryLabel());
         assertEquals("", result.description());
@@ -81,11 +90,12 @@ class PresentationServiceTest {
         assertThrows(Exception.class, () -> JSON.readValue("{\"inheritBrand\":\"true\"}", PresentationVO.Footer.class));
         assertThrows(Exception.class, () -> JSON.readValue("{\"inheritContact\":1}", PresentationVO.Footer.class));
     }
-    @Test void malformedOrUnsafeStoredSectionsFallBackWithoutPublishingUnsafeLinks() {
+    @Test void malformedOrUnsafeStoredSectionsReturnEmptyWithoutPublishingUnsafeLinks() {
         stored.put("content.presentation.home", "{\"primaryUrl\":\"javascript:alert(1)\"}");
         stored.put("content.presentation.about", "not json");
-        assertEquals("/works", service.loadHome().primaryUrl());
-        assertEquals(3, service.loadAbout().principles().size());
+        assertEquals("", service.loadHome().primaryUrl());
+        assertTrue(service.loadAbout().principles().isEmpty());
+        assertEquals("", service.loadAbout().principlesTitle());
     }
     @ParameterizedTest @ValueSource(strings={"javascript:alert(1)","data:text/html,x","//evil.example","/\\evil.example","mqq://join/1","qq://group/1","https://user:pass@example.com","https://exa mple.com","https://example.com\n"})
     void unsafeUrlsAreRejected(String value) { assertFalse(PresentationService.isSafeUrl(value)); }
@@ -120,5 +130,12 @@ class PresentationServiceTest {
         verify(mapper).batchUpsert(anyList());
         verify(cache).evictAfterCommit("cache:site:settings");
         verify(cache).evictByPatternAfterCommit("cache:site:group:*");
+    }
+
+    private void storePatch(String section, String patch) throws Exception {
+        String key = PresentationService.KEY_PREFIX + section;
+        var value = (com.fasterxml.jackson.databind.node.ObjectNode) JSON.readTree(stored.getOrDefault(key, "{}"));
+        value.setAll((com.fasterxml.jackson.databind.node.ObjectNode) JSON.readTree(patch));
+        stored.put(key, JSON.writeValueAsString(value));
     }
 }

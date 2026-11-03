@@ -11,7 +11,7 @@ const { chromium, firefox, webkit } = require(process.env.PLAYWRIGHT_MODULE || '
 const project = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const out = process.env.COORDINATION_QA_OUT || path.join(project, 'artifacts', 'site-coordination')
 fs.mkdirSync(out, { recursive: true })
-const defaults = JSON.parse(fs.readFileSync(path.join(project, 'shared/presentation-defaults.json'), 'utf8'))
+const defaults = JSON.parse(fs.readFileSync(path.join(project, 'scripts/fixtures/presentation.json'), 'utf8'))
 let presentation = structuredClone(defaults)
 let brandName = '共同品牌'
 let failAboutOnce = false

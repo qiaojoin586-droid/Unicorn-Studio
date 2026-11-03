@@ -8,7 +8,7 @@
     </div>
 
     <el-card shadow="never">
-      <div class="featured-notice"><p>{{ usingDefaultLimit ? '公开配置尚未核验，展示数量暂按共享默认 ' + featuredLimit + ' 件。' : '首页当前显示 ' + featuredLimit + ' 件精选作品。' }}超出展示位的推荐作品会保留为候选，草稿与下线作品不对外展示。</p><button type="button" :disabled="slotsLoading" @click="loadSlots">{{ slotsLoading ? '正在核验…' : '刷新线上位置' }}</button></div>
+      <div class="featured-notice"><p>{{ featuredLimit == null ? '首页展示数量尚未核验。' : '首页当前显示 ' + featuredLimit + ' 件精选作品。' }}超出展示位的推荐作品会保留为候选，草稿与下线作品不对外展示。</p><button type="button" :disabled="slotsLoading" @click="loadSlots">{{ slotsLoading ? '正在核验…' : '刷新线上位置' }}</button></div>
       <div class="table-toolbar">
         <el-input v-model="query.keyword" placeholder="标题 / slug" clearable style="width: 220px" @keyup.enter="search" />
         <el-select v-model="query.category" placeholder="分类" clearable style="width: 140px" @change="search">
@@ -94,15 +94,13 @@ import { useTable } from '@/composables/useTable'
 import StatusTag from '@/components/StatusTag.vue'
 import { formatDateTime } from '@/utils/format'
 import { publicSiteUrl } from '@/utils/site'
-import presentationDefaults from '@/generated/presentation-defaults.json'
 
 const table = useTable((params) => workApi.list(params))
 const { loading, list, total, query, selection, onSelectionChange, load, search, reset } = table
-const featuredLimit = ref(presentationDefaults.home.featuredLimit)
+const featuredLimit = ref<number | null>(null)
 const publicCandidates = ref<any[]>([])
 const slotsLoading = ref(false)
 const slotsError = ref(false)
-const usingDefaultLimit = ref(true)
 async function readPublic(path: string) {
   const response = await fetch(publicSiteUrl(path), { credentials: 'omit', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(12000) })
   if (!response.ok) throw new Error('公开内容暂时无法读取')
@@ -117,8 +115,8 @@ async function loadSlots() {
   const results = await Promise.allSettled([readPublic('/api/works?featured=true'), readPublic('/api/site/presentation')])
   if (results[0].status === 'fulfilled' && Array.isArray(results[0].value?.list)) publicCandidates.value = results[0].value.list
   else slotsError.value = true
-  if (results[1].status === 'fulfilled' && Number.isInteger(results[1].value?.home?.featuredLimit)) { featuredLimit.value = results[1].value.home.featuredLimit; usingDefaultLimit.value = false }
-  else usingDefaultLimit.value = true
+  const limit = results[1].status === 'fulfilled' ? results[1].value?.home?.featuredLimit : null
+  featuredLimit.value = Number.isInteger(limit) && limit >= 1 && limit <= 6 ? limit : null
   slotsLoading.value = false
 }
 function placement(row: any): { label: string; reason: string; tone: 'info' | 'warning' | 'success' } {
@@ -126,7 +124,7 @@ function placement(row: any): { label: string; reason: string; tone: 'info' | 'w
   if (row.status !== 'published') return { label: row.status === 'offline' ? '下线候选' : '草稿候选', reason: '推荐标记保留，发布后才参与首页展示。', tone: 'warning' }
   if (slotsLoading.value || slotsError.value) return { label: '待核验', reason: '当前公开展示位置尚未核验，请刷新后查看。', tone: 'info' }
   const index = publicCandidates.value.findIndex(work => Number(work.id) === Number(row.id))
-  if (index >= 0 && usingDefaultLimit.value) return { label: '公开排序第 ' + (index + 1), reason: '首页实际展示数量尚未核验，此处仅为公开推荐列表顺序。', tone: 'info' }
+  if (index >= 0 && featuredLimit.value == null) return { label: '公开排序第 ' + (index + 1), reason: '首页实际展示数量尚未核验，此处仅为公开推荐列表顺序。', tone: 'info' }
   return index >= 0 && index < featuredLimit.value ? { label: '首页第 ' + (index + 1) + ' 位', reason: '来自当前主站公开推荐列表。', tone: 'success' } : { label: '推荐候选', reason: index >= 0 ? '当前排序第 ' + (index + 1) + ' 位，超出首页展示数量。' : '公开列表暂未包含此作品，请刷新核验。', tone: 'warning' }
 }
 

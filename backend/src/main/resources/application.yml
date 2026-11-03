@@ -164,6 +164,9 @@ app:
     # 生产环境请用 APP_CORS_ORIGIN_PATTERNS 显式收窄，设为空串则仅按 allowed-origins 精确匹配。
     allowed-origin-patterns: ${APP_CORS_ORIGIN_PATTERNS:http://localhost:[*],http://127.0.0.1:[*]}
   ai:
+    # AI 请求专用 HTTP 代理（HTTPS 目标通过 CONNECT 隧道访问）；留空时使用 JVM 默认代理策略。
+    # Windows 的系统代理不会被 Java 默认继承，需要时显式设置，例如 http://127.0.0.1:7890。
+    http-proxy: ${AI_HTTP_PROXY:}
     # ==================== AI 助手（com.unicorn.studio.AIWorker，基于 Spring AI）====================
     # 记忆（§10 预留契约）：带入模型的历史轮数。
     # ⚠️ 这是【上下文窗口】不是【历史】：历史全量落库（90 天清理），记忆只取最近几轮，
@@ -377,16 +380,12 @@ logging:
   # 同一个值也被 RetentionService 用来定位并清理 admin 审计文件，改这里即可。
   file:
     path: ${LOG_DIR:./logs}
-  # 控制台编码（2026-09-11 修复中文乱码）：
-  # Spring Boot 默认把控制台编码设为 UTF-8（LoggingSystemProperties.CONSOLE_CHARSET 默认值），
-  # 而 IDEA Run 控制台 / Windows 中文控制台按系统代码页 CP936(GBK) 解码子进程输出流，
-  # 于是中文日志显示成「闈欐€佽祫婧愪笉瀛樺湪」这类乱码。
-  # 这里把控制台编码对齐为 GBK（由 Spring Boot 发布为 CONSOLE_LOG_CHARSET，
-  # 供 logback-spring.xml 引入的 console-appender.xml 使用）。
-  # 文件日志不受影响：各 file appender 固定 UTF-8。
-  # 若终端本身是 UTF-8（Windows Terminal / Git Bash / IDEA 控制台编码已设为 UTF-8），改回 UTF-8 即可。
+  # 控制台日志与 JVM 标准输出使用相同编码，避免日志和 System.out/err 混用两种编码。
+  # 中文 Windows 的 stdout.encoding 可能是 GBK；UTF-8 终端及 Linux 通常为 UTF-8。
+  # 未提供 stdout.encoding 时依次回退到 native.encoding、UTF-8。
+  # 可通过 LOGGING_CHARSET_CONSOLE 显式覆盖；文件日志始终使用 UTF-8。
   charset:
-    console: UTF-8
+    console: ${stdout.encoding:${native.encoding:UTF-8}}
     file: UTF-8
   level:
     com.unicorn.studio: INFO

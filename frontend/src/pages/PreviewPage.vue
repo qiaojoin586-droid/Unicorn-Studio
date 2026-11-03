@@ -15,7 +15,7 @@
 import { computed, defineAsyncComponent, nextTick, onBeforeUnmount, onMounted, provide, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import DOMPurify from 'dompurify'
-import defaults from '@/generated/presentation-defaults.json'
+import { createPresentation, presentationFields } from '../../../shared/presentation-contract.js'
 import AppHeader from '@/components/AppHeader.vue'
 import AppFooter from '@/components/AppFooter.vue'
 import WorkCard from '@/components/WorkCard.vue'
@@ -38,7 +38,7 @@ const model = reactive({})
 provide('studio-preview', model)
 const linkHint = ref('')
 let lastPayload = null
-let basePresentation = JSON.parse(JSON.stringify(defaults))
+let basePresentation = createPresentation()
 let robotMeta
 let disposed = false
 const renderers = {
@@ -64,14 +64,14 @@ function known(template, incoming) {
     if (value === undefined || value === null) continue
     if (typeof template[key] === 'string') result[key] = key.endsWith('Url') ? safeLink(text(value)) : text(value)
     else if (typeof template[key] === 'boolean') result[key] = value === true
-    else if (typeof template[key] === 'number') result[key] = Math.min(6, Math.max(1, Number(value) || 3))
+    else if (key === 'featuredLimit') result[key] = Number.isInteger(value) && value >= 1 && value <= 6 ? value : null
     else if (Array.isArray(template[key]) && Array.isArray(value)) result[key] = value.slice(0, 8).map(item => ({ title: text(item?.title, 160), description: text(item?.description, 1200) }))
   }
   return result
 }
 function normalize(payload) {
   const result = { presentation: {} }
-  for (const section of Object.keys(defaults)) result.presentation[section] = known(basePresentation[section] || defaults[section], payload.presentation?.[section])
+  for (const section of Object.keys(presentationFields)) result.presentation[section] = known(basePresentation[section], payload.presentation?.[section])
   const pick = (value, keys) => Object.fromEntries(keys.map(key => [key, text(value?.[key], key === 'content' ? 200000 : 4000)]))
   if (payload.work) {
     result.work = pick(payload.work, ['title', 'slug', 'summary', 'category', 'coverUrl', 'content', 'tagType', 'authors', 'dateLabel', 'externalLink'])
@@ -130,10 +130,11 @@ onMounted(async () => {
     const response = await fetch((import.meta.env.VITE_API_BASE || '') + '/api/site/presentation', { credentials: 'include', signal: AbortSignal.timeout(3000) })
     const result = response.ok ? await response.json() : null
     if (result?.data && !disposed) {
-      for (const section of Object.keys(defaults)) basePresentation[section] = known(defaults[section], result.data[section])
+      const empty = createPresentation()
+      for (const section of Object.keys(presentationFields)) basePresentation[section] = known(empty[section], result.data[section])
       if (lastPayload) { applyPayload(lastPayload); await nextTick() }
     }
-  } catch { /* The current form can still render with canonical defaults. */ }
+  } catch { /* The current form can still render; other sections remain empty. */ }
 })
 onBeforeUnmount(() => { disposed = true; window.removeEventListener('message', onMessage); robotMeta?.remove() })
 </script>

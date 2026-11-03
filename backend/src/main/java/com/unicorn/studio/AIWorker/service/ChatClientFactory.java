@@ -7,12 +7,18 @@ import org.springframework.ai.model.tool.ToolCallingManager;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.ai.retry.RetryUtils;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.http.client.reactive.JdkClientHttpConnector;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.reactive.function.client.WebClient;
 
+import java.net.InetSocketAddress;
+import java.net.ProxySelector;
+import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.Map;
@@ -59,6 +65,7 @@ public class ChatClientFactory {
 
     private final Map<String, ChatClient> cache = new ConcurrentHashMap<>();
     private final ToolCallingManager toolCallingManager;
+    private final ProxySelector httpProxy;
 
     /**
      * 关闭智谱深度思考的策略（见 {@link ZhipuThinking}）。
@@ -69,8 +76,10 @@ public class ChatClientFactory {
      */
     private final ZhipuThinking thinking = new ZhipuThinking();
 
-    public ChatClientFactory(ToolCallingManager toolCallingManager) {
+    public ChatClientFactory(ToolCallingManager toolCallingManager,
+                             @Value("${app.ai.http-proxy:}") String httpProxy) {
         this.toolCallingManager = toolCallingManager;
+        this.httpProxy = proxySelector(httpProxy);
     }
 
     /**
@@ -84,7 +93,7 @@ public class ChatClientFactory {
      * @param config 已解密的运行时配置
      */
     public ChatClient client(AiRuntimeConfig config) {
-        return cached(fingerprint(config) + "|chat", config, CHAT_CONNECT_TIMEOUT, CHAT_READ_TIMEOUT);
+        return cached(fingerprint(config) + "|chat", config, CHAT_CONNECT_TIMEOUT, CHAT_READ_TIMEOUT, false);
     }
 
     /**
@@ -94,11 +103,11 @@ public class ChatClientFactory {
      * 否则管理员点一次「测试连通性」就会把对话用的 120s 客户端挤掉（或反之）。
      */
     public ChatClient probeClient(AiRuntimeConfig config) {
-        return cached(fingerprint(config) + "|probe", config, PROBE_CONNECT_TIMEOUT, PROBE_READ_TIMEOUT);
+        return cached(fingerprint(config) + "|probe", config, PROBE_CONNECT_TIMEOUT, PROBE_READ_TIMEOUT, true);
     }
 
     private ChatClient cached(String fingerprint, AiRuntimeConfig config,
-                              Duration connectTimeout, Duration readTimeout) {
+                              Duration connectTimeout, Duration readTimeout, boolean probe) {
         ChatClient cached = cache.get(fingerprint);
         if (cached != null) {
             return cached;
@@ -111,7 +120,7 @@ public class ChatClientFactory {
         // 触发条件是「缓存达到上限 + 又来一个新指纹」，即管理员改过几轮 AI 配置后必然踩到。
         evictIfOversized();
 
-        return cache.computeIfAbsent(fingerprint, key -> build(config, connectTimeout, readTimeout));
+        return cache.computeIfAbsent(fingerprint, key -> build(config, connectTimeout, readTimeout, probe));
     }
 
     /** 构建并缓存 AI 配置指纹，用于判断是否需要重建模型实例。 */
@@ -121,7 +130,7 @@ public class ChatClientFactory {
                 + Integer.toHexString(config.apiKey() == null ? 0 : config.apiKey().hashCode());
     }
 
-    private ChatClient build(AiRuntimeConfig config, Duration connectTimeout, Duration readTimeout) {
+    private ChatClient build(AiRuntimeConfig config, Duration connectTimeout, Duration readTimeout, boolean probe) {
         // 注意 completionsPath：Spring AI 默认拼 /v1/chat/completions，
         // 而智谱等厂商 base 自带 /v4 版本段，必须覆盖该路径，否则 404（详见 AiRuntimeConfig）。
         //
@@ -148,6 +157,9 @@ public class ChatClientFactory {
                 .openAiApi(api)
                 .defaultOptions(options)
                 .toolCallingManager(toolCallingManager)
+                // 探测只发一次请求。SDK 默认重试 10 次并指数退避，会远超前端的 30s 超时。
+                .retryTemplate(probe ? RetryTemplate.builder().maxAttempts(1).build()
+                        : RetryUtils.DEFAULT_RETRY_TEMPLATE)
                 .build();
 
         return ChatClient.builder(model)
@@ -169,9 +181,7 @@ public class ChatClientFactory {
      * 必须同时配 {@link #webClientBuilder}，否则修复对前台问答完全无效。
      */
     private RestClient.Builder restClientBuilder(Duration connectTimeout, Duration readTimeout) {
-        HttpClient httpClient = HttpClient.newBuilder()
-                .connectTimeout(connectTimeout)
-                .build();
+        HttpClient httpClient = httpClient(connectTimeout);
         JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(readTimeout);
         return RestClient.builder()
@@ -190,11 +200,37 @@ public class ChatClientFactory {
      * 这样连接超时与 RestClient 侧保持一致。
      */
     private WebClient.Builder webClientBuilder(Duration connectTimeout) {
-        HttpClient httpClient = HttpClient.newBuilder()
-                .connectTimeout(connectTimeout)
-                .build();
+        HttpClient httpClient = httpClient(connectTimeout);
         return WebClient.builder()
                 .clientConnector(new ZhipuThinkingConnector(new JdkClientHttpConnector(httpClient), thinking));
+    }
+
+    /** 同步探测与流式对话共用代理设置；不修改 JVM 全局网络行为。 */
+    private HttpClient httpClient(Duration connectTimeout) {
+        HttpClient.Builder builder = HttpClient.newBuilder().connectTimeout(connectTimeout);
+        if (httpProxy != null) {
+            builder.proxy(httpProxy);
+        }
+        return builder.build();
+    }
+
+    private static ProxySelector proxySelector(String rawProxy) {
+        if (rawProxy == null || rawProxy.isBlank()) {
+            return null;
+        }
+        URI proxy;
+        try {
+            proxy = URI.create(rawProxy.trim());
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("app.ai.http-proxy 格式应为 http://host:port");
+        }
+        if (!"http".equalsIgnoreCase(proxy.getScheme()) || proxy.getHost() == null
+                || proxy.getPort() < 1 || proxy.getPort() > 65535 || proxy.getUserInfo() != null
+                || (proxy.getRawPath() != null && !proxy.getRawPath().isEmpty() && !"/".equals(proxy.getRawPath()))
+                || proxy.getRawQuery() != null || proxy.getRawFragment() != null) {
+            throw new IllegalArgumentException("app.ai.http-proxy 格式应为 http://host:port（不含账号密码或路径）");
+        }
+        return ProxySelector.of(new InetSocketAddress(proxy.getHost(), proxy.getPort()));
     }
 
     /**

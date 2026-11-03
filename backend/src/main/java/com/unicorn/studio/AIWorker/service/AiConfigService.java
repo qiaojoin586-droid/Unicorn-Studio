@@ -17,7 +17,14 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import javax.net.ssl.SSLException;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
+import java.net.http.HttpConnectTimeoutException;
+import java.net.http.HttpTimeoutException;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -194,8 +201,12 @@ public class AiConfigService {
     /** 组装探测用配置：表单优先，缺失字段逐个回退到库中值。 */
     private AiRuntimeConfig resolveProbeConfig(AiTestRequest form) {
         AiRuntimeConfig saved = configProvider.runtimeConfig();
+        if (saved == null) {
+            return null;
+        }
         if (form == null || form.allBlank()) {
-            return saved;
+            return new AiRuntimeConfig(saved.apiKey(), saved.apiUrl(), saved.model(),
+                    saved.systemPrompt(), PROBE_MAX_TOKENS, saved.temperature(), true);
         }
         String apiKey = form.apiKeyUnchanged() ? saved.apiKey() : form.apiKey().trim();
         String apiUrl = blankToNull(form.apiUrl()) == null ? saved.apiUrl() : form.apiUrl().trim();
@@ -208,7 +219,23 @@ public class AiConfigService {
     /** 把底层异常翻译成运维能直接定位的中文原因。 */
     private String humanizeError(Exception e) {
         String msg = e.getMessage() == null ? "" : e.getMessage();
-        String lower = msg.toLowerCase();
+        StringBuilder details = new StringBuilder();
+        boolean connectTimeout = false;
+        boolean responseTimeout = false;
+        boolean unknownHost = false;
+        boolean tlsFailure = false;
+        boolean connectionFailure = false;
+        // SDK/HTTP 客户端会包装底层异常，不能只检查最外层的 "Retry exhausted"。
+        Throwable cause = e;
+        for (int depth = 0; cause != null && depth < 20; depth++, cause = cause.getCause()) {
+            details.append(' ').append(cause.getMessage());
+            connectTimeout |= cause instanceof HttpConnectTimeoutException;
+            responseTimeout |= cause instanceof HttpTimeoutException || cause instanceof SocketTimeoutException;
+            unknownHost |= cause instanceof UnknownHostException;
+            tlsFailure |= cause instanceof SSLException;
+            connectionFailure |= cause instanceof ConnectException;
+        }
+        String lower = details.toString().toLowerCase(Locale.ROOT);
         if (lower.contains("401") || lower.contains("unauthorized") || lower.contains("invalid api key")
                 || lower.contains("authentication")) {
             return "鉴权失败（401）：API Key 无效或已过期，请检查后重新填写";
@@ -224,10 +251,19 @@ public class AiConfigService {
                 || lower.contains("invalid"))) {
             return "模型名不存在：请核对模型名是否与供应商文档一致";
         }
-        if (lower.contains("timeout") || lower.contains("timed out")) {
-            return "连接超时：请检查 API URL 是否可达、网络是否存在代理限制";
+        if (connectTimeout) {
+            return "连接超时：后端无法连接 AI 接口，请检查 API URL、网络及 AI_HTTP_PROXY 代理配置";
         }
-        if (lower.contains("connection") || lower.contains("connect") || lower.contains("unknownhost")
+        if (responseTimeout || lower.contains("timeout") || lower.contains("timed out")) {
+            return "请求超时：AI 接口未在时限内返回，请稍后重试；若使用代理，请检查 AI_HTTP_PROXY 配置";
+        }
+        if (unknownHost) {
+            return "域名解析失败：请检查 API URL、DNS 及代理设置";
+        }
+        if (tlsFailure) {
+            return "TLS 连接失败：请检查服务器证书、系统时间及代理设置";
+        }
+        if (connectionFailure || lower.contains("connection") || lower.contains("connect") || lower.contains("unknownhost")
                 || lower.contains("nodename")) {
             return "无法建立连接：请检查 API URL 域名是否正确、服务器能否访问外网";
         }

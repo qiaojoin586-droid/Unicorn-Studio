@@ -30,7 +30,7 @@
           <template #default="{ row }">
             <span
               class="cell-expand"
-              @mouseenter="expandDesc($event, row)"
+              @mouseenter="expandDesc($event, row as AdminTool)"
               @mouseleave="collapseDesc"
             >{{ row.description }}</span>
           </template>
@@ -45,7 +45,7 @@
             <el-switch
               v-permission="'ai:tool:edit'"
               :model-value="row.enabled"
-              @change="(v: any) => onToggle(row, v as boolean)"
+              @change="(v: any) => onToggle(row as AdminTool, v as boolean)"
             />
             <el-tag v-if="!canEdit" size="small" :type="row.enabled ? 'success' : 'danger'">
               {{ row.enabled ? '启用' : '停用' }}
@@ -84,7 +84,7 @@
           <template #default="{ row }">
             <span
               class="cell-expand"
-              @mouseenter="expandDesc($event, row)"
+              @mouseenter="expandDesc($event, row as AdminTool)"
               @mouseleave="collapseDesc"
             >{{ row.description }}</span>
           </template>
@@ -99,7 +99,7 @@
             <el-switch
               v-permission="'ai:tool:edit'"
               :model-value="row.enabled"
-              @change="(v: any) => onToggle(row, v as boolean)"
+              @change="(v: any) => onToggle(row as AdminTool, v as boolean)"
             />
             <el-tag v-if="!canEdit" size="small" :type="row.enabled ? 'success' : 'danger'">
               {{ row.enabled ? '启用' : '停用' }}
@@ -122,26 +122,26 @@
               v-permission="'ai:tool:use'"
               link
               type="primary"
-              @click="testTool(row)"
+              @click="testTool(row as AdminTool)"
             >测试</el-button>
             <el-button
               v-if="row.pendingConfirm"
               v-permission="'ai:tool:edit'"
               link
               type="warning"
-              @click="confirmTool(row)"
+              @click="confirmTool(row as AdminTool)"
             >确认</el-button>
             <el-button
               v-permission="'ai:tool:edit'"
               link
               type="primary"
-              @click="openEdit(row)"
+              @click="openEdit(row as AdminTool)"
             >编辑</el-button>
             <el-button
               v-permission="'ai:tool:edit'"
               link
               type="danger"
-              @click="removeTool(row)"
+              @click="removeTool(row as AdminTool)"
             >删除</el-button>
           </template>
         </el-table-column>

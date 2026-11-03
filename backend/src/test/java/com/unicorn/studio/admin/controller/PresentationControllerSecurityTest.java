@@ -142,8 +142,14 @@ class PresentationControllerSecurityTest {
     }
     @ParameterizedTest @CsvSource({"home,carousel:edit", "about,about:edit", "footer,footer:edit", "join,join:edit"})
     void sectionWriteUsesItsExactExistingPermission(String section, String permission) throws Exception {
+        String form = switch (section) {
+            case "home" -> "{\"title\":\"首页\",\"worksTitle\":\"作品\",\"capabilitiesTitle\":\"能力\",\"directionsTitle\":\"方向\",\"invitationTitle\":\"邀请\",\"mediaMode\":\"carousel\",\"featuredLimit\":3}";
+            case "about" -> "{\"principlesTitle\":\"理念\",\"invitationTitle\":\"邀请\"}";
+            case "join" -> "{\"invitationText\":\"加入我们\"}";
+            default -> "{}";
+        };
         mvc.perform(put("/api/admin/presentation/" + section).with(user("editor").authorities(new SimpleGrantedAuthority(permission)))
-            .contentType(MediaType.APPLICATION_JSON).content("{}"))
+            .contentType(MediaType.APPLICATION_JSON).content(form))
             .andExpect(status().isOk()).andExpect(jsonPath("$.code").value(200)).andExpect(jsonPath("$.data").isMap());
         verify(settings).updateAll(anyList());
     }

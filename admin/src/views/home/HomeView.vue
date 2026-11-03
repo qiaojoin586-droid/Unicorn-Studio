@@ -90,6 +90,7 @@ async function save() {
     if (field.required && !String(form[field.key]).trim()) { ElMessage.warning(group.title + '：' + field.label + '不能为空'); return }
     if (field.key.toLowerCase().includes('url') && !isPresentationUrl(String(form[field.key]))) { ElMessage.warning(field.label + '只支持站内路径、锚点或 HTTP(S) 地址'); return }
   }
+  if (!['single', 'carousel'].includes(form.mediaMode) || !Number.isInteger(form.featuredLimit) || form.featuredLimit < 1 || form.featuredLimit > 6) { ElMessage.warning('请选择媒体模式，并设置 1 至 6 件精选作品'); return }
   saving.value = true
   saveStatus.value = ''
   try { await presentationApi.update('home', form); markSaved(); saveStatus.value = '首页配置已保存并更新主站，请刷新线上页面核验。'; ElMessage.success('首页配置已保存') }

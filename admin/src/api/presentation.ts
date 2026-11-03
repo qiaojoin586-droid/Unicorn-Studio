@@ -2,22 +2,11 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { http } from '@/utils/request'
-import defaults from '@/generated/presentation-defaults.json'
-
-export type HomePresentation = typeof defaults.home
-export type AboutPresentation = typeof defaults.about
-export type FooterPresentation = typeof defaults.footer
-export type JoinPresentation = typeof defaults.join
-export interface PresentationSections {
-  home: HomePresentation
-  about: AboutPresentation
-  footer: FooterPresentation
-  join: JoinPresentation
-}
-export type PresentationSection = keyof PresentationSections
+import { createPresentationSection, type PresentationSections, type PresentationSection } from '../../../shared/presentation-contract.js'
+export type { HomePresentation, AboutPresentation, FooterPresentation, JoinPresentation, PresentationSections, PresentationSection } from '../../../shared/presentation-contract.js'
 
 export function clonePresentation<K extends PresentationSection>(section: K): PresentationSections[K] {
-  return JSON.parse(JSON.stringify(defaults[section]))
+  return createPresentationSection(section)
 }
 
 export const presentationApi = {
