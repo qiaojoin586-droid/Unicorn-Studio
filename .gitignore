@@ -54,3 +54,5 @@ notes/
 
 # 忽略 Docker 相关文件夹
 backend/docker/
+.workbuddy/
+.github/
