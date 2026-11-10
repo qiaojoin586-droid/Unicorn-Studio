@@ -100,7 +100,11 @@ public class AiSessionService {
                 conversationMapper.selectPage(PageResult.safePage(page + 1, size), wrapper),
                 c -> new SessionVO(c.getId(), c.getTitle(), c.getMessageCount(),
                         c.getLastActiveAt(), c.getCreatedAt()));
-        if (page == 1) {
+        // 只缓存第一页：与上面的读取条件 page == 0 严格对齐。
+        // 键里没有页码（CacheKeys.aiSessions 只带 userId + size），
+        // 若写成 page == 1，会把「第二页的数据」写进「第一页的键」，
+        // 之后用户回到第一页就会命中这份缓存，看到第二页的内容。
+        if (page == 0) {
             cache.set(key, result, SESSION_CACHE_TTL);
         }
         return result;
@@ -153,8 +157,19 @@ public class AiSessionService {
         int affected = messageMapper.softDeleteByConversation(conversationId);
         // 必须在事务提交后才失效：此时若事务回滚，缓存仍有效，提前清了会被回填旧值（§5.3 陷阱 1）
         cache.evictByPatternAfterCommit(CacheKeys.aiSessionsPattern(userId));
-        cache.evictByPatternAfterCommit(CacheKeys.aiMessagesPattern(conversationId));
+        evictMessages(conversationId);
         log.info("清空对话 conversationId={} userId={} 软删消息 {} 条", conversationId, userId, affected);
+    }
+
+    /**
+     * 失效某个会话的消息列表缓存。
+     * <p>
+     * <b>必须按精确键删，不能用 pattern</b>：写键是 {@code cache:ai:msgs:{conversationId}}
+     * （没有 size 后缀），而 {@code cache:ai:msgs:{conversationId}:*} 这种 pattern 多一个冒号，
+     * SCAN MATCH 永远匹配不到 —— 结果就是「清空对话后旧消息还在」。
+     */
+    private void evictMessages(String conversationId) {
+        cache.evictAfterCommit(CacheKeys.aiMessages(conversationId));
     }
 
     /**
@@ -197,6 +212,8 @@ public class AiSessionService {
             return null;
         }
         touchConversation(conversationId);
+        // 新消息落库后失效消息列表缓存：否则 10 分钟内刷新会话看不到刚发的这条
+        evictMessages(conversationId);
         return msg.getId();
     }
 
@@ -213,6 +230,8 @@ public class AiSessionService {
         msg.setClientMsgId(null);
         msg.setContextEligible(1);
         messageMapper.insert(msg);
+        // 占位行也会出现在消息列表里（pageByCursor 只过滤 deleted_at），同样要失效缓存
+        evictMessages(conversationId);
         return msg.getId();
     }
 
@@ -224,6 +243,8 @@ public class AiSessionService {
         // 助手消息有了 id，回填本会话这一轮工具调用的 message_id（文档 §11.7 第 4 条）。
         // ⚠️ 必须在消息落库【之后】——流式下工具调用发生在落库之前，那时拿不到 id。
         backfillToolMessageId(conversationId, messageId);
+        // 助手消息定稿（completed / interrupted）后失效缓存，刷新才能拿到完整内容
+        evictMessages(conversationId);
     }
 
     /**
@@ -271,6 +292,7 @@ public class AiSessionService {
         messageMapper.insert(msg);
         // 让 message_count 把这次拒答算进去，否则会话里「用户 7 条 / 助手 5 条」对不上
         touchConversation(conversationId);
+        evictMessages(conversationId);
     }
 
     /**

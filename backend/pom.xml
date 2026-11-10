@@ -237,17 +237,12 @@
     </build>
 
     <!--
-      打包专用 profile：保证 jar 内只有 src/main/resources/application.yml 这一个 yaml。
-
-      为什么需要：
-        · Spring Boot 只把 `application.yml` 当作主配置自动加载，所以服务器要「零外部配置」，
-          这个文件名不能改；
-        · 本地开发可能重新放一份 `application-local.yml`（已 gitignore）。它绝不能被带进 jar，
-          否则服务器上会出现「两份配置叠加」的隐式行为（profile 文件优先级高于主配置）。
+      保留 jar profile 兼容现有打包命令。
+      后端统一使用 application.yml；排除额外的 profile YAML，避免意外引入配置覆盖。
 
       用法：
         mvn -Pjar clean package -DskipTests
-        java -jar target/unicorn-studio-1.0.0.jar
+        java -jar target/unicorn-studio-1.0.1.jar
     -->
     <profiles>
         <profile>

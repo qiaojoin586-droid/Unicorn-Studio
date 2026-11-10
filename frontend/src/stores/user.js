@@ -29,14 +29,14 @@ export const useUserStore = defineStore('user', {
     return {
       // 前台 token 走 Authorization: Bearer 头（不是 cookie），有效期由后端控制（7 天）
       token: saved?.token || '',
-      // 后端 /api/auth/login 响应里带回的全部用户字段：{ id, nickname, email }
-      user: saved?.user || null,
+      user: saved?.user ? { id: saved.user.id, nickname: saved.user.nickname, phone: saved.user.phone } : null,
     }
   },
 
   getters: {
     isLoggedIn: (state) => !!state.token,
-    displayName: (state) => state.user?.nickname || state.user?.email || '',
+    displayName: (state) => state.user?.nickname || '',
+    maskedPhone: (state) => state.user?.phone?.replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2') || '',
   },
 
   actions: {

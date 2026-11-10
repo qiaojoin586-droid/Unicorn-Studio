@@ -1,5 +1,10 @@
 # 本地库 → 服务器 MySQL 全量迁移手册
 
+> 主站用户编辑升级（V23）：已有库在 V22 之后执行 `V23-public-user-edit.sql`，导入旧数据后同样需执行。超级管理员默认获得 `user:edit`，也可通过角色管理分配给其他管理员。
+
+> 主站手机号登录升级（V22）：已有库执行 `V22-public-user-phone.sql`，全新库使用 `01-schema-full.sql`。如果还要导入旧版 `02-data.sql`，导入后再执行 V22，补回被旧导出覆盖的绑定权限。旧用户可由拥有 `user:bind-phone` 权限的管理员核实身份后在用户详情绑定手机号。
+> 本地测试注册时，启动后端前设置 `REGISTRATION_SMS_CONSOLE_ENABLED=true`，从后端控制台查看验证码。正式短信通道通过实现 `RegistrationSmsSender` 接入。
+
 > 页面展示配置升级（V21）：部署移除默认 JSON 的版本前，先执行 `01-schema-full.sql`
 > 末尾的 V21 段，将原有展示内容补齐到 `site_settings` 的 `content.presentation.*` 四项配置。
 > 迁移可重复执行，保留已保存的非空值及显式空字符串、`false`、空列表；只补缺失/null 字段。
@@ -152,8 +157,9 @@ DELETE FROM upload_file WHERE url IN (
 
 ## 6. 服务器侧后端配置
 
-`application.yml` 里**没有默认凭据**，缺失即拒绝启动（`SecretsStartupValidator`）。
-模板见 `backend/src/main/resources/application-local.yml.example`。
+后端统一使用 `src/main/resources/application.yml`，不再加载独立的本地配置文件。
+当前文件包含本地连接配置与凭据；部署时通过下表环境变量覆盖，提交或分发前移除本地凭据。
+必要凭据为空时仍由 `SecretsStartupValidator` 拒绝启动。
 
 ### 6.1 必须显式配置的项
 
@@ -166,7 +172,7 @@ DELETE FROM upload_file WHERE url IN (
 | `PUBLIC_JWT_SECRET` | ≥32 位 | 轮换会使所有前台 token 立即失效 |
 | `APP_CORS_ORIGINS` | 见 §6.2 | 漏配 = `/api/**` 全 403 |
 | `TRUSTED_PROXY_COUNT` | **`1`** | 生产为 nginx → 后端 1 层代理；留 0 会让全站共用一个限流桶 |
-| `REDIS_HOST` / `REDIS_PASSWORD` | 非空 | 缺失时缓存整体降级（不阻断启动） |
+| `REDIS_HOST` / `REDIS_PASSWORD` | 主机非空；非回环主机必须配置密码 | 本机无密码 Redis 可将密码留空 |
 
 ### 6.2 CORS（本地出过线上故障，重点）
 
@@ -197,7 +203,7 @@ Redis 连接池配置里 `REDIS_DATABASE` 默认 `0`。若服务器与本地**�
 | 层 | 措施 | 说明 |
 |---|---|---|
 | 代码 | 缓存键自动带 profile 前缀 | `CacheHelper` 给每个键加 `<profile>:`，如 `local:cache:learning:list` / `prod:cache:carousel:home`。键空间天然分开，**不依赖运维记性** |
-| 配置 | 本地固定 `spring.data.redis.database: 1` | 与线上的 db `0` 物理隔离（已落在 `application-local.yml`） |
+| 配置 | 通过 `REDIS_DATABASE` 选择不同的数据库 | 当前统一配置默认 `0`；共用 Redis 时需显式隔离 |
 
 启动日志会打印一行便于确认：`缓存键环境隔离前缀: 'prod:'`。
 历史上已写入的无前缀键不会被再读取（自然过期即可），**无需手工清理**。
@@ -211,8 +217,7 @@ redis-cli -h <host> -p 6379 -a <pwd> -n <db> --scan --pattern 'prod:cache:*' | x
 
 ### 6.4 其他
 
-- `SPRING_PROFILES_ACTIVE`：`application.yml` 未指定默认 profile，务必显式设置（如 `prod`），
-  否则读不到对应 profile 的覆盖项。
+- `SPRING_PROFILES_ACTIVE`：不再用于加载拆分的 YAML；如需区分缓存键环境前缀，仍可设为 `prod` 或 `local`。
 - `MYSQLDUMP_PATH`：后台「备份」功能依赖 `mysqldump`，服务器上需装 MySQL 客户端或指向绝对路径。
 - `FILE_UPLOAD_DIR`：上传根目录，同时是 `FileService` 的**写入目录**与 `/uploads/**` 静态映射的**读取目录**。
   解析优先级（`UploadProperties`，单一来源）：
@@ -246,7 +251,7 @@ redis-cli -h <host> -p 6379 -a <pwd> -n <db> --scan --pattern 'prod:cache:*' | x
   `<应用目录>/logs`。否则「从别的目录 `java -jar`」会把日志写到那个目录下，
   目录不可写时更是**完全没有文件日志**（logback 只会把错误写进自己的内部状态，不报错给你）。
   该变量同时决定 heapdump 落点与 `RetentionService` 清理 admin 审计文件的目录。
-- 日志级别：`application-prod.yml` 把 `com.unicorn.studio` 收到 `WARN`（业务包），
+- 日志级别：统一配置中 `com.unicorn.studio` 默认 `INFO`，生产可将该项调整为 `WARN`（业务包），
   但**接口访问日志（`[ACCESS]` 行）走独立的 `ACCESS_LOG` logger，仍为 INFO** ——
   它在 `logs/info/yyyy-MM-dd/app-info.log` 里，每行含方法/路径/状态码/客户端 IP/耗时，
   是「接口到底有没有被调到、返回了几百」的第一现场。要连它一起关就单独设
@@ -370,7 +375,7 @@ mvnw.cmd clean package          :: 含测试；要跳过测试用 -DskipTests
 |---|---|
 | `JAVA_HOME` | 必须指向 JDK 21（只把 `java` 放进 PATH 不够，`mvnw` 会直接报 "JAVA_HOME is not defined correctly"） |
 | 离线构建 | 依赖已缓存时可加 `-o`：`mvnw.cmd -o clean package` |
-| 本地配置 | `src/main/resources/application-local.yml`（已 gitignore）需含真实 DB 口令；缺失则用 `-Dspring.datasource.password=...` 临时覆盖 |
+| 本地配置 | 统一在 `src/main/resources/application.yml`，支持环境变量或 `-Dspring.datasource.password=...` 覆盖 |
 
 ### 9.2 「Could not initialize plugin: interface org.mockito.plugins.MockMaker」
 

@@ -4,6 +4,7 @@ import com.unicorn.studio.common.IpUtils;
 import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.service.PublicAuthService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.springframework.web.bind.annotation.*;
 
@@ -21,25 +22,34 @@ public class PublicAuthController {
     }
 
     public record RegisterRequest(@NotBlank(message = "昵称不能为空") String nickname,
-                                  @NotBlank(message = "邮箱不能为空") String email,
-                                  @NotBlank(message = "密码不能为空") String password) {
+                                  @NotBlank(message = "手机号不能为空") String phone,
+                                  @NotBlank(message = "密码不能为空") String password,
+                                  @NotBlank(message = "验证码不能为空") String code) {
     }
 
-    public record LoginRequest(@NotBlank(message = "邮箱不能为空") String email,
+    public record LoginRequest(@NotBlank(message = "手机号不能为空") String phone,
                                @NotBlank(message = "密码不能为空") String password) {
     }
 
+    public record RegistrationCodeRequest(@NotBlank(message = "手机号不能为空") String phone) {
+    }
+
+    @PostMapping("/register/code")
+    public ApiResponse<Map<String, Integer>> sendRegistrationCode(@Valid @RequestBody RegistrationCodeRequest request) {
+        return ApiResponse.ok(Map.of("retryAfterSeconds", publicAuthService.sendRegistrationCode(request.phone())));
+    }
+
     @PostMapping("/register")
-    public ApiResponse<Map<String, Object>> register(@RequestBody RegisterRequest request,
+    public ApiResponse<Map<String, Object>> register(@Valid @RequestBody RegisterRequest request,
                                                      HttpServletRequest httpRequest) {
         return ApiResponse.ok(publicAuthService.register(
-                request.nickname(), request.email(), request.password(),
+                request.nickname(), request.phone(), request.password(), request.code(),
                 IpUtils.getClientIp(httpRequest)));
     }
 
     @PostMapping("/login")
-    public ApiResponse<Map<String, Object>> login(@RequestBody LoginRequest request) {
-        return ApiResponse.ok(publicAuthService.login(request.email(), request.password()));
+    public ApiResponse<Map<String, Object>> login(@Valid @RequestBody LoginRequest request) {
+        return ApiResponse.ok(publicAuthService.login(request.phone(), request.password()));
     }
 
     /**

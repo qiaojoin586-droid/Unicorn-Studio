@@ -6,7 +6,11 @@ import com.unicorn.studio.model.PublicUser;
 import com.unicorn.studio.service.CommentService;
 import com.unicorn.studio.service.PublicAuthService;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.Size;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
@@ -25,10 +29,10 @@ public class CommentController {
     }
 
     public record CreateRequest(@NotBlank(message = "评论对象不能为空") String targetType,
-                                @NotBlank(message = "评论对象 id 不能为空") Long targetId,
-                                @NotBlank(message = "评论内容不能为空") String content,
-                                String guestNickname,
-                                Long parentId) {
+                                @NotNull(message = "评论对象 id 不能为空") @Positive Long targetId,
+                                @NotBlank(message = "评论内容不能为空") @Size(max = 1000) String content,
+                                @Size(max = 50) String guestNickname,
+                                @Positive Long parentId) {
     }
 
     @GetMapping
@@ -41,7 +45,7 @@ public class CommentController {
     }
 
     @PostMapping
-    public ApiResponse<Map<String, Object>> create(@RequestBody CreateRequest request,
+    public ApiResponse<Map<String, Object>> create(@Valid @RequestBody CreateRequest request,
                                                    @RequestHeader(value = "Authorization", required = false) String authorization,
                                                    HttpServletRequest httpRequest) {
         PublicUser user = publicAuthService.resolveFromHeader(authorization);

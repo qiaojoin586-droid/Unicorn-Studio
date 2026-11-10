@@ -25,58 +25,62 @@
       </div>
     </section>
 
-    <section id="selected-works" class="selected-works" aria-labelledby="works-heading" :aria-busy="worksLoading">
-      <div class="page-shell">
-        <div class="section-heading">
-          <div><p v-if="home.worksEyebrow" class="eyebrow section-eyebrow"><span>01</span>{{ home.worksEyebrow }}</p><h2 id="works-heading" class="section-title configured-lines">{{ home.worksTitle }}</h2></div>
-          <div class="section-heading__aside"><p v-if="home.worksDescription" class="configured-lines">{{ home.worksDescription }}</p><router-link to="/works" class="text-link">查看全部作品 <span aria-hidden="true">↗</span></router-link></div>
+    <div class="home-middle">
+      <BackgroundVideo :src="indexVideo" :poster="indexPoster" desktop-only sticky />
+
+      <section id="selected-works" class="selected-works" aria-labelledby="works-heading" :aria-busy="worksLoading">
+        <div class="page-shell">
+          <div class="section-heading">
+            <div><p v-if="home.worksEyebrow" class="eyebrow section-eyebrow"><span>01</span>{{ home.worksEyebrow }}</p><h2 id="works-heading" class="section-title configured-lines">{{ home.worksTitle }}</h2></div>
+            <div class="section-heading__aside"><p v-if="home.worksDescription" class="configured-lines">{{ home.worksDescription }}</p><router-link to="/works" class="text-link">查看全部作品 <span aria-hidden="true">↗</span></router-link></div>
+          </div>
+          <div v-if="worksLoading" class="works-skeleton" role="status" aria-label="正在加载精选作品"><div v-for="item in 2" :key="item" class="works-skeleton__item"><div></div><span></span><span></span></div></div>
+          <div v-else-if="worksError" class="home-state" role="status"><span class="meta-label">作品暂未加载</span><p>{{ worksError }}</p><button type="button" class="text-link" @click="loadFeaturedWorks">重新加载 <span aria-hidden="true">↗</span></button></div>
+          <div v-else-if="featuredWorks.length" class="work-gallery" :class="{ 'work-gallery--single': featuredWorks.length === 1 }">
+            <div v-for="(work, index) in featuredWorks" :key="work.slug" class="work-gallery__item">
+              <WorkCard :slug="work.slug" :title="work.title" :description="work.summary || ''" :cover-url="work.coverUrl || ''" :tag-type="work.tagType || ''" :authors="work.authors || ''" :date="work.dateLabel || ''" :variant="index === 0 ? 'featured' : 'default'" />
+            </div>
+          </div>
+          <div v-else class="home-state"><span class="meta-label">WORK IN PROGRESS</span><p>新的作品正在整理，探索还在继续。</p><router-link to="/learning" class="text-link">先从学习资料开始 <span aria-hidden="true">↗</span></router-link></div>
         </div>
-        <div v-if="worksLoading" class="works-skeleton" role="status" aria-label="正在加载精选作品"><div v-for="item in 2" :key="item" class="works-skeleton__item"><div></div><span></span><span></span></div></div>
-        <div v-else-if="worksError" class="home-state" role="status"><span class="meta-label">作品暂未加载</span><p>{{ worksError }}</p><button type="button" class="text-link" @click="loadFeaturedWorks">重新加载 <span aria-hidden="true">↗</span></button></div>
-        <div v-else-if="featuredWorks.length" class="work-gallery" :class="{ 'work-gallery--single': featuredWorks.length === 1 }">
-          <div v-for="(work, index) in featuredWorks" :key="work.slug" class="work-gallery__item">
-            <WorkCard :slug="work.slug" :title="work.title" :description="work.summary || ''" :cover-url="work.coverUrl || ''" :tag-type="work.tagType || ''" :authors="work.authors || ''" :date="work.dateLabel || ''" :variant="index === 0 ? 'featured' : 'default'" />
+      </section>
+
+      <section class="growth" aria-labelledby="growth-heading" :aria-busy="capabilitiesLoading">
+        <div class="page-shell growth__grid">
+          <div class="growth__intro">
+            <p v-if="home.capabilitiesEyebrow" class="eyebrow section-eyebrow"><span>02</span>{{ home.capabilitiesEyebrow }}</p>
+            <h2 id="growth-heading" class="section-title configured-lines">{{ home.capabilitiesTitle }}</h2>
+            <p v-if="home.capabilitiesDescription" class="growth__description configured-lines">{{ home.capabilitiesDescription }}</p>
+            <router-link to="/about" class="text-link">认识独角兽 <span aria-hidden="true">↗</span></router-link>
+            <svg class="growth__drawing" viewBox="0 0 220 120" fill="none" aria-hidden="true"><path d="M8 100C60 100 36 13 104 13c72 0 39 88 108 88M78 110l28-96 29 72M10 100h202" /></svg>
+          </div>
+          <div class="growth__content">
+            <div v-if="capabilitiesLoading" class="home-state home-state--dark" role="status"><p>正在加载我们的成长方式…</p></div>
+            <div v-else-if="capabilitiesError" class="home-state home-state--dark" role="status"><p>{{ capabilitiesError }}</p><button type="button" class="text-link" @click="loadCapabilities">重新加载 <span aria-hidden="true">↗</span></button></div>
+            <div v-else-if="!capabilities.length" class="home-state home-state--dark"><p>培养体系正在整理，欢迎先来认识我们。</p><router-link to="/about" class="text-link">关于工作室 <span aria-hidden="true">↗</span></router-link></div>
+            <div v-else class="capability-list">
+              <details v-for="(capability, index) in capabilities" :key="capability.id" class="capability" :open="index === 0">
+                <summary><span class="capability__number"><StudioIcon v-if="capability.icon" :icon="capability.icon" /><template v-else>{{ String(index + 1).padStart(2, '0') }}</template></span><h3>{{ capability.title }}</h3><span class="capability__toggle" aria-hidden="true"></span></summary>
+                <div class="capability__body"><p>{{ capability.description }}</p></div>
+              </details>
+            </div>
+            <p class="growth__footnote"><span class="signal-dot" aria-hidden="true"></span> 学习不止于课堂，成长发生在实践。</p>
           </div>
         </div>
-        <div v-else class="home-state"><span class="meta-label">WORK IN PROGRESS</span><p>新的作品正在整理，探索还在继续。</p><router-link to="/learning" class="text-link">先从学习资料开始 <span aria-hidden="true">↗</span></router-link></div>
-      </div>
-    </section>
+      </section>
 
-    <section class="growth" aria-labelledby="growth-heading" :aria-busy="capabilitiesLoading">
-      <div class="page-shell growth__grid">
-        <div class="growth__intro">
-          <p v-if="home.capabilitiesEyebrow" class="eyebrow section-eyebrow"><span>02</span>{{ home.capabilitiesEyebrow }}</p>
-          <h2 id="growth-heading" class="section-title configured-lines">{{ home.capabilitiesTitle }}</h2>
-          <p v-if="home.capabilitiesDescription" class="growth__description configured-lines">{{ home.capabilitiesDescription }}</p>
-          <router-link to="/about" class="text-link">认识独角兽 <span aria-hidden="true">↗</span></router-link>
-          <svg class="growth__drawing" viewBox="0 0 220 120" fill="none" aria-hidden="true"><path d="M8 100C60 100 36 13 104 13c72 0 39 88 108 88M78 110l28-96 29 72M10 100h202" /></svg>
-        </div>
-        <div class="growth__content">
-          <div v-if="capabilitiesLoading" class="home-state home-state--dark" role="status"><p>正在加载我们的成长方式…</p></div>
-          <div v-else-if="capabilitiesError" class="home-state home-state--dark" role="status"><p>{{ capabilitiesError }}</p><button type="button" class="text-link" @click="loadCapabilities">重新加载 <span aria-hidden="true">↗</span></button></div>
-          <div v-else-if="!capabilities.length" class="home-state home-state--dark"><p>培养体系正在整理，欢迎先来认识我们。</p><router-link to="/about" class="text-link">关于工作室 <span aria-hidden="true">↗</span></router-link></div>
-          <div v-else class="capability-list">
-            <details v-for="(capability, index) in capabilities" :key="capability.id" class="capability" :open="index === 0">
-              <summary><span class="capability__number"><StudioIcon v-if="capability.icon" :icon="capability.icon" /><template v-else>{{ String(index + 1).padStart(2, '0') }}</template></span><h3>{{ capability.title }}</h3><span class="capability__toggle" aria-hidden="true"></span></summary>
-              <div class="capability__body"><p>{{ capability.description }}</p></div>
-            </details>
+      <section class="directions" aria-labelledby="directions-heading" :aria-busy="servicesLoading">
+        <div class="page-shell">
+          <div class="section-heading section-heading--directions"><div><p v-if="home.directionsEyebrow" class="eyebrow section-eyebrow"><span>03</span>{{ home.directionsEyebrow }}</p><h2 id="directions-heading" class="section-title configured-lines">{{ home.directionsTitle }}</h2></div><p v-if="home.directionsDescription" class="directions__description configured-lines">{{ home.directionsDescription }}</p></div>
+          <div v-if="servicesLoading" class="home-state" role="status"><p>正在加载探索方向…</p></div>
+          <div v-else-if="servicesError" class="home-state" role="status"><p>{{ servicesError }}</p><button type="button" class="text-link" @click="loadServices">重新加载 <span aria-hidden="true">↗</span></button></div>
+          <div v-else-if="services.length" class="direction-list">
+            <router-link v-for="(service, index) in services" :key="service.id" to="/join" class="direction-row" :aria-label="service.title + '，了解如何加入'"><span class="direction-row__number"><StudioIcon v-if="service.icon" :icon="service.icon" /><template v-else>{{ String(index + 1).padStart(2, '0') }}</template></span><h3>{{ service.title }}</h3><p>{{ service.description }}</p><span class="direction-row__arrow" aria-hidden="true">↗</span></router-link>
           </div>
-          <p class="growth__footnote"><span class="signal-dot" aria-hidden="true"></span> 学习不止于课堂，成长发生在实践。</p>
+          <div v-else class="home-state"><p>探索方向正在更新，欢迎带着你的想法来交流。</p><router-link to="/join" class="text-link">加入交流 <span aria-hidden="true">↗</span></router-link></div>
         </div>
-      </div>
-    </section>
-
-    <section class="directions" aria-labelledby="directions-heading" :aria-busy="servicesLoading">
-      <div class="page-shell">
-        <div class="section-heading section-heading--directions"><div><p v-if="home.directionsEyebrow" class="eyebrow section-eyebrow"><span>03</span>{{ home.directionsEyebrow }}</p><h2 id="directions-heading" class="section-title configured-lines">{{ home.directionsTitle }}</h2></div><p v-if="home.directionsDescription" class="directions__description configured-lines">{{ home.directionsDescription }}</p></div>
-        <div v-if="servicesLoading" class="home-state" role="status"><p>正在加载探索方向…</p></div>
-        <div v-else-if="servicesError" class="home-state" role="status"><p>{{ servicesError }}</p><button type="button" class="text-link" @click="loadServices">重新加载 <span aria-hidden="true">↗</span></button></div>
-        <div v-else-if="services.length" class="direction-list">
-          <router-link v-for="(service, index) in services" :key="service.id" to="/join" class="direction-row" :aria-label="service.title + '，了解如何加入'"><span class="direction-row__number"><StudioIcon v-if="service.icon" :icon="service.icon" /><template v-else>{{ String(index + 1).padStart(2, '0') }}</template></span><h3>{{ service.title }}</h3><p>{{ service.description }}</p><span class="direction-row__arrow" aria-hidden="true">↗</span></router-link>
-        </div>
-        <div v-else class="home-state"><p>探索方向正在更新，欢迎带着你的想法来交流。</p><router-link to="/join" class="text-link">加入交流 <span aria-hidden="true">↗</span></router-link></div>
-      </div>
-    </section>
+      </section>
+    </div>
 
     <section class="invitation" aria-labelledby="invitation-heading">
       <div class="page-shell invitation__shell">
@@ -95,6 +99,9 @@ import WorkCard from '@/components/WorkCard.vue'
 import SiteLink from '@/components/SiteLink.vue'
 import StudioIcon from '@/components/StudioIcon.vue'
 import StudioMedia from '@/components/StudioMedia.vue'
+import BackgroundVideo from '@/components/BackgroundVideo.vue'
+import indexVideo from '@/image/index.mp4'
+import indexPoster from '@/image/index-poster.jpg'
 import { usePresentation } from '@/composables/usePresentation'
 import { useApi } from '@/composables/useApi'
 import { usePageMeta, DEFAULT_DESCRIPTION } from '@/composables/usePageMeta'
@@ -186,6 +193,26 @@ onMounted(() => { loadCarousel(); loadFeaturedWorks(); loadCapabilities(); loadS
 .hero__scroll { display: inline-flex; align-items: center; min-height: 44px; gap: 22px; color: #c9c8c5; text-decoration: none; font-size: 11px; }
 .hero__scroll svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.3; transition: transform 180ms ease; }
 .hero__scroll:hover svg { transform: translateY(3px); }
+.home-middle {
+  position: relative;
+  isolation: isolate;
+  --color-ink: #f6f5fb;
+  --color-paper: #161925;
+  --color-muted-light: #e1e1ec;
+  --text-on-paper: #e1e1ec;
+  --feature-text: #f6f5fb;
+  --feature-muted: #e1e1ec;
+  --feature-line: #ffffff4d;
+  --feature-accent: #ffb1ba;
+  --accent-on-paper: var(--feature-accent);
+  --surface-soft: #24293a;
+  --video-shade: linear-gradient(90deg, #0a0e1be0, #101522ab 56%, #0b0e18ad);
+  --video-position: 65% center;
+  background: var(--color-paper);
+  color: var(--feature-text);
+}
+.home-middle > section { position: relative; z-index: 1; }
+.home-middle :deep(.video-toggle) { justify-self: start; }
 .selected-works { padding: 120px 0 128px; scroll-margin-top: calc(var(--header-height, 80px) + 20px); }
 .section-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 48px; margin-bottom: 58px; }
 .section-eyebrow { display: flex; align-items: center; gap: 15px; margin: 0 0 30px; color: var(--text-on-paper, #68676b); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 10px; letter-spacing: .12em; }
@@ -202,7 +229,7 @@ onMounted(() => { loadCarousel(); loadFeaturedWorks(); loadCapabilities(); loadS
 .work-gallery__item:nth-child(3) { grid-column: 1; max-width: 86%; }
 .work-gallery--single { grid-template-columns: minmax(0, 1fr); max-width: 930px; }
 .work-gallery--single .work-gallery__item { padding-top: 0; }
-.home-state { padding: 44px 0; border-top: 1px solid #d0cec8; border-bottom: 1px solid #d0cec8; }
+.home-state { padding: 44px 0; border-block: 1px solid var(--feature-line); }
 .home-state p { margin: 12px 0; color: var(--text-on-paper, #62636a); font-size: 15px; line-height: 1.8; }
 .home-state .meta-label { color: var(--text-on-paper, #62636a); font-size: 10px; letter-spacing: .12em; }
 .works-skeleton { display: grid; grid-template-columns: 1.2fr 1fr; gap: 44px; }
@@ -210,40 +237,36 @@ onMounted(() => { loadCarousel(); loadFeaturedWorks(); loadCapabilities(); loadS
 .works-skeleton__item > span { display: block; width: 63%; height: 18px; margin-top: 24px; border-radius: 3px; background: var(--surface-soft, #dedbd5); }
 .works-skeleton__item > span:last-child { width: 87%; height: 10px; margin-top: 13px; }
 .works-skeleton__item:nth-child(2) { padding-top: 114px; }
-.growth { padding: 116px 0 104px; color: var(--feature-text); background: var(--feature-bg); }
+.growth { padding: 116px 0 104px; }
 .growth__grid { display: grid; grid-template-columns: .9fr 1.1fr; gap: 80px; }
-.growth .section-eyebrow { color: #a7a8af; }
-.growth__description { margin: 30px 0 22px; color: #a7a8af; font-size: 15px; line-height: 1.95; }
-.growth .text-link { color: #f4f2ec; }
+.growth__description { margin: 30px 0 22px; color: var(--feature-muted); font-size: 15px; line-height: 1.95; }
 .growth__drawing { display: block; width: 180px; height: 98px; margin-top: 48px; stroke: #66666c; stroke-width: 1; }
 .growth__content { padding-top: 51px; }
-.capability { border-top: 1px solid #404046; }
-.capability:last-child { border-bottom: 1px solid #404046; }
+.capability { border-top: 1px solid var(--feature-line); }
+.capability:last-child { border-bottom: 1px solid var(--feature-line); }
 .capability summary { display: flex; align-items: center; gap: 25px; min-height: 92px; padding: 20px 0; cursor: pointer; list-style: none; }
 .capability summary::-webkit-details-marker { display: none; }
-.capability__number { color: #9a9aa2; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; }
+.capability__number { color: var(--feature-muted); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; }
 .capability h3 { flex: 1; margin: 0; font-size: clamp(20px, 2vw, 28px); font-weight: 500; line-height: 1.45; }
 .capability__toggle { position: relative; width: 24px; height: 24px; flex-shrink: 0; }
 .capability__toggle::before, .capability__toggle::after { position: absolute; content: ''; width: 13px; height: 1px; top: 11px; left: 5px; background: #c9c8c5; }
 .capability__toggle::after { transform: rotate(90deg); transition: transform 180ms ease; }
 .capability[open] .capability__toggle::after { transform: rotate(0); }
-.capability[open] h3 { color: #ff8c95; }
+.capability[open] h3 { color: var(--feature-accent); }
 .capability__body { padding: 0 34px 30px 42px; }
-.capability__body p { max-width: 450px; margin: 0; color: #aaaab1; font-size: 15px; line-height: 1.95; }
-.growth__footnote { display: flex; align-items: center; gap: 12px; margin: 37px 0 0; color: #9d9da6; font-size: 11px; line-height: 1.8; }
+.capability__body p { max-width: 450px; margin: 0; color: var(--feature-muted); font-size: 15px; line-height: 1.95; }
+.growth__footnote { display: flex; align-items: center; gap: 12px; margin: 37px 0 0; color: var(--feature-muted); font-size: 11px; line-height: 1.8; }
 .growth__footnote .signal-dot { width: 5px; height: 5px; flex-basis: 5px; }
-.home-state--dark { border-color: #404046; }
-.home-state--dark p { color: #aaaab1; }
 .directions { padding: 116px 0 128px; }
 .section-heading--directions { margin-bottom: 55px; }
 .directions__description { width: 300px; margin-bottom: 5px; }
-.direction-row { display: grid; grid-template-columns: 48px 1fr 1.2fr 56px; gap: 24px; align-items: center; min-height: 132px; padding: 26px 0; color: inherit; text-decoration: none; border-top: 1px solid #c8c6c1; transition: background-color 180ms ease; }
-.direction-row:last-child { border-bottom: 1px solid #c8c6c1; }
+.direction-row { display: grid; grid-template-columns: 48px 1fr 1.2fr 56px; gap: 24px; align-items: center; min-height: 132px; padding: 26px 0; color: inherit; text-decoration: none; border-top: 1px solid var(--feature-line); transition: background-color 180ms ease; }
+.direction-row:last-child { border-bottom: 1px solid var(--feature-line); }
 .direction-row__number { align-self: start; padding-top: 9px; color: var(--text-on-paper, #77767c); font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 11px; }
 .direction-row h3 { margin: 0; font-size: clamp(23px, 2.4vw, 34px); font-weight: 550; line-height: 1.35; letter-spacing: -.03em; }
 .direction-row p { max-width: 390px; margin: 0; color: var(--text-on-paper, #62636a); font-size: 14px; line-height: 1.85; }
 .direction-row__arrow { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border: 1px solid #cfcdc6; border-radius: 50%; font-size: 27px; transition: color 180ms ease, background-color 180ms ease, transform 180ms ease; }
-.direction-row:hover h3 { color: var(--home-accent); }
+.direction-row:hover h3 { color: var(--feature-accent); }
 .direction-row:hover .direction-row__arrow, .direction-row:focus-visible .direction-row__arrow { color: #fff; border-color: var(--home-accent); background: var(--home-accent); transform: rotate(4deg); }
 .invitation { overflow: hidden; color: var(--feature-text); background: var(--feature-raised-bg); }
 .invitation__shell { padding-top: 90px; padding-bottom: 29px; }
@@ -297,30 +320,17 @@ onMounted(() => { loadCarousel(); loadFeaturedWorks(); loadCapabilities(); loadS
 :global([data-theme='light'] .hero__disciplines) ,
 :global([data-theme='light'] .hero__bottomline p) ,
 :global([data-theme='light'] .hero__bottomline p span) ,
-:global([data-theme='light'] .growth .section-eyebrow) ,
-:global([data-theme='light'] .growth__description) ,
-:global([data-theme='light'] .capability__number) ,
-:global([data-theme='light'] .capability__body p) ,
-:global([data-theme='light'] .growth__footnote) ,
-:global([data-theme='light'] .home-state--dark p) ,
 :global([data-theme='light'] .invitation .section-eyebrow) ,
 :global([data-theme='light'] .invitation h2 span) ,
 :global([data-theme='light'] .invitation__grid p) ,
 :global([data-theme='light'] .invitation__bottom) { color: var(--feature-muted); }
 :global([data-theme='light'] .hero__secondary) ,
 :global([data-theme='light'] .hero__scroll) ,
-:global([data-theme='light'] .growth .text-link) ,
 :global([data-theme='light'] .invitation__link) { color: var(--feature-text); }
-:global([data-theme='light'] .hero__secondary span) ,
-:global([data-theme='light'] .capability[open] h3) { color: var(--feature-accent); }
+:global([data-theme='light'] .hero__secondary span) { color: var(--feature-accent); }
 :global([data-theme='light'] .hero__bottomline) ,
-:global([data-theme='light'] .capability) ,
-:global([data-theme='light'] .home-state--dark) ,
 :global([data-theme='light'] .invitation__link) ,
 :global([data-theme='light'] .invitation__bottom) { border-color: var(--feature-line); }
-:global([data-theme='light'] .capability__toggle::before) ,
-:global([data-theme='light'] .capability__toggle::after) { background: var(--feature-muted); }
 :global([data-theme='light'] .invitation__link:hover) ,
 :global([data-theme='light'] .invitation__link:focus-visible) { color: #fff; border-color: var(--home-accent); }
-:global([data-theme='light'] .direction-row:hover h3) { color: var(--accent-on-paper); }
 </style>

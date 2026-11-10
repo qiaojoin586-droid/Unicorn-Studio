@@ -144,7 +144,22 @@ public class ViewCountService {
             apply(key, delta);
         } catch (Exception e) {
             log.warn("浏览量回写失败 {}: {}", key, e.getMessage());
+            // ⚠️ 必须先把增量补回计数键，再重新标脏。
+            // DRAIN_AND_UNMARK 已经 GETDEL 把计数删了：只 reMarkDirty 的话，
+            // 下一轮 flush 读到的是 nil（raw == null 直接 return），
+            // 这次 delta 会永久丢失 —— 注释里说的「下轮重试」根本不会发生。
+            restoreDelta(key, delta);
             reMarkDirty(key);
+        }
+    }
+
+    /** 回写失败时把增量补回计数键，供下一轮重试（键已被 GETDEL，不补回就等于丢计数）。 */
+    private void restoreDelta(String key, long delta) {
+        try {
+            redis.opsForValue().increment(key, delta);
+        } catch (Exception e) {
+            // 连补回都失败只能放弃：浏览量是弱一致指标，绝不能让回写异常影响主流程
+            log.warn("浏览量回写失败且增量补回失败 {}: {}", key, e.getMessage());
         }
     }
 

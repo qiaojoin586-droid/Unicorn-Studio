@@ -41,7 +41,7 @@ public class CacheHelper {
      * 键前缀：{@code app.cache.namespace} + 当前 profile（形如 {@code local:} / {@code prod:}）。
      * <p>
      * <b>为什么必须有它（2026-09-22 实测故障）</b>：本地开发与线上服务器<b>共用同一台 Redis 的
-     * 同一个 db</b>（见 {@code application-local.yml} 与 {@code REDIS_HOST}），而缓存键里
+     * 同一个 db</b>（见 {@code application.yml} 与 {@code REDIS_HOST}），而缓存键里
      * 没有任何环境标识 —— 于是两边互相读写对方的缓存：
      * <ol>
      *   <li>本地库只有 4 条学习资料，但本地实例的列表接口返回了 <b>7 条</b>；

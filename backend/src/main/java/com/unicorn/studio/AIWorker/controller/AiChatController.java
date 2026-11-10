@@ -81,9 +81,9 @@ public class AiChatController {
      */
     @PostMapping("/sessions")
     @RequireSiteUser
-    public ApiResponse<SessionVO> createSession(@RequestBody(required = false) CreateSessionRequest req) {
+    public ApiResponse<SessionVO> createSession(@Valid @RequestBody(required = false) CreateSessionRequest req) {
         PublicUser user = currentSiteUser();
-        return ApiResponse.ok(aiSessionService.createSession(user.getId(), req.firstMessage()));
+        return ApiResponse.ok(aiSessionService.createSession(user.getId(), req == null ? null : req.firstMessage()));
     }
 
     /** 列出会话。未登录由 {@link RequireSiteUser} 拦在方法体之前 ——
@@ -105,12 +105,13 @@ public class AiChatController {
     @RequireSiteUser
     public ApiResponse<CursorPage<MessageVO>> messages(
             @PathVariable String id,
-            @RequestParam(defaultValue = "0") int beforeId,
+            @RequestParam(defaultValue = "0") long beforeId,
             @RequestParam(defaultValue = "30") int limit){
         return ApiResponse.ok(aiSessionService.findVisibleMessages(id, currentSiteUser().getId(), beforeId, limit));
     }
 
     @DeleteMapping("/sessions/{id}")
+    @RequireSiteUser
     public ApiResponse<Void> clearSession(@PathVariable String id){
         aiSessionService.clearConversation(id, currentSiteUser().getId());
         return ApiResponse.ok();
@@ -151,14 +152,14 @@ public class AiChatController {
                             },
                             () -> completeQuietly(emitter, finished));
         } catch (BusinessException e) {
-            // 429（问答配额超限）必须原样抛出，让 GlobalExceptionHandler 产出真正的 429 ——
-            // 不放行的话 HTTP 状态停在 200，前端只看状态码的 429 分支永远走不到，
-            // 用户只会看到"AI 服务暂不可用"。
+            // 配额、会话归属与权限错误必须保留 HTTP 状态，不能包装成 200 SSE。
             // ⚠️ 不能写成 "catch (BusinessException) { throw e; }"：AI 未配置时抛的也是
             // BusinessException.badRequest（AiRuntimeConfig.unavailable()），那样会把
-            // 「200 + 友好提示」变成错误响应。必须按状态码挑。
+            // 「200 + 友好提示」变成错误响应，因此只对上述业务拒绝保留状态码。
             // 此处 emitter 尚未 send 任何分片，响应未提交，改状态码仍然有效（同 @RequireSiteUser）。
-            if (e.getStatusCode().value() == HttpStatus.TOO_MANY_REQUESTS.value()) {
+            if (e.getStatusCode().value() == HttpStatus.TOO_MANY_REQUESTS.value()
+                    || e.getStatusCode().value() == HttpStatus.NOT_FOUND.value()
+                    || e.getStatusCode().value() == HttpStatus.FORBIDDEN.value()) {
                 throw e;
             }
             sendQuietly(emitter, friendlyMessage(e));

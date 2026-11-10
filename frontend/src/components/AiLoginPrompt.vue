@@ -13,14 +13,17 @@
     标志用项目自己的 🦄 / 独角兽工作室。
   -->
   <Teleport to="body">
-    <div v-if="store.showLoginPrompt" class="fixed inset-0 z-[1000] flex items-center justify-center px-4 py-6">
-      <!-- 遮罩不禁用，只是完全透明：只负责"点空白处关闭"，不给后面的主页压任何黑、也不加模糊。
-           弹窗本身靠白底 + 阴影 + 描边跟主页区分开。 -->
-      <div class="absolute inset-0" @click="close"></div>
-
+    <div
+      v-if="store.showLoginPrompt"
+      class="auth-viewport fixed inset-0 z-[1000] grid justify-items-center overflow-y-auto overscroll-contain px-4 py-4"
+      @click.self="close"
+    >
       <div
         data-ai-login-panel
-        class="relative grid max-h-[92vh] w-full max-w-[420px] overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl md:h-[620px] md:max-w-[960px] md:grid-cols-2"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="auth-dialog-title"
+        class="relative grid w-full max-w-[420px] overflow-hidden rounded-2xl border border-black/10 bg-white shadow-2xl md:min-h-[540px] md:max-w-[960px] md:grid-cols-2"
       >
         <button
           type="button"
@@ -70,7 +73,7 @@
 
         <!-- ── 右栏：表单（淡紫底 + 极光，浅色主题） ── -->
         <div
-          class="auth-panel relative flex flex-col overflow-y-auto overflow-x-hidden p-8"
+          class="auth-panel relative flex flex-col px-5 py-6 sm:px-8"
           @focusin="onFocusIn"
           @focusout="onFocusOut"
         >
@@ -87,21 +90,21 @@
 
           <div class="relative z-10 m-auto w-full max-w-[380px]">
             <!-- 窄屏 logo（左栏已隐藏） -->
-            <div class="mb-6 flex items-center justify-center gap-3 md:hidden">
+            <div class="mb-4 flex items-center justify-center gap-3 md:hidden">
               <div class="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 text-base">🦄</div>
               <span class="text-lg font-semibold text-gray-900">独角兽工作室</span>
             </div>
 
-            <div class="mb-8 text-center">
-              <h1 class="text-2xl font-semibold text-gray-900">
+            <div class="mb-5 text-center">
+              <h1 id="auth-dialog-title" class="text-2xl font-semibold text-gray-900">
                 {{ isRegister ? '创建账号' : '账号登录' }}
               </h1>
               <p class="mt-1.5 text-sm text-gray-700">
-                {{ isRegister ? '注册成功会自动登录，并继续回答你刚才的问题' : '登录后会继续回答你刚才的问题' }}
+                {{ isRegister ? '验证手机号后创建账号' : '使用手机号和密码登录' }}
               </p>
             </div>
 
-            <form class="space-y-5" @submit.prevent="submit">
+            <form class="space-y-3" @submit.prevent="submit">
               <AuthInput
                 v-if="isRegister"
                 v-model="form.nickname"
@@ -120,19 +123,20 @@
               </AuthInput>
 
               <AuthInput
-                ref="emailInput"
-                v-model="form.email"
-                label="邮箱"
-                type="email"
-                placeholder="邮箱"
-                autocomplete="email"
-                :error="errors.email"
+                ref="phoneInput"
+                v-model="form.phone"
+                label="手机号"
+                type="tel"
+                placeholder="11 位手机号"
+                inputmode="numeric"
+                autocomplete="username"
+                :error="errors.phone"
                 :disabled="loading"
               >
                 <template #icon>
                   <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                    <polyline points="22,6 12,13 2,6" />
+                    <rect x="6" y="2" width="12" height="20" rx="2" />
+                    <path d="M11 18h2" />
                   </svg>
                 </template>
               </AuthInput>
@@ -155,34 +159,16 @@
                 </template>
               </AuthInput>
 
-              <!-- 手机验证码：先留个空位装上，后端还没有短信接口，所以不参与校验、也不挡提交 -->
-              <AuthInput
-                v-if="isRegister"
-                v-model="form.phoneCode"
-                label="手机验证码"
-                placeholder="手机验证码"
-                autocomplete="one-time-code"
-                inputmode="numeric"
-                maxlength="6"
-                :disabled="loading"
-              >
-                <template #icon>
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
-                    <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6A19.79 19.79 0 012.12 4.18 2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0122 16.92z" />
-                  </svg>
-                </template>
-              </AuthInput>
-
-              <!-- 验证码：输入框 + 画布同高并排 -->
-              <div class="flex items-start gap-3">
+              <div v-if="isRegister" class="flex items-start gap-2">
                 <div class="min-w-0 flex-1">
                   <AuthInput
-                    v-model="form.captcha"
-                    label="验证码"
-                    placeholder="验证码"
-                    autocomplete="off"
-                    maxlength="4"
-                    :error="errors.captcha"
+                    v-model="form.phoneCode"
+                    label="手机验证码"
+                    placeholder="6 位验证码"
+                    autocomplete="one-time-code"
+                    inputmode="numeric"
+                    maxlength="6"
+                    :error="errors.phoneCode"
                     :disabled="loading"
                   >
                     <template #icon>
@@ -193,7 +179,14 @@
                     </template>
                   </AuthInput>
                 </div>
-                <AiLoginCaptcha ref="captchaRef" @generated="onCaptchaGenerated" />
+                <button
+                  type="button"
+                  class="h-12 shrink-0 rounded-full border border-violet-200 bg-white/75 px-3 text-sm font-medium text-indigo-700 hover:border-violet-400 disabled:opacity-60"
+                  :disabled="loading || sendingCode || secondsLeft > 0"
+                  @click="requestCode"
+                >
+                  {{ sendingCode ? '获取中…' : secondsLeft > 0 ? secondsLeft + ' 秒后重试' : '获取验证码' }}
+                </button>
               </div>
 
               <!-- 选项栏 -->
@@ -203,6 +196,7 @@
                   记住账号
                 </label>
                 <button
+                  v-if="!isRegister"
                   type="button"
                   class="text-sm text-indigo-600 transition-opacity hover:opacity-80"
                   @click="onForgotPassword"
@@ -212,7 +206,7 @@
               </div>
 
               <!-- 失败原因 / 中性提示，就地展示 -->
-              <p v-if="notice.text" class="text-xs" :class="notice.tone === 'error' ? 'text-red-600' : 'text-violet-700'">
+              <p v-if="notice.text" role="status" class="text-xs" :class="notice.tone === 'error' ? 'text-red-600' : 'text-violet-700'">
                 {{ notice.text }}
               </p>
 
@@ -226,10 +220,11 @@
               </div>
             </form>
 
-            <p class="mt-8 text-center text-sm text-gray-700">
+            <p class="mt-5 text-center text-sm text-gray-700">
               {{ isRegister ? '已有账号？' : '还没有账号？' }}
               <button
                 type="button"
+                :disabled="loading || sendingCode"
                 class="font-medium text-indigo-600 transition-opacity hover:opacity-80"
                 @click="switchMode(isRegister ? 'login' : 'register')"
               >
@@ -251,229 +246,212 @@ import { useAiChat } from '@/composables/useAiChat'
 import { useApi } from '@/composables/useApi'
 import AuthInput from './AuthInput.vue'
 import AuthButton from './AuthButton.vue'
-import AiLoginCaptcha from './AiLoginCaptcha.vue'
 import AiLoginCharacters from './AiLoginCharacters.vue'
 
 const store = useAiChatStore()
 const userStore = useUserStore()
-const { login, register } = useApi()
-// 登录成功后要靠它把刚才被拦下的那条提问自动重发
+const { login, register, sendRegistrationCode } = useApi()
 const { resendPending } = useAiChat()
 
-/** 「记住账号」只存邮箱，明文密码一律不落盘 */
-const REMEMBER_KEY = 'unicorn.auth.rememberedEmail'
-
+const REMEMBER_KEY = 'unicorn.auth.rememberedPhone'
+const PHONE_RE = /^1[3-9][0-9]{9}$/
 const mode = ref('login')
 const isRegister = computed(() => mode.value === 'register')
 const loading = ref(false)
-/** 任一个输入框聚焦中，驱动角色的「对视」动作 */
+const sendingCode = ref(false)
 const isTyping = ref(false)
 const showPassword = ref(false)
 const remember = ref(true)
+const phoneInput = ref(null)
 
-const form = reactive({ nickname: '', email: '', password: '', phoneCode: '', captcha: '' })
-const errors = reactive({ nickname: '', email: '', password: '', captcha: '' })
+const form = reactive({ nickname: '', phone: '', password: '', phoneCode: '' })
+const errors = reactive({ nickname: '', phone: '', password: '', phoneCode: '' })
 const notice = reactive({ text: '', tone: 'error' })
-
-const emailInput = ref(null)
-const captchaRef = ref(null)
-/** 首帧稳定后再聚焦的延时句柄 */
-let focusTimer = 0
-/**
- * 「这次聚焦是程序自动做的」标记。
- * 弹窗打开时会自动聚焦邮箱框，那不是用户在输入；但 focusin 照样会触发，
- * isTyping 一变 true 角色就切到「打字 / 对视」姿态 —— 小人物会突然大幅前倾 + 右移，
- * 看着就像"鼠标一进来整个人飘走了"，而且会一直保持到输入框失焦为止（=用户点一下才恢复）。
- * focus() 派发 focus 事件是同步的，所以围着它上下夹一下就够了。
- */
+const cooldown = reactive({ phone: '', until: 0 })
+const now = ref(Date.now())
+const secondsLeft = computed(() => form.phone.trim() === cooldown.phone
+  ? Math.max(0, Math.ceil((cooldown.until - now.value) / 1000))
+  : 0)
+let cooldownTimer
 let autoFocusing = false
-/** 当前验证码答案，由子组件通过 generated 事件回传（纯前端本地校验） */
-let captchaCode = ''
-
-/** 与后端 PublicAuthService.register 的正则保持一致，前端先挡一道省掉无效请求 */
-const EMAIL_RE = /^[\w.+-]+@[\w-]+(\.[\w-]+)+$/
 
 function clearErrors() {
   errors.nickname = ''
-  errors.email = ''
+  errors.phone = ''
   errors.password = ''
-  errors.captcha = ''
+  errors.phoneCode = ''
   notice.text = ''
 }
 
-function onCaptchaGenerated(code) {
-  captchaCode = code
-}
-
-function switchMode(next) {
-  mode.value = next
+function resetFormSecrets() {
   form.password = ''
   form.phoneCode = ''
-  form.captcha = ''
   showPassword.value = false
-  clearErrors()
-  captchaRef.value?.refresh()
-}
-
-function onFocusIn(e) {
-  // 程序自动聚焦的那一次不算「用户在打字」
-  if (autoFocusing) return
-  // 只让输入框驱动 isTyping：按钮 / 链接 / 验证码画布获得焦点时不该触发「打字」动作
-  if (e.target?.tagName === 'INPUT') isTyping.value = true
-}
-
-function onFocusOut(e) {
-  if (e.target?.tagName === 'INPUT') isTyping.value = false
-}
-
-/**
- * 关闭弹窗（点遮罩 / 叉 / ESC）。
- * 密码与验证码输入不留在内存里；邮箱保留，方便用户改一处再试。
- */
-function close() {
-  store.closeLoginPrompt()
-  clearTimeout(focusTimer)
-  form.password = ''
-  form.phoneCode = ''
-  form.captcha = ''
-  showPassword.value = false
-  // 输入框随弹窗一起卸载时不一定补发 focusout，这里显式复位，避免下次打开角色还处于「打字」姿态
   isTyping.value = false
   clearErrors()
 }
 
+function switchMode(next) {
+  mode.value = next
+  resetFormSecrets()
+}
+
+function onFocusIn(event) {
+  if (!autoFocusing && event.target?.tagName === 'INPUT') isTyping.value = true
+}
+
+function onFocusOut(event) {
+  if (event.target?.tagName === 'INPUT') isTyping.value = false
+}
+
+function close() {
+  store.closeLoginPrompt()
+  resetFormSecrets()
+}
+
 function onForgotPassword() {
-  // 后端没有找回密码接口（前台认证只有 register / login 两个），所以这里只能如实说明
   notice.tone = 'info'
   notice.text = '暂未开放自助找回，请联系工作室管理员重置密码'
 }
 
+function validatePhone() {
+  const phone = form.phone.trim()
+  errors.phone = PHONE_RE.test(phone) ? '' : '请输入有效的 11 位手机号'
+  return errors.phone ? '' : phone
+}
+
+async function requestCode() {
+  if (loading.value || sendingCode.value || secondsLeft.value > 0) return
+  const phone = validatePhone()
+  if (!phone) return
+
+  sendingCode.value = true
+  notice.text = ''
+  errors.phoneCode = ''
+  const response = await sendRegistrationCode(phone)
+  sendingCode.value = false
+
+  if (response.error || !response.data?.retryAfterSeconds) {
+    if (form.phone.trim() === phone) {
+      notice.tone = 'error'
+      notice.text = response.message || '获取验证码失败，请稍后重试'
+    }
+    return
+  }
+
+  now.value = Date.now()
+  cooldown.phone = phone
+  cooldown.until = now.value + response.data.retryAfterSeconds * 1000
+  clearInterval(cooldownTimer)
+  cooldownTimer = setInterval(() => {
+    now.value = Date.now()
+    if (now.value >= cooldown.until) clearInterval(cooldownTimer)
+  }, 250)
+
+  if (form.phone.trim() === phone) {
+    form.phoneCode = ''
+    notice.tone = 'info'
+    notice.text = '请填写获取到的 6 位验证码，5 分钟内有效'
+  }
+}
+
 async function submit() {
-  if (loading.value) return
+  if (loading.value || sendingCode.value) return
   clearErrors()
 
-  const nickname = form.nickname.trim()
-  const email = form.email.trim()
+  const phone = validatePhone()
+  if (!phone) return
 
-  // 本地校验口径与后端一致：注册要昵称 + 8 位密码；登录只要求非空
-  if (isRegister.value) {
-    if (!nickname || nickname.length > 50) {
-      errors.nickname = '昵称 1-50 字'
-      return
-    }
-    if (form.password.length < 8) {
-      errors.password = '密码至少 8 位'
-      return
-    }
-  } else if (!form.password) {
+  const nickname = form.nickname.trim()
+  if (isRegister.value && (!nickname || nickname.length > 50)) {
+    errors.nickname = '昵称 1-50 字'
+    return
+  }
+  if (!form.password.trim()) {
     errors.password = '请输入密码'
     return
   }
-  if (!EMAIL_RE.test(email)) {
-    errors.email = '邮箱格式不正确'
+  if (isRegister.value && form.password.length < 8) {
+    errors.password = '密码至少 8 位'
     return
   }
-
-  // 验证码不区分大小写；错了就地换一张并清空输入
-  if (!form.captcha || form.captcha.toLowerCase() !== captchaCode.toLowerCase()) {
-    errors.captcha = '验证码错误'
-    form.captcha = ''
-    captchaRef.value?.refresh()
+  if (isRegister.value && new TextEncoder().encode(form.password).length > 72) {
+    errors.password = '密码不能超过 72 字节'
+    return
+  }
+  const code = form.phoneCode.trim()
+  if (isRegister.value && !/^[0-9]{6}$/.test(code)) {
+    errors.phoneCode = '请输入 6 位验证码'
     return
   }
 
   loading.value = true
-  const res = isRegister.value
-    ? await register(nickname, email, form.password)
-    : await login(email, form.password)
+  const response = isRegister.value
+    ? await register(nickname, phone, form.password, code)
+    : await login(phone, form.password)
+  loading.value = false
 
-  if (res.error) {
-    loading.value = false
-    notice.tone = 'error'
-    notice.text = res.message
-    form.captcha = ''
-    captchaRef.value?.refresh()
-    return
-  }
-
-  // 后端注册也直接签发 token（isNew=true），所以注册成功等价于登录成功
-  const token = res.data?.token
+  const token = response.data?.token
   if (!token) {
-    loading.value = false
     notice.tone = 'error'
-    notice.text = '登录响应异常，请稍后重试'
+    notice.text = response.message || '登录响应异常，请稍后重试'
     return
   }
 
   try {
-    if (remember.value) window.localStorage.setItem(REMEMBER_KEY, email)
+    if (remember.value) window.localStorage.setItem(REMEMBER_KEY, phone)
     else window.localStorage.removeItem(REMEMBER_KEY)
   } catch {
-    /* 隐私模式禁用存储：忽略，只是记不住而已 */
+    // 存储不可用时仍可登录。
   }
 
-  userStore.setSession(token, res.data.user)
-  loading.value = false
-  form.password = ''
-  form.phoneCode = ''
-  form.captcha = ''
-  // 把被拦下的那条提问接着问完；没有待重发消息时它只负责关掉弹窗
+  userStore.setSession(token, response.data.user)
+  resetFormSecrets()
   await resendPending()
 }
 
-// 打开时清掉密码与旧报错（邮箱留着），换一张验证码，并把焦点交给第一个可见输入框
-watch(
-  () => store.showLoginPrompt,
-  (open) => {
-    if (!open) return
-    form.password = ''
-    form.phoneCode = ''
-    form.captcha = ''
-    showPassword.value = false
-    clearErrors()
-    // 等 DOM 真的渲染出来再动 ref：v-if 刚为 true 的这一刻子组件还没挂载
-    nextTick(() => {
-      captchaRef.value?.refresh()
-      // 延后聚焦：等弹窗渲染稳定了再把光标放进去（用户一进来就能直接敲）。
-      // 这一下是程序行为，不算用户在输入，所以用 autoFocusing 把 focusin 挡掉 ——
-      // 否则 isTyping 会在弹窗一打开就变 true，角色莫名其妙进入「打字」姿态。
-      clearTimeout(focusTimer)
-      focusTimer = setTimeout(() => {
-        autoFocusing = true
-        emailInput.value?.focus()
-        autoFocusing = false
-      }, 240)
-    })
-  },
-  // 组件随对话面板一起被 v-if 卸载过：重新挂载时弹窗可能本来就是开着的，也得补一次
-  { immediate: true },
-)
+watch(() => form.phone.trim(), () => {
+  form.phoneCode = ''
+  errors.phone = ''
+  errors.phoneCode = ''
+  notice.text = ''
+})
 
-function onKeydown(e) {
-  if (e.key === 'Escape' && store.showLoginPrompt) close()
+watch(() => store.showLoginPrompt, async (open) => {
+  if (!open) return
+  resetFormSecrets()
+  await nextTick()
+  if (!store.showLoginPrompt || window.matchMedia('(any-pointer: coarse)').matches) return
+  autoFocusing = true
+  phoneInput.value?.focus()
+  autoFocusing = false
+}, { immediate: true })
+
+function onKeydown(event) {
+  if (event.key === 'Escape' && store.showLoginPrompt) close()
 }
 
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
-  // 恢复上次记住的邮箱（只恢复邮箱，不恢复密码）
   try {
+    window.localStorage.removeItem('unicorn.auth.rememberedEmail')
     const saved = window.localStorage.getItem(REMEMBER_KEY)
-    if (saved) {
-      form.email = saved
-      remember.value = true
-    }
+    if (PHONE_RE.test(saved || '')) form.phone = saved
   } catch {
-    /* 存储不可用：忽略 */
+    // 存储不可用时继续使用空表单。
   }
 })
 
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
-  clearTimeout(focusTimer)
+  clearInterval(cooldownTimer)
 })
 </script>
 
 <style scoped>
+.auth-viewport { align-items: start; align-items: safe center; scrollbar-width: none; }
+.auth-viewport::-webkit-scrollbar { display: none; }
+
 /*
   右栏背景 = 淡紫底 + 紫色极光。
 

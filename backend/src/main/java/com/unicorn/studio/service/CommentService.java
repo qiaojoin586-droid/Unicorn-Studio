@@ -1,6 +1,7 @@
 package com.unicorn.studio.service;
 
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.common.CommentThreads;
 import com.unicorn.studio.common.IpUtils;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -63,17 +64,24 @@ public class CommentService {
     public Comment create(String targetType, Long targetId, String content,
                           String guestNickname, Long parentId,
                           PublicUser user, HttpServletRequest request) {
-        if (!TARGET_TYPES.contains(targetType)) {
-            throw BusinessException.badRequest("不支持的评论对象");
-        }
+        validateTarget(targetType, targetId);
         if (content == null || content.isBlank() || content.length() > 1000) {
             throw BusinessException.badRequest("评论内容 1-1000 字");
         }
-        if (user == null && (guestNickname == null || guestNickname.isBlank())) {
-            throw BusinessException.badRequest("游客评论请填写昵称");
+        if (user == null && (guestNickname == null || guestNickname.isBlank() || guestNickname.trim().length() > 50)) {
+            throw BusinessException.badRequest("游客昵称 1-50 字");
         }
-        if (parentId != null && commentMapper.selectById(parentId) == null) {
-            throw BusinessException.badRequest("回复的评论不存在");
+        if (parentId != null) {
+            Comment parent = commentMapper.selectById(parentId);
+            if (parent == null || !targetType.equals(parent.getTargetType())
+                    || !targetId.equals(parent.getTargetId()) || !"approved".equals(parent.getStatus())) {
+                throw BusinessException.badRequest("回复的评论不存在或不属于当前内容");
+            }
+            Comment root = CommentThreads.rootOf(parent, commentMapper::selectById);
+            if (!"approved".equals(root.getStatus())) {
+                throw BusinessException.badRequest("回复的评论尚未公开");
+            }
+            parentId = root.getId();
         }
 
         // 禁言校验
@@ -113,6 +121,7 @@ public class CommentService {
      * 不做边界的话任意取值都能生成新键，把键空间撑成无界。
      */
     public Map<String, Object> listApproved(String targetType, Long targetId, int page, int size) {
+        validateTarget(targetType, targetId);
         if (!cacheable(targetType, targetId, page, size)) {
             return loadApproved(targetType, targetId, page, size);
         }
@@ -129,6 +138,12 @@ public class CommentService {
                 && targetId != null && targetId > 0
                 && page >= 0 && page < MAX_CACHEABLE_PAGE
                 && size >= 1 && size <= MAX_CACHEABLE_SIZE;
+    }
+
+    private static void validateTarget(String targetType, Long targetId) {
+        if (targetType == null || !TARGET_TYPES.contains(targetType) || targetId == null || targetId <= 0) {
+            throw BusinessException.badRequest("评论对象类型或 id 不正确");
+        }
     }
 
     /**

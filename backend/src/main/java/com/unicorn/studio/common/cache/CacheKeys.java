@@ -202,10 +202,10 @@ public final class CacheKeys {
         return "cache:ai:sessions:" + userId + ":*";
     }
 
-    /** 清空对话时失效该会话的全部消息缓存（size 有多种变体，只能按模式删） */
-    public static String aiMessagesPattern(String conversationId) {
-        return "cache:ai:msgs:" + conversationId + ":*";
-    }
+    // ⚠️ 消息缓存键【没有】size 变体（见 AiSessionService.findVisibleMessages，写的就是上面的裸键）。
+    // 因此失效必须走「精确键」cache.evictAfterCommit(aiMessages(conversationId))。
+    // 不要写成 "cache:ai:msgs:{id}:*" 的 pattern：多出的那个冒号会让 SCAN MATCH 匹配不到写键，
+    // 表现为「清空对话后旧消息仍然在」（已修过一次的坑）。
 
     // ---- AI 问答配额（文档 §9.3）----
     // 日期段由调用方格式化传入：过期时间要按自然日/自然月对齐，键名必须自带窗口类型，

@@ -90,8 +90,15 @@ public class AiChatService {
      * @return 增量文本分片流；调用方负责订阅与错误兜底
      * @throws BusinessException 未配置可用模型时抛出（400）
      */
-    public Flux<String> stream(String userMessage, String conversationId,
+    public Flux<String> stream(String userMessage, String requestedConversationId,
                                Long userId, String clientMsgId) {
+        final String conversationId;
+        if (requestedConversationId == null || requestedConversationId.isBlank()) {
+            conversationId = aisessionService.createSession(userId, userMessage).id();
+        } else {
+            aisessionService.requireOwned(requestedConversationId, userId);
+            conversationId = requestedConversationId;
+        }
         // ⓪ 敏感词阻断（文档 §9.1：必须在调用模型之前）。
         // 命中也要落库（status=blocked + 命中词），否则无法审计"谁问了什么违规内容"。
         // ⚠️ 日志只打命中词、绝不打消息全文（§9.2：聊天内容里会有用户主动输入的密码/密钥）。
@@ -107,6 +114,8 @@ public class AiChatService {
         }
         // ①.1 流式计费（文档 §9.1：必须在调用模型之前）
         aiquotaService.consume(userId);
+        // 在本轮消息落库前读取历史，否则本轮提问会同时出现在 history 和 .user() 中。
+        List<ChatMessage> context = new ArrayList<>(memoryProvider.loadContext(conversationId, userId));
         // ①.2 落 user 行（幂等：同 clientMsgId 重发不插第二条）
         Long newMessageId = aisessionService.appendUserMessage(conversationId, userId, userMessage,
                 clientMsgId, "completed", null);
@@ -122,13 +131,20 @@ public class AiChatService {
             //   都是 interrupted，分不出"还在跑"和"早就死了"，用户重发一百次都只得到同一句提示。
             log.info("AI 消息撞幂等键，按新对话继续生成 conversationId={} clientMsgId={}",
                     conversationId, clientMsgId);
+            // 中断后的重试：末尾可能已保留同一条用户消息，只从本次 prompt 中去重。
+            if (!context.isEmpty()) {
+                ChatMessage last = context.get(context.size() - 1);
+                if (ChatMessage.ROLE_USER.equals(last.role()) && userMessage.equals(last.content())) {
+                    context.remove(context.size() - 1);
+                }
+            }
         }
 
         // ② 历史上下文（正序）。⚠️ 走 ChatMemoryProvider 而不是直接调 SessionService：
         //   记忆的截断策略将来可插拔（换实现类即可），这里只负责映射成框架的 Message。
         //   ⚠️ 映射这一步留在本层：记忆层的自有类型 ChatMessage 不依赖模型框架，
         //   将来换模型框架时只有这一行要动。
-        List<Message> history = memoryProvider.loadContext(conversationId, userId).stream()
+        List<Message> history = context.stream()
                 .map(m -> ChatMessage.ROLE_USER.equals(m.role())
                         ? (Message) new UserMessage(m.content())
                         : (Message) new AssistantMessage(m.content()))

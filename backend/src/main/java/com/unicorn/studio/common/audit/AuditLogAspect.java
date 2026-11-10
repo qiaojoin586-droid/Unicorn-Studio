@@ -50,7 +50,7 @@ public class AuditLogAspect {
      * 明文密钥会同时落到 {@code sys_operation_log.params} 与管理端审计文件，属于严重安全问题。
      */
     private static final Set<String> SENSITIVE_KEYS = Set.of(
-            "password", "token", "refreshToken", "oldPassword", "newPassword",
+            "password", "token", "refreshToken", "oldPassword", "newPassword", "phone",
             "apikey", "api_key", "secret", "cryptosecret", "accesskey", "access_key", "authorization");
     private static final String MASKED = "***";
 

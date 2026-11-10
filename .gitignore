@@ -22,8 +22,7 @@ backend/data/
 data/
 **/.env
 
-# 本地开发配置（含真实凭据：DB/Redis 口令、各 JWT/crypto 密钥）—— 绝不入库
-# 模板见 backend/src/main/resources/application-local.yml.example
+# 防止旧版拆分的本地凭据文件被意外提交；当前统一使用 application.yml
 **/application-local.yml
 
 # 数据库迁移产物：数据导出文件含 sys_user 口令散列、AES 加密的 AI Key、

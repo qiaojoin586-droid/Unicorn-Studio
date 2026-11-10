@@ -1,5 +1,7 @@
 <template>
   <div class="about-page">
+    <BackgroundVideo :src="aboutVideo" :poster="aboutPoster" desktop-only sticky />
+
     <section class="page-shell about-intro" aria-labelledby="about-title">
       <div class="about-overline">
         <p v-if="page.eyebrow" class="eyebrow"><span class="signal-dot" aria-hidden="true"></span>{{ page.eyebrow }}</p>
@@ -14,10 +16,6 @@
 
     <section class="page-shell about-story" aria-label="认识独角兽工作室">
       <figure class="about-visual" :class="{ 'about-visual--photo': !!page.imageUrl && !imageFailed }">
-        <div v-if="background" class="about-background">
-          <BackgroundVideo v-if="background.mediaType === 'video'" :src="background.videoUrl" :poster="background.imageUrl" />
-          <img v-else :src="background.imageUrl" alt="" aria-hidden="true" loading="lazy" decoding="async" />
-        </div>
         <span class="visual-corner" aria-hidden="true"></span>
         <img :src="imageSrc" :alt="page.imageUrl && !imageFailed ? '独角兽工作室' : '独角兽工作室品牌标志'" width="1139" height="1164" class="about-visual-image" decoding="async" @error="imageFailed = true" />
         <figcaption class="about-visual-caption"><span>独角兽工作室</span><span>IDEAS INTO REALITY</span></figcaption>
@@ -61,15 +59,15 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { usePageMeta } from '@/composables/usePageMeta'
-import { usePageBackground } from '@/composables/usePageBackground'
 import BackgroundVideo from '@/components/BackgroundVideo.vue'
 import logoUrl from '@/image/LOGO.jpg'
+import aboutVideo from '@/image/home.mp4'
+import aboutPoster from '@/image/home-poster.jpg'
 import SiteLink from '@/components/SiteLink.vue'
 import { usePresentation } from '@/composables/usePresentation'
 const { presentation } = usePresentation()
 const extra = computed(() => presentation.about)
 
-const { background } = usePageBackground('about')
 const { get } = useApi()
 const imageFailed = ref(false)
 const loading = ref(false)
@@ -113,49 +111,58 @@ usePageMeta(() => ({ title: page.title === DEFAULTS.title ? '关于独角兽工�
 </script>
 
 <style scoped>
-.about-page { background: var(--color-paper, #f4f2ec); color: var(--color-ink, #121316); }
-.about-intro { padding-block: clamp(56px, 7vw, 108px) 0; }
+.about-page {
+  position: relative;
+  isolation: isolate;
+  background: #101522;
+  color: #f6f5fb;
+  --about-muted: #e1e1ec;
+  --about-line: #ffffff4d;
+  --about-accent: #ffb1ba;
+  --video-shade: linear-gradient(95deg, #0b1020e0, #0b1020b5 60%, #0b1020ab);
+  --video-position: 55% center;
+}
+.about-page > section { position: relative; z-index: 1; }
+.about-page :deep(.video-toggle) { justify-self: start; }
+.about-intro { padding-block: clamp(56px, 7vw, 108px) 22px; }
 .about-overline { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 48px; }
 .about-overline .eyebrow { display: flex; align-items: center; gap: 10px; margin: 0; }
 .signal-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--color-accent, #c92d3b); flex-shrink: 0; }
-.about-edition { font: 10px/1.5 ui-monospace, monospace; letter-spacing: .08em; color: var(--color-muted-light, #62636a); }
+.about-edition { font: 10px/1.5 ui-monospace, monospace; letter-spacing: .08em; color: var(--about-muted); }
 .about-heading-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 64px; align-items: end; }
 .about-title { font-size: clamp(40px, 5.5vw, 76px); line-height: 1.2; letter-spacing: -.055em; font-weight: 650; margin: 0; max-width: 10em; overflow-wrap: anywhere; text-wrap: balance; }
-.about-subtitle { font-size: clamp(16px, 1.3vw, 18px); line-height: 1.9; color: var(--color-muted-light, #62636a); margin: 0 0 4px; max-width: 29em; }
-.about-rule { display: flex; justify-content: space-between; gap: 20px; margin-top: 52px; padding-block: 18px; border-top: 1px solid #12131625; color: var(--text-on-paper, #62636a); font-size: 12px; }
+.about-subtitle { font-size: clamp(16px, 1.3vw, 18px); line-height: 1.9; color: var(--about-muted); margin: 0 0 4px; max-width: 29em; }
+.about-rule { display: flex; justify-content: space-between; gap: 20px; margin-top: 52px; padding-block: 18px; border-top: 1px solid var(--about-line); color: var(--about-muted); font-size: 12px; }
 .about-rule span:last-child { font: 10px/1.5 ui-monospace, monospace; letter-spacing: .07em; }
 .about-story { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(40px, 7vw, 112px); align-items: center; padding-block: 48px 112px; }
-.about-visual { min-width: 0; margin: 0; aspect-ratio: 1 / 1.08; background: #080808; color: #f4f2ec; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
-.about-background { position: absolute; inset: 0; }
-.about-background > img { width: 100%; height: 100%; object-fit: cover; }
-.about-background > img, .about-background :deep(video), .about-background :deep(img) { opacity: .25; }
-.about-background :deep(.video-toggle) { top: 16px; right: 16px; bottom: auto; z-index: 3; }
+.about-visual { min-width: 0; margin: 0; aspect-ratio: 1 / 1.08; color: #f4f2ec; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
 .about-visual-image { position: relative; width: 75%; height: auto; max-height: 78%; object-fit: contain; }
 .about-visual--photo .about-visual-image { width: 100%; height: 100%; max-height: none; object-fit: cover; }
 .visual-corner { position: absolute; width: 32px; height: 32px; border-top: 1px solid #ffffff60; border-left: 1px solid #ffffff60; top: 24px; left: 24px; z-index: 1; }
-.about-visual-caption { position: absolute; bottom: 0; left: 0; right: 0; padding: 28px 24px 20px; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font-size: 11px; background: linear-gradient(transparent, #080808d9); }
+.about-visual-caption { position: absolute; bottom: 0; left: 0; right: 0; padding: 28px 24px 20px; display: flex; justify-content: space-between; align-items: baseline; gap: 16px; font-size: 11px; }
+.about-visual--photo .about-visual-caption { background: linear-gradient(transparent, #080808d9); }
 .about-visual-caption span:last-child { font: 9px/1.5 ui-monospace, monospace; letter-spacing: .07em; }
 .about-story-copy { min-width: 0; padding-block: 16px; }
-.about-story-label { margin: 0 0 32px; color: var(--text-on-paper, #62636a); }
+.about-story-label { margin: 0 0 32px; color: var(--about-muted); }
 .about-paragraphs p { font-size: clamp(16px, 1.35vw, 19px); line-height: 1.95; margin: 0 0 24px; overflow-wrap: anywhere; }
-.about-paragraphs p + p { color: var(--color-muted-light, #62636a); }
-.about-stats { display: flex; flex-wrap: wrap; gap: 24px 40px; margin: 36px 0; padding-top: 28px; border-top: 1px solid #12131625; }
+.about-paragraphs p + p { color: var(--about-muted); }
+.about-stats { display: flex; flex-wrap: wrap; gap: 24px 40px; margin: 36px 0; padding-top: 28px; border-top: 1px solid var(--about-line); }
 .about-stats > div { min-width: 72px; }
 .about-stats dd { font-size: clamp(28px, 3vw, 44px); font-weight: 600; letter-spacing: -.04em; margin: 0; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.about-stats dt { color: var(--text-on-paper, #62636a); font-size: 12px; margin-top: 8px; }
-.about-text-link { display: inline-flex; min-height: 44px; align-items: center; gap: 32px; margin-top: 16px; font-size: 14px; font-weight: 600; border-bottom: 1px solid #121316; transition: color 160ms, gap 180ms; }
-.about-text-link:hover { color: var(--color-accent, #c92d3b); gap: 40px; }
+.about-stats dt { color: var(--about-muted); font-size: 12px; margin-top: 8px; }
+.about-text-link { display: inline-flex; min-height: 44px; align-items: center; gap: 32px; margin-top: 16px; font-size: 14px; font-weight: 600; border-bottom: 1px solid currentColor; transition: color 160ms, gap 180ms; }
+.about-text-link:hover { color: var(--about-accent); gap: 40px; }
 .about-text-link span { font-size: 23px; }
-.about-source-status { font-size: 12px; color: var(--text-on-paper, #62636a); margin-top: 20px; }
+.about-source-status { font-size: 12px; color: var(--about-muted); margin-top: 20px; }
 .about-source-status button { text-decoration: underline; text-underline-offset: 4px; min-height: 44px; padding-inline: 8px; }
-.about-practice { background: var(--surface-soft, #eae8e1); padding-block: clamp(64px, 7vw, 112px); }
+.about-practice { padding-block: clamp(64px, 7vw, 112px); }
 .about-practice-heading { display: grid; grid-template-columns: .8fr 1.2fr; gap: 32px; align-items: start; margin-bottom: 56px; }
 .about-practice-heading .eyebrow { margin: 10px 0 0; }
 .about-practice-heading .section-title { margin: 0; }
-.practice-item { display: grid; grid-template-columns: .18fr .82fr 1fr; gap: 32px; align-items: baseline; border-top: 1px solid #12131625; padding-block: 28px; }
-.practice-number { font: 12px/1.6 ui-monospace, monospace; color: var(--color-accent, #c92d3b); }
+.practice-item { display: grid; grid-template-columns: .18fr .82fr 1fr; gap: 32px; align-items: baseline; border-top: 1px solid var(--about-line); padding-block: 28px; }
+.practice-number { font: 12px/1.6 ui-monospace, monospace; color: var(--about-accent); }
 .practice-item h3 { margin: 0; font-size: clamp(18px, 1.7vw, 24px); font-weight: 600; letter-spacing: -.025em; }
-.practice-item p { margin: 0; font-size: 15px; line-height: 1.9; color: var(--text-on-paper, #62636a); max-width: 31em; }
+.practice-item p { margin: 0; font-size: 15px; line-height: 1.9; color: var(--about-muted); max-width: 31em; }
 .about-invitation { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; padding-block: clamp(72px, 8vw, 128px); }
 .about-invitation .eyebrow { margin: 0 0 24px; }
 .about-invitation h2 { margin: 0; font-size: clamp(32px, 4.5vw, 60px); line-height: 1.25; font-weight: 600; letter-spacing: -.045em; }

@@ -93,6 +93,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if ("POST".equals(method) && "/api/auth/register".equals(uri)) {
             return !rateLimiter.isAllowed(CacheKeys.rate("register", ip), registerPerHour, Duration.ofHours(1));
         }
+        if ("POST".equals(method) && "/api/auth/register/code".equals(uri)) {
+            return !rateLimiter.isAllowed(CacheKeys.rate("register-code", ip), registerPerHour, Duration.ofHours(1));
+        }
         // 前台登录：IP 10 次/分
         if ("POST".equals(method) && "/api/auth/login".equals(uri)) {
             return !rateLimiter.isAllowed(CacheKeys.rate("auth-login", ip), 10, Duration.ofMinutes(1));

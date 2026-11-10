@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.common.CommentThreads;
 import com.unicorn.studio.common.PageResult;
 import com.unicorn.studio.common.cache.CacheHelper;
 import com.unicorn.studio.common.cache.CacheKeys;
@@ -76,10 +77,14 @@ public class CommentAdminService {
     @Transactional
     public Comment reply(Long id, String content) {
         Comment target = getOrThrow(id);
+        if (content == null || content.isBlank() || content.length() > 1000) {
+            throw BusinessException.badRequest("评论内容 1-1000 字");
+        }
+        Comment root = CommentThreads.rootOf(target, commentMapper::selectById);
         Comment reply = Comment.builder()
                 .targetType(target.getTargetType())
                 .targetId(target.getTargetId())
-                .parentId(target.getId())
+                .parentId(root.getId())
                 .content(content.trim())
                 .status("approved")
                 .build();

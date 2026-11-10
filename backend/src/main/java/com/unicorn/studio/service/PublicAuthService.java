@@ -1,6 +1,9 @@
 package com.unicorn.studio.service;
 
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.common.PhoneNumber;
+import com.unicorn.studio.common.PublicPassword;
 import com.unicorn.studio.common.cache.RevokedTokenStore;
 import com.unicorn.studio.mapper.PublicUserMapper;
 import com.unicorn.studio.model.PublicUser;
@@ -11,6 +14,7 @@ import io.jsonwebtoken.security.Keys;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -24,6 +28,7 @@ import java.util.Date;
 import java.util.HexFormat;
 import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * 前台用户体系（独立于后台 token 体系，不同 secret）：
@@ -47,11 +52,13 @@ public class PublicAuthService {
     private final PublicUserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
     private final RevokedTokenStore revokedTokens;
+    private final RegistrationCodeService registrationCodes;
     private final SecretKey key;
 
     public PublicAuthService(PublicUserMapper userMapper,
                              PasswordEncoder passwordEncoder,
                              RevokedTokenStore revokedTokens,
+                             RegistrationCodeService registrationCodes,
                              @Value("${app.public.jwt-secret:}") String secret) {
         if (secret == null || secret.length() < MIN_SECRET_LENGTH) {
             log.error("PUBLIC_JWT_SECRET 未配置或长度不足 {} 字符，拒绝启动（安全要求）", MIN_SECRET_LENGTH);
@@ -61,44 +68,64 @@ public class PublicAuthService {
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
         this.revokedTokens = revokedTokens;
+        this.registrationCodes = registrationCodes;
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public Map<String, Object> register(String nickname, String email, String password, String ip) {
-        if (email == null || !email.matches("^[\\w.+-]+@[\\w-]+(\\.[\\w-]+)+$")) {
-            throw BusinessException.badRequest("邮箱格式不正确");
-        }
+    public int sendRegistrationCode(String phone) {
+        phone = PhoneNumber.normalize(phone);
+        requireUnregisteredPhone(phone);
+        registrationCodes.send(phone);
+        return RegistrationCodeService.RESEND_SECONDS;
+    }
+
+    public Map<String, Object> register(String nickname, String phone, String password, String code, String ip) {
+        phone = PhoneNumber.normalize(phone);
         if (nickname == null || nickname.isBlank() || nickname.length() > 50) {
             throw BusinessException.badRequest("昵称 1-50 字");
         }
-        if (password == null || password.length() < 8) {
-            throw BusinessException.badRequest("密码至少 8 位");
-        }
-        if (userMapper.existsByEmail(email)) {
-            throw BusinessException.conflict("邮箱已注册");
-        }
+        PublicPassword.validate(password);
+        requireUnregisteredPhone(phone);
+        registrationCodes.verifyAndConsume(phone, code);
         PublicUser user = PublicUser.builder()
                 .nickname(nickname.trim())
-                .email(email.trim().toLowerCase())
+                .phone(phone)
                 .password(passwordEncoder.encode(password))
                 .status(1)
                 .registerIp(ip)
                 .build();
-        userMapper.insert(user);
+        try {
+            userMapper.insert(user);
+        } catch (DuplicateKeyException e) {
+            throw BusinessException.conflict("手机号已注册或绑定");
+        }
         return tokenOf(user, true);
     }
 
-    public Map<String, Object> login(String email, String password) {
-        PublicUser user = userMapper.findByEmail(email.trim().toLowerCase())
-                .orElseThrow(() -> new BusinessException(org.springframework.http.HttpStatus.UNAUTHORIZED, "邮箱或密码错误"));
+    private void requireUnregisteredPhone(String phone) {
+        if (userMapper.existsByPhone(phone)) {
+            throw BusinessException.conflict("手机号已注册或绑定");
+        }
+    }
+
+    public Map<String, Object> login(String phone, String password) {
+        phone = PhoneNumber.normalize(phone);
+        if (password == null || password.isBlank()) {
+            throw BusinessException.badRequest("密码不能为空");
+        }
+        PublicUser user = userMapper.findByPhone(phone)
+                .orElseThrow(() -> new BusinessException(org.springframework.http.HttpStatus.UNAUTHORIZED, "手机号或密码错误"));
         if (!passwordEncoder.matches(password, user.getPassword())) {
-            throw new BusinessException(org.springframework.http.HttpStatus.UNAUTHORIZED, "邮箱或密码错误");
+            throw new BusinessException(org.springframework.http.HttpStatus.UNAUTHORIZED, "手机号或密码错误");
         }
         if (user.getStatus() != null && user.getStatus() == 2) {
             throw new BusinessException(org.springframework.http.HttpStatus.FORBIDDEN, "账号已被注销");
         }
-        user.setLastLoginAt(LocalDateTime.now());
-        userMapper.updateById(user);
+        // 只更新登录时间，避免把查询后已被管理员更新的资料或密码覆盖回去。
+        userMapper.update(null, new LambdaUpdateWrapper<PublicUser>()
+                .set(PublicUser::getLastLoginAt, LocalDateTime.now())
+                .eq(PublicUser::getId, user.getId())
+                .eq(PublicUser::getAuthVersion, user.getAuthVersion()));
         return tokenOf(user, false);
     }
 
@@ -126,7 +153,8 @@ public class PublicAuthService {
             if (user == null || user.getStatus() == null || user.getStatus() == 2) {
                 return null;
             }
-            return user;
+            Long version = claims.get("ver", Long.class);
+            return user.getAuthVersion() == (version == null ? 0L : version) ? user : null;
         } catch (JwtException | IllegalArgumentException e) {
             return null;
         }
@@ -208,14 +236,17 @@ public class PublicAuthService {
     private Map<String, Object> tokenOf(PublicUser user, boolean isNew) {
         Date now = new Date();
         String token = Jwts.builder()
+                // 同一用户在同一秒重新登录也应签发新 token，避免命中上一枚 token 的撤销记录。
+                .id(UUID.randomUUID().toString())
                 .subject(String.valueOf(user.getId()))
+                .claim("ver", user.getAuthVersion())
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + TOKEN_EXPIRE_HOURS * 3600_000L))
                 .signWith(key)
                 .compact();
         return Map.of(
                 "token", token,
-                "user", Map.of("id", user.getId(), "nickname", user.getNickname(), "email", user.getEmail()),
+                "user", Map.of("id", user.getId(), "nickname", user.getNickname(), "phone", user.getPhone()),
                 "isNew", isNew);
     }
 }

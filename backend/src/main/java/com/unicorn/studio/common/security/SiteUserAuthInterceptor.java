@@ -53,9 +53,12 @@ public class SiteUserAuthInterceptor implements HandlerInterceptor {
             throw unauthorized();
         }
 
-        // 注销态兜底：resolveFromHeader 目前只把 status=0（禁言）当游客，status=2 会被它放进来
+        // 已注销的站点账号不能访问受保护的会话接口。
         if (user.getStatus() != null && user.getStatus() == 2) {
             throw unauthorized();
+        }
+        if (Integer.valueOf(0).equals(user.getAiEnabled())) {
+            throw new BusinessException(HttpStatus.FORBIDDEN, "当前账号未开通 AI 助手权限");
         }
 
         return true;

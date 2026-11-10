@@ -27,7 +27,7 @@ export function useApi() {
         signal: options.signal ?? AbortSignal.timeout(DEFAULT_TIMEOUT),
       })
 
-      if (res.status === 401) {
+      if (res.status === 401 && url !== '/api/auth/login') {
         return { error: true, status: 401, message: '请先验证访问权限' }
       }
 
@@ -74,12 +74,16 @@ export function useApi() {
    * 前台站点用户登录/注册（/api/auth/*，与后台 sys_user 是两套体系）。
    * 提前固定好请求体字段名，调用方只传值，避免各处手写 body 写漂。
    */
-  function login(email, password) {
-    return post('/api/auth/login', { email, password })
+  function login(phone, password) {
+    return post('/api/auth/login', { phone, password })
   }
 
-  function register(nickname, email, password) {
-    return post('/api/auth/register', { nickname, email, password })
+  function register(nickname, phone, password, code) {
+    return post('/api/auth/register', { nickname, phone, password, code })
+  }
+
+  function sendRegistrationCode(phone) {
+    return post('/api/auth/register/code', { phone })
   }
 
   /**
@@ -93,5 +97,5 @@ export function useApi() {
     })
   }
 
-  return { request, get, post, del, login, register, logout }
+  return { request, get, post, del, login, register, sendRegistrationCode, logout }
 }

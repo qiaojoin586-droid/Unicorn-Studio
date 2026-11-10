@@ -58,7 +58,7 @@ defineOptions({ inheritAttrs: false })
 
 const props = defineProps({
   modelValue: { type: String, default: '' },
-  /** 仅支持 text / password / email，够登录注册用 */
+  /** HTML 输入类型，密码的显隐由组件控制。 */
   type: { type: String, default: 'text' },
   /** 无可见 <label>，故同时用作 aria-label */
   label: { type: String, default: '' },

@@ -48,8 +48,8 @@
         <div v-if="userMenuOpen" class="user-menu" role="menu">
           <div class="user-menu-head">
             <p class="user-menu-name">{{ userStore.displayName }}</p>
-            <p v-if="userStore.user && userStore.user.email" class="user-menu-mail">
-              {{ userStore.user.email }}
+            <p v-if="userStore.maskedPhone" class="user-menu-phone">
+              {{ userStore.maskedPhone }}
             </p>
           </div>
           <div class="user-menu-sep" />
@@ -90,8 +90,8 @@
           </button>
           <!-- 展开的子菜单：插在列表里（不是浮层），全宽、缩进一级 -->
           <div v-if="userStore.isLoggedIn && mobileUserMenuOpen" class="mobile-user-panel">
-            <p v-if="userStore.user && userStore.user.email" class="mobile-user-mail">
-              {{ userStore.user.email }}
+            <p v-if="userStore.maskedPhone" class="mobile-user-phone">
+              {{ userStore.maskedPhone }}
             </p>
             <button class="mobile-user-action" type="button" @click="onLogout">退出登录</button>
           </div>
@@ -236,7 +236,7 @@ onBeforeUnmount(() => {
 }
 .user-menu-head { padding: 8px 10px 6px; }
 .user-menu-name { margin: 0; font-size: 13px; font-weight: 600; color: var(--header-text); }
-.user-menu-mail { margin: 3px 0 0; font-size: 11px; color: var(--color-muted-dark); word-break: break-all; }
+.user-menu-phone { margin: 3px 0 0; font-size: 11px; color: var(--color-muted-dark); word-break: break-all; }
 .user-menu-sep { height: 1px; margin: 4px 6px; background: var(--color-line); }
 .user-menu-item {
   display: block;
@@ -319,7 +319,7 @@ onBeforeUnmount(() => {
   padding: 16px 0 8px;
   border-bottom: 1px solid var(--header-line-soft);
 }
-.mobile-user-mail {
+.mobile-user-phone {
   margin: 0 0 12px;
   font-size: 13px;
   color: var(--color-muted-dark);
