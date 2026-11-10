@@ -14,20 +14,6 @@ server:
     min-response-size: 1024
 
 spring:
-  # ==================== Spring AI（AI 助手模块）====================
-  # 模型实例在运行时由 AIWorker.ChatClientFactory 按数据库配置手动构建，
-  # 不使用 starter 的自动装配，故在此排除全部自动配置的模型 Bean。
-  # 必须排除的原因：这些自动配置会强制校验 spring.ai.openai.api-key，
-  # 而本项目的 key 存在数据库（禁止在配置文件里放第二份明文），会导致启动失败。
-  # 已同时在 UnicornStudioApplication 的 exclude 属性中声明（双保险）。
-  autoconfigure:
-    exclude:
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
   # 上传体积上限（V11 支持动态壁纸时补齐）：
   # 此前未配置 spring.servlet.multipart，Spring Boot 默认 max-file-size=1MB，
   # 导致超过 1MB 的图片/文档在进入 FileService 之前就被 Servlet 层拒绝
