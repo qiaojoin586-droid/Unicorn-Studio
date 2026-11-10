@@ -34,7 +34,7 @@ public class CommentService {
 
     private static final Set<String> TARGET_TYPES = Set.of("work", "news");
 
-    /** 公开评论列表 TTL：与 {@code app.cache.ttl.comment} 的 5 min 对齐（先审后发，5 min 延迟可接受） */
+    /** 公开评论列表 TTL 为 5 分钟。 */
     private static final Duration CACHE_TTL = Duration.ofMinutes(5);
 
     /**

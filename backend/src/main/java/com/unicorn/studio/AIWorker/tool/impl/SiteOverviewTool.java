@@ -1,8 +1,6 @@
 package com.unicorn.studio.AIWorker.tool.impl;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.AIWorker.tool.AiTool;
-import com.unicorn.studio.AIWorker.tool.AiToolDefinition;
 import com.unicorn.studio.AIWorker.tool.support.AiToolSupport;
 import com.unicorn.studio.AIWorker.tool.support.SiteUrls;
 import com.unicorn.studio.admin.service.AboutPageService;
@@ -14,6 +12,7 @@ import com.unicorn.studio.vo.FooterVO;
 import com.unicorn.studio.vo.JoinPageVO;
 import com.unicorn.studio.vo.ServiceItemVO;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -37,31 +36,23 @@ public class SiteOverviewTool implements AiTool {
     private final FooterService footerService;
     private final ServiceItemService serviceItemService;
     private final JoinPageService joinPageService;
-    private final ObjectMapper mapper;
     private final SiteUrls siteUrls;
 
     public SiteOverviewTool(AboutPageService aboutService, FooterService footerService,
                             ServiceItemService serviceItemService, JoinPageService joinPageService,
-                            ObjectMapper mapper, SiteUrls siteUrls) {
+                            SiteUrls siteUrls) {
         this.aboutService = aboutService;
         this.footerService = footerService;
         this.serviceItemService = serviceItemService;
         this.joinPageService = joinPageService;
-        this.mapper = mapper;
         this.siteUrls = siteUrls;
     }
 
-    @Override
-    public AiToolDefinition definition() {
-        return AiToolDefinition.noArgs("site_overview",
-                "获取独角兽工作室的基本信息：工作室简介、正在招收的方向、如何加入我们、"
-                        + "联系方式与主要页面入口（页面地址是完整网址，可直接给访客点击）。"
-                        + "当用户询问「你们是做什么的」「怎么联系你们」「在哪里」「招人吗」「怎么加入」时优先调用。"
-                        + "不要用它查具体作品或学习资料（那是 work_list / learning_list 的职责）。");
-    }
-
-    @Override
-    public String invoke(String argumentsJson) {
+    @Tool(name = "site_overview", description = "获取独角兽工作室的基本信息：工作室简介、正在招收的方向、如何加入我们、"
+            + "联系方式与主要页面入口（页面地址是完整网址，可直接给访客点击）。"
+            + "当用户询问「你们是做什么的」「怎么联系你们」「在哪里」「招人吗」「怎么加入」时优先调用。"
+            + "不要用它查具体作品或学习资料（那是 work_list / learning_list 的职责）。")
+    public Map<String, Object> siteOverview() {
         Map<String, Object> data = new LinkedHashMap<>();
         try {
             AboutPageVO about = aboutService.load();
@@ -89,10 +80,10 @@ public class SiteOverviewTool implements AiTool {
             }
         } catch (Exception e) {
             // ⚠️ 整个工具返回错误，不吞异常：联系方式缺失比工具报错更容易误导访客
-            return AiToolSupport.error(mapper, "internal",
+            return AiToolSupport.error("internal",
                     "读取工作室信息失败，请稍后再试", null, true);
         }
-        return AiToolSupport.ok(mapper, data);
+        return AiToolSupport.ok(data);
     }
 
     /**

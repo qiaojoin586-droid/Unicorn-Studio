@@ -22,49 +22,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 
-/**
- * 启动时把「日志到底写到哪」显式打出来。
- *
- * <h2>要解决的判定难题：日志文件不见了，但现场一切正常</h2>
- * {@code logging.file.path} 默认值是 {@code ./logs} —— <b>相对 JVM 工作目录</b>解析
- * （Spring Boot 的 {@code LogFile.applyTo()} 把这个字符串原样发布成系统属性 {@code LOG_PATH}，
- * 不做绝对化，logback 拿到的就是 {@code ./logs}）。
- * <p>
- * 本地 {@code java -jar} / IDEA Run 的工作目录恰好是项目根，于是日志落在项目里，看起来没问题；
- * 换到 Docker / systemd 之后工作目录一变（或挂载点与它不一致），日志就落到别处 ——
- * 而<b>这个过程是完全静默的</b>：logback 成功创建目录、成功写入文件，没有任何错误可言，
- * 唯一的现象就是「你去看的那个目录里没有日志」。
- *
- * <h2>实测结论（2026-09-27，Boot 3.3.5，务必先读）</h2>
- * 本类的失败分支在实践中几乎不可达，因为<b>目录不可写时应用根本起不来</b>：
- * logback 在配置阶段启动 appender 失败 → Spring Boot 的
- * {@code LogbackLoggingSystem.reportConfigurationErrorsIfNecessary()} 直接抛
- * {@code IllegalStateException} 终止启动，控制台会打出完整堆栈：
- * <pre>
- * Logging system failed to initialize using configuration from 'null'
- * java.lang.IllegalStateException: Logback configuration error detected:
- * ERROR in RollingFileAppender[INFO_FILE] - Failed to create parent directories for [.../info/2026-09-27/app-info.log.0]
- * ...
- * ERROR o.s.boot.SpringApplication : Application run failed
- * </pre>
- * 也就是说：<b>「容器能正常提供服务但没有日志」只可能是路径错位，不可能是权限问题</b>
- * ——权限问题会让容器根本 Up 不起来（在 {@code --restart always} 下表现为反复重启）。
- * 这条判据能把排查范围直接砍一半，故在此类里也顺带把落点印出来供对照。
- *
- * <h2>为什么读 logback 自己的配置而不是复刻解析规则</h2>
- * 直接遍历 logback 的 appender 取 {@code fileNamePattern}，拿到的是<b>属性已解析后</b>
- * logback 真正会用的模板（{@code ./logs/info/%d{yyyy-MM-dd}/app-info.log.%i} 这种），
- * 比在代码里再算一遍「相对路径按工作目录展开」更权威、也不会随 logback 版本漂移。
- *
- * <h2>为什么输出走 System.err</h2>
- * prod profile 下 CONSOLE appender 是刻意不挂载的（见 logback-spring.xml），
- * {@code docker logs} 里本来就什么都没有；而这行信息恰恰是要在 {@code docker logs}
- * 里被看到的。{@code System.err} 由容器主进程直接持有 fd 2，与 logback 的健康状态无关，
- * 是唯一不依赖日志系统本身的输出通道。
- *
- * <h2>容错</h2>
- * 任何异常都只记一条日志、<b>绝不阻断启动</b> —— 与 {@link UploadIntegrityCheck} 同一取向。
- */
+
 @Component
 @Order(Integer.MAX_VALUE)
 public class LoggingPathCheck implements ApplicationRunner {

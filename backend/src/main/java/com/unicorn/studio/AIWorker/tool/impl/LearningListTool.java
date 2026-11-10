@@ -1,11 +1,11 @@
 package com.unicorn.studio.AIWorker.tool.impl;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.AIWorker.tool.AiTool;
-import com.unicorn.studio.AIWorker.tool.AiToolDefinition;
 import com.unicorn.studio.AIWorker.tool.support.AiToolSupport;
 import com.unicorn.studio.service.LearningService;
 import com.unicorn.studio.vo.LearningCardVO;
+import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -27,37 +27,20 @@ public class LearningListTool implements AiTool {
     private static final int MAX_LIMIT = 10;
 
     private final LearningService learningService;
-    private final ObjectMapper mapper;
 
-    public LearningListTool(LearningService learningService, ObjectMapper mapper) {
+    public LearningListTool(LearningService learningService) {
         this.learningService = learningService;
-        this.mapper = mapper;
     }
 
-    @Override
-    public AiToolDefinition definition() {
-        return AiToolDefinition.withParams("learning_list",
-                "列出/筛选工作室的学习资料（标题、分类、标签、简介、是否需要附件）。"
-                        + "当用户问「有没有 XX 的学习资料」「教程」「文档」「资源推荐」时优先调用本工具。",
-                List.of(
-                        // 输入参数的规格说明，每个参数占一行
-                        AiToolDefinition.Param.optional("category", AiToolDefinition.ParamType.STRING,
-                                "资料分类，如「前端」「后端」"),
-                        AiToolDefinition.Param.optional("keyword", AiToolDefinition.ParamType.STRING,
-                                "在资料标题/简介/标签里做关键词匹配"),
-                        AiToolDefinition.Param.optional("limit", AiToolDefinition.ParamType.INTEGER,
-                                "返回条数，默认 8，上限 10")));
-    }
-
-    @Override
-    public String invoke(String argumentsJson) {
-        Map<String, String> args = AiToolSupport.parseArgs(argumentsJson, mapper);
-        // 获取类别参数
-        String category = AiToolSupport.stringArg(args, "category");
-        // 获取关键词参数
-        String keyword = AiToolSupport.stringArg(args, "keyword");
-        // 获取返回条数限制参数
-        int limit = AiToolSupport.intArg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT);
+    @Tool(name = "learning_list", description = "列出/筛选工作室的学习资料（标题、分类、标签、简介、是否需要附件）。"
+            + "当用户问「有没有 XX 的学习资料」「教程」「文档」「资源推荐」时优先调用本工具。")
+    public Map<String, Object> learningList(
+            @ToolParam(description = "资料分类，如「前端」「后端」", required = false) String category,
+            @ToolParam(description = "在资料标题/简介/标签里做关键词匹配", required = false) String keyword,
+            @ToolParam(description = "返回条数，默认 8，上限 10", required = false) Integer limit) {
+        category = AiToolSupport.textArg(category);
+        keyword = AiToolSupport.textArg(keyword);
+        int maxItems = AiToolSupport.boundedLimit(limit, DEFAULT_LIMIT, MAX_LIMIT);
 
         // ⚠️ 一次性取回全部（带 30min 缓存），过滤在内存里做
         // 把资料列表全部取回，在内存里过滤，这样可以避免频繁数据库查询
@@ -81,7 +64,7 @@ public class LearningListTool implements AiTool {
             // 统计匹配的资料数
             matched++;
             // ⚠️ continue 不能 break：break 会让后面的不再计数，total 就变成"本页条数"了
-            if (items.size() >= limit) {
+            if (items.size() >= maxItems) {
                 continue;
             }
             Map<String, Object> item = new LinkedHashMap<>();
@@ -105,7 +88,7 @@ public class LearningListTool implements AiTool {
         // 匹配的资料总数，不是本页条数，本页有数量限制
         data.put("total", matched);
         data.put("items", items);
-        return AiToolSupport.ok(mapper, data);
+        return AiToolSupport.ok(data);
     }
 
     /** 关键词在标题/简介/标签里任一命中即可。⚠️ 不区分大小写：模型可能传「Vue」而库里是「vue」。 */

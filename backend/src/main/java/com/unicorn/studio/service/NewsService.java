@@ -26,7 +26,7 @@ public class NewsService {
     private static final Duration LIST_TTL = Duration.ofMinutes(30);
 
     /**
-     * 详情 TTL：与 {@code app.cache.ttl.detail} 的 60 min 对齐。
+     * 详情 TTL 为 60 分钟。
      * <p>
      * 与作品详情不同，{@link NewsDetailVO} <b>不含 viewCount</b>（浏览量只做计数、不回显），
      * 因此这里可以放心用长 TTL —— 不存在「浏览量被缓存冻结」的问题。

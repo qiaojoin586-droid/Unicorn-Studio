@@ -1,23 +1,23 @@
 package com.unicorn.studio.AIWorker.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.unicorn.studio.AIWorker.entity.AiToolConfig;
 import com.unicorn.studio.AIWorker.mapper.AiToolConfigMapper;
-import com.unicorn.studio.AIWorker.tool.AiTool;
-import com.unicorn.studio.AIWorker.tool.AiToolDefinition;
+import com.unicorn.studio.AIWorker.tool.AiToolRegistry;
 import com.unicorn.studio.AIWorker.tool.ToolFingerprint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
-import java.util.List;
 
 /**
- * 内置工具启动时同步入库（§11.2「① 内置工具：fingerprint 由代码里的 definition() 计算，
+ * 内置工具启动时同步入库（§11.2「① 内置工具：fingerprint 由 @Tool 生成的定义计算，
  * 启动时同步入库，同时置 enabled=1、confirmed_at=NOW()」）。
  * <p>
  * <b>为什么必须同步</b>：后台的工具列表（§6.5 接口 6）要能看到"在跑的工具 + 熔断倒计时"。
@@ -28,11 +28,11 @@ public class BuiltinToolSyncService {
 
     private static final Logger log = LoggerFactory.getLogger(BuiltinToolSyncService.class);
 
-    private final List<AiTool> tools;
+    private final AiToolRegistry registry;
     private final AiToolConfigMapper configMapper;
 
-    public BuiltinToolSyncService(List<AiTool> tools, AiToolConfigMapper configMapper) {
-        this.tools = tools;
+    public BuiltinToolSyncService(AiToolRegistry registry, AiToolConfigMapper configMapper) {
+        this.registry = registry;
         this.configMapper = configMapper;
     }
 
@@ -59,11 +59,7 @@ public class BuiltinToolSyncService {
     @Transactional
     public int doSync() {
         int count = 0;
-        for (AiTool tool : tools) {
-            AiToolDefinition def = tool.definition();
-            if (def == null || def.name() == null || def.name().isBlank()) {
-                continue;
-            }
+        for (ToolDefinition def : registry.builtinDefinitions()) {
             AiToolConfig cfg = findByName(def.name());
             String fingerprint = ToolFingerprint.of(def.name(), def.description(), def.inputSchema());
             if (cfg == null) {
@@ -76,8 +72,13 @@ public class BuiltinToolSyncService {
             // 跟后端一起 mvn package，不存在"外部改动"这条路径；
             // 若让它等管理员点确认，换来的是纯负面后果——升级后新工具集体静默不生效。
             if (!fingerprint.equals(cfg.getFingerprint())) {
-                applyDefinition(cfg, def, fingerprint);
-                configMapper.updateById(cfg);
+                // 只更新代码定义，保留后台保存的启停、优先级和其他配置。
+                configMapper.update(null, new LambdaUpdateWrapper<AiToolConfig>()
+                        .set(AiToolConfig::getDescription, def.description())
+                        .set(AiToolConfig::getParamSchema, def.inputSchema())
+                        .set(AiToolConfig::getFingerprint, fingerprint)
+                        .set(AiToolConfig::getConfirmedAt, LocalDateTime.now())
+                        .eq(AiToolConfig::getId, cfg.getId()));
                 log.info("AI 内置工具 [{}] 的定义有变化，已同步更新指纹", def.name());
             }
             count++;
@@ -92,7 +93,7 @@ public class BuiltinToolSyncService {
     }
 
     /** 新建一行内置工具的记录。 */
-    private AiToolConfig newRow(AiToolDefinition def, String fingerprint) {
+    private AiToolConfig newRow(ToolDefinition def, String fingerprint) {
         AiToolConfig cfg = new AiToolConfig();
         cfg.setToolName(def.name());
         cfg.setToolType("builtin");
@@ -111,17 +112,4 @@ public class BuiltinToolSyncService {
         return cfg;
     }
 
-    /**
-     * 把代码里的最新定义覆盖到已有记录上。
-     * <p>
-     * ⚠️ <b>只覆盖"代码说了算的字段"</b>：描述 / 参数 Schema / 指纹 / 确认时间。
-     * {@code enabled} / {@code priority} / {@code scope} / {@code timeout_ms}
-     * 归运营管 —— 管理员在后台关掉某个内置工具，同步不该把它又打开。
-     */
-    private void applyDefinition(AiToolConfig cfg, AiToolDefinition def, String fingerprint) {
-        cfg.setDescription(def.description());
-        cfg.setParamSchema(def.inputSchema());
-        cfg.setFingerprint(fingerprint);
-        cfg.setConfirmedAt(LocalDateTime.now());
-    }
 }

@@ -1,5 +1,6 @@
 package com.unicorn.studio.AIWorker.tool;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.AIWorker.entity.AiToolInvocation;
 import com.unicorn.studio.AIWorker.mapper.AiToolInvocationMapper;
@@ -9,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
+import org.springframework.ai.tool.method.MethodToolCallback;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -24,7 +26,7 @@ import java.util.Map;
  * </ol>
  * 三道判断都在<b>真正执行之前</b>，所以被拦下时<b>不产生副作用</b>——不会白发一次 HTTP 请求。
  * <p>
- * ⚠️ <b>为什么这些判断不能放在 {@code AiTool.invoke()} 里</b>：那是工具实现自己的代码，
+ * ⚠️ <b>为什么这些判断不能放在各工具方法里</b>：那是工具实现自己的代码，
  * 每个工具都得写一遍、且新人加工具时极易漏。放在装饰器里是<b>一次接线、全局生效</b>。
  */
 public class BudgetedToolCallback implements ToolCallback {
@@ -121,7 +123,7 @@ public class BudgetedToolCallback implements ToolCallback {
 
         // ④ 真执行。⚠️ 兜住"工具自己抛的"，但放过程序错误
         try {
-            result = delegate.call(argumentsJson);
+            result = invokeTool(argumentsJson);
             breaker.onSuccess(toolName);
             status = statusOf(result);
         } catch (ToolGuardException e) {
@@ -147,6 +149,25 @@ public class BudgetedToolCallback implements ToolCallback {
         }
         audit(toolName, argumentsJson, status, result.length(), start);
         return result;
+    }
+
+    private String invokeTool(String argumentsJson) {
+        if (!(delegate instanceof MethodToolCallback)) {
+            return delegate.call(argumentsJson);
+        }
+        String input = argumentsJson == null || argumentsJson.isBlank() || "null".equals(argumentsJson.trim())
+                ? "{}" : argumentsJson;
+        try {
+            return delegate.call(input);
+        } catch (NumberFormatException | ArithmeticException e) {
+            // Spring AI 在调用方法前转换整数参数。
+            throw ToolGuardException.invalidArgument(null, "请按工具定义传入整数参数");
+        } catch (IllegalStateException e) {
+            if (e.getCause() instanceof JsonProcessingException) {
+                throw ToolGuardException.invalidArgument(null, "工具参数必须是合法的 JSON 对象");
+            }
+            throw e;
+        }
     }
 
     /**

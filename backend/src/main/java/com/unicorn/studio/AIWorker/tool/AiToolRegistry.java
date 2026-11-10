@@ -7,15 +7,15 @@ import com.unicorn.studio.AIWorker.mapper.AiToolConfigMapper;
 import com.unicorn.studio.AIWorker.mapper.AiToolInvocationMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.ai.support.ToolCallbacks;
 import org.springframework.ai.tool.ToolCallback;
 import org.springframework.ai.tool.definition.ToolDefinition;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -24,7 +24,7 @@ import java.util.Map;
  * <p>
  * <b>两路来源</b>：
  * <ol>
- *   <li><b>内置工具</b>：代码里的 {@link AiTool} 实现（{@code @Component} 扫到），
+ *   <li><b>内置工具</b>：代码里的 {@link AiTool} Bean，其 {@code @Tool} 方法转为回调，
  *       描述来自代码、不存在被外部篡改的可能 ⇒ scope 固定 {@code public}
  *       （§11.4："站点用户路径只装配 scope='public' 的工具（即内置只读工具）"）；</li>
  *   <li><b>API 工具</b>：{@code ai_tool_config} 里 {@code tool_type='api'} 的行，
@@ -66,7 +66,7 @@ public class AiToolRegistry {
     private static final String EMPTY_SCHEMA = "{\"type\":\"object\",\"properties\":{},\"required\":[]}";
 
     private final boolean toolsEnabled;
-    private final Map<String, AiTool> tools = new LinkedHashMap<>();
+    private final List<ToolCallback> builtinTools;
 
     private final AiToolConfigMapper configMapper;
     private final ApiToolInvoker apiInvoker;
@@ -87,31 +87,19 @@ public class AiToolRegistry {
         this.breaker = breaker;
         this.mapper = mapper;
         this.auditMapper = auditMapper;
-        if (candidates != null) {
-            for (AiTool tool : candidates) {
-                if (!tool.enabled()) {
-                    log.info("AI 工具 [{}] 已注册但当前禁用（enabled=false）", name(tool));
-                    continue;
-                }
-                String n = name(tool);
-                if (tools.containsKey(n)) {
-                    log.warn("AI 工具名称重复 [{}]，后者覆盖前者，请检查实现类命名", n);
-                }
-                tools.put(n, tool);
-            }
-        }
-        log.info("AI 工具层初始化完成：候选 {} 个，可用 {} 个，装配开关 app.ai.tools.enabled={}",
-                candidates == null ? 0 : candidates.size(), tools.size(), toolsEnabled);
+        this.builtinTools = candidates.isEmpty() ? List.of() : List.of(ToolCallbacks.from(candidates.toArray()));
+        log.info("AI 工具层初始化完成：内置工具 {} 个，装配开关 app.ai.tools.enabled={}",
+                builtinTools.size(), toolsEnabled);
     }
 
+    /** 后台同步使用与模型调用相同的定义。 */
+    public List<ToolDefinition> builtinDefinitions() {
+        return builtinTools.stream().map(ToolCallback::getToolDefinition).toList();
+    }
 
     /** 已注册的内置工具名列表（供后台/诊断查看）。 */
     public List<String> registeredNames() {
-        return new ArrayList<>(tools.keySet());
-    }
-
-    public boolean isEmpty() {
-        return tools.isEmpty();
+        return builtinDefinitions().stream().map(ToolDefinition::name).toList();
     }
 
     /**
@@ -133,20 +121,20 @@ public class AiToolRegistry {
         List<Candidate> candidates = new ArrayList<>();
         // ⚠️ 内置工具在表里的配置一次查完（每个工具查一次表 ⇒ 每轮 6~7 次多余查询）
         Map<String, AiToolConfig> builtinCfg = builtinConfig();
-        for (AiTool tool : tools.values()) {
-            AiToolDefinition def = tool.definition();
-            AiToolConfig cfg = builtinCfg.get(def.name());
+        for (ToolCallback tool : builtinTools) {
+            String name = tool.getToolDefinition().name();
+            AiToolConfig cfg = builtinCfg.get(name);
             // ⚠️ 表里的 enabled 也要生效：管理员在后台停用了某个内置工具 ⇒ 后端就不该再装配它。
             // ⚠️ 以前这里没判 ⇒ 后台的开关改了没反应（表里的 enabled 对内置工具是摆设）。
             // ⚠️ 表里没有这一行（同步没跑过 / 表被清空）⇒ 默认启用（代码为准），
             //    否则一次查表失败就让所有内置工具集体消失。
             if (cfg != null && cfg.getEnabled() != null && cfg.getEnabled() != 1) {
-                log.info("AI 工具 [{}] 已被后台停用（ai_tool_config.enabled=0），本轮不装配", def.name());
+                log.info("AI 工具 [{}] 已被后台停用（ai_tool_config.enabled=0），本轮不装配", name);
                 continue;
             }
             // ⚠️ priority 也读表里的：运营在后台调优先级对内置工具也要有效
             int priority = cfg != null && cfg.getPriority() != null ? cfg.getPriority() : DEFAULT_PRIORITY;
-            candidates.add(new Candidate(def, AiToolConfig.SCOPE_PUBLIC, priority, adapt(tool)));
+            candidates.add(new Candidate(tool, AiToolConfig.SCOPE_PUBLIC, priority));
         }
         if (candidates.size() > MAX_BUILTIN) {
             log.warn("AI 内置工具数量 {} 超过配额 {}（§11.4），本轮只装配前 {} 个",
@@ -160,7 +148,7 @@ public class AiToolRegistry {
             log.warn("AI API 工具数量 {} 超过配额 {}（§11.4），本轮只装配前 {} 个：被截断的工具：{}",
                     apiList.size(), MAX_API, MAX_API,
                     apiList.subList(MAX_API, apiList.size()).stream()
-                            .map(c -> c.definition().name()).toList());
+                            .map(Candidate::name).toList());
             apiList = new ArrayList<>(apiList.subList(0, MAX_API));
         }
         candidates.addAll(apiList);
@@ -172,12 +160,12 @@ public class AiToolRegistry {
                 visible.add(c);
             } else {
                 log.debug("AI 工具 [{}] 的 scope={} 不适用于调用者 {}，本轮不装配",
-                        c.definition().name(), c.scope(), caller.invokerType());
+                        c.name(), c.scope(), caller.invokerType());
             }
         }
 
         // ③ priority 升序（同名按工具名兜底，保证顺序稳定、可复现）
-        visible.sort(Comparator.comparingInt(Candidate::priority).thenComparing(c -> c.definition().name()));
+        visible.sort(Comparator.comparingInt(Candidate::priority).thenComparing(Candidate::name));
 
         // ④ 单轮上限 12：被截断的必须记 WARN（§11.4：不要静默截断）
         List<Candidate> selected = visible;
@@ -187,13 +175,13 @@ public class AiToolRegistry {
                             + "被截断的工具：{}。若这些工具本该被用上，请调低其 priority 或调高上限",
                     visible.size(), MAX_PER_ROUND,
                     visible.subList(MAX_PER_ROUND, visible.size()).stream()
-                            .map(c -> c.definition().name()).toList());
+                            .map(Candidate::name).toList());
         }
 
         // ⑤ 跳过熔断中的工具（§11.5：熔断期间该工具不装配）
         List<ToolCallback> callbacks = new ArrayList<>(selected.size());
         for (Candidate c : selected) {
-            String toolName = c.definition().name();
+            String toolName = c.name();
             if (breaker.isOpen(toolName)) {
                 log.warn("AI 工具 [{}] 处于熔断状态（剩余 {}s），本轮不装配",
                         toolName, breaker.remainingSeconds(toolName));
@@ -245,16 +233,10 @@ public class AiToolRegistry {
                             cfg.getToolName());
                     continue;
                 }
-                String schema = cfg.getParamSchema();
-                if (schema == null || schema.isBlank()) {
-                    // 没写 Schema ⇒ 退化成"接受任意参数"，否则模型传什么都解析不了
-                    schema = EMPTY_SCHEMA;
-                }
                 result.add(new Candidate(
-                        new AiToolDefinition(cfg.getToolName(), cfg.getDescription(), schema),
+                        apiCallback(cfg, caller),
                         cfg.getScope(),
-                        cfg.getPriority() == null ? DEFAULT_PRIORITY : cfg.getPriority(),
-                        apiCallback(cfg, caller)));
+                        cfg.getPriority() == null ? DEFAULT_PRIORITY : cfg.getPriority()));
             }
         } catch (Exception e) {
             // ⚠️ 查表失败不能让整轮对话挂掉：退化成"只有内置工具"
@@ -263,7 +245,6 @@ public class AiToolRegistry {
         return result;
     }
 
-    /** API 工具的回调：闭包捕获配置与调用者，执行交给 {@link ApiToolInvoker}。 */
     /**
      * 内置工具在表里的配置（工具名 → 配置行），一次查完。
      * <p>
@@ -283,16 +264,18 @@ public class AiToolRegistry {
         }
     }
 
+    /** API 工具从数据库构建定义，执行交给 {@link ApiToolInvoker}。 */
     private ToolCallback apiCallback(AiToolConfig cfg, AiToolCaller caller) {
+        String schema = cfg.getParamSchema();
+        ToolDefinition definition = ToolDefinition.builder()
+                .name(cfg.getToolName())
+                .description(cfg.getDescription())
+                .inputSchema(schema == null || schema.isBlank() ? EMPTY_SCHEMA : schema)
+                .build();
         return new ToolCallback() {
             @Override
             public ToolDefinition getToolDefinition() {
-                String schema = cfg.getParamSchema();
-                return ToolDefinition.builder()
-                        .name(cfg.getToolName())
-                        .description(cfg.getDescription())
-                        .inputSchema(schema == null || schema.isBlank() ? EMPTY_SCHEMA : schema)
-                        .build();
+                return definition;
             }
 
             @Override
@@ -303,34 +286,9 @@ public class AiToolRegistry {
         };
     }
 
-    /** 装配候选：描述 + scope + priority（排序，通过定义priority把可靠的工具放前面，减少误选） + 已造好的回调。 */
-    private record Candidate(AiToolDefinition definition, String scope, int priority, ToolCallback callback) {
-    }
-
-    /** 把与框架无关的工具适配为 Spring AI 的 ToolCallback。 */
-    private ToolCallback adapt(AiTool tool) {
-        AiToolDefinition def = tool.definition();
-        return new ToolCallback() {
-            @Override
-            public ToolDefinition getToolDefinition() {
-                return ToolDefinition.builder()
-                        .name(def.name())
-                        .description(def.description())
-                        .inputSchema(def.inputSchema())
-                        .build();
-            }
-
-            @Override
-            public String call(String argumentsJson) {
-                return tool.invoke(argumentsJson);
-            }
-        };
-    }
-
-    private static String name(AiTool tool) {
-        AiToolDefinition def = tool.definition();
-        return def == null || def.name() == null || def.name().isBlank()
-                ? tool.getClass().getSimpleName()
-                : def.name();
+    private record Candidate(ToolCallback callback, String scope, int priority) {
+        String name() {
+            return callback.getToolDefinition().name();
+        }
     }
 }

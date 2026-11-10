@@ -1,5 +1,7 @@
 # 本地库 → 服务器 MySQL 全量迁移手册
 
+> AI 工具入口（V20）：已有 `ai_tool_config` 和 `ai_tool_invocation` 的库若缺少「AI 工具」菜单，执行 `V20-ai-tool-permissions.sql` 补齐权限。导入不含这些权限的旧版 `02-data.sql` 后也需执行。超级管理员获得查看、编辑和测试权限，内容编辑默认只有查看权限。执行后等待权限缓存更新并刷新管理端。
+
 > 主站用户编辑升级（V23）：已有库在 V22 之后执行 `V23-public-user-edit.sql`，导入旧数据后同样需执行。超级管理员默认获得 `user:edit`，也可通过角色管理分配给其他管理员。
 
 > 主站手机号登录升级（V22）：已有库执行 `V22-public-user-phone.sql`，全新库使用 `01-schema-full.sql`。如果还要导入旧版 `02-data.sql`，导入后再执行 V22，补回被旧导出覆盖的绑定权限。旧用户可由拥有 `user:bind-phone` 权限的管理员核实身份后在用户详情绑定手机号。

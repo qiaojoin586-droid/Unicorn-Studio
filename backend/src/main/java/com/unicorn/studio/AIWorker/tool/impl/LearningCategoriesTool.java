@@ -1,11 +1,9 @@
 package com.unicorn.studio.AIWorker.tool.impl;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.AIWorker.tool.AiTool;
-import com.unicorn.studio.AIWorker.tool.AiToolDefinition;
 import com.unicorn.studio.AIWorker.tool.support.AiToolSupport;
 import com.unicorn.studio.admin.service.LearningCategoryService;
-import com.unicorn.studio.model.LearningCategory;
+import org.springframework.ai.tool.annotation.Tool;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -23,23 +21,15 @@ import java.util.Map;
 public class LearningCategoriesTool implements AiTool {
 
     private final LearningCategoryService categoryService;
-    private final ObjectMapper mapper;
 
-    public LearningCategoriesTool(LearningCategoryService categoryService, ObjectMapper mapper) {
+    public LearningCategoriesTool(LearningCategoryService categoryService) {
         this.categoryService = categoryService;
-        this.mapper = mapper;
     }
 
-    @Override
-    public AiToolDefinition definition() {
-        return AiToolDefinition.noArgs("learning_categories",
-                "列出学习资料的分类及每个分类下的资料数量。"
-                        + "当用户问「都有哪些方面的资料」「有前端相关的吗」但没有明确关键词时，"
-                        + "先调本工具给出分类清单，再由用户选择。");
-    }
-
-    @Override
-    public String invoke(String argumentsJson) {
+    @Tool(name = "learning_categories", description = "列出学习资料的分类及每个分类下的资料数量。"
+            + "当用户问「都有哪些方面的资料」「有前端相关的吗」但没有明确关键词时，"
+            + "先调本工具给出分类清单，再由用户选择。")
+    public Map<String, Object> learningCategories() {
         Map<String, Object> data = new LinkedHashMap<>();
         List<Map<String, Object>> categories = new ArrayList<>();
         long total = 0;
@@ -71,6 +61,6 @@ public class LearningCategoriesTool implements AiTool {
         // 添加资料总数
         // ⚠️ total 是各分类资料数之和（不是分类个数）：模型要能答"一共有多少份资料"
         data.put("total", total);
-        return AiToolSupport.ok(mapper, data);
+        return AiToolSupport.ok(data);
     }
 }

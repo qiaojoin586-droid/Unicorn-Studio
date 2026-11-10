@@ -1,11 +1,11 @@
 package com.unicorn.studio.AIWorker.tool.impl;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.AIWorker.tool.AiTool;
-import com.unicorn.studio.AIWorker.tool.AiToolDefinition;
 import com.unicorn.studio.AIWorker.tool.support.AiToolSupport;
 import com.unicorn.studio.service.NewsService;
 import com.unicorn.studio.vo.NewsCardVO;
+import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.ai.tool.annotation.ToolParam;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -27,30 +27,18 @@ public class NewsListTool implements AiTool {
     private static final int MAX_LIMIT = 10;
 
     private final NewsService newsService;
-    private final ObjectMapper mapper;
 
-    public NewsListTool(NewsService newsService, ObjectMapper mapper) {
+    public NewsListTool(NewsService newsService) {
         this.newsService = newsService;
-        this.mapper = mapper;
     }
 
-    @Override
-    public AiToolDefinition definition() {
-        return AiToolDefinition.withParams("news_list",
-                "列出工作室已发布的新闻/动态卡片（标题、slug、分类、摘要、发布时间）。"
-                        + "当用户问「最近有什么动态」「新闻」「活动」时调用。",
-                List.of(
-                        AiToolDefinition.Param.optional("category", AiToolDefinition.ParamType.STRING,
-                                "新闻分类，如「工作室动态」「学术活动」"),
-                        AiToolDefinition.Param.optional("limit", AiToolDefinition.ParamType.INTEGER,
-                                "返回条数，默认 5，上限 10")));
-    }
-
-    @Override
-    public String invoke(String argumentsJson) {
-        Map<String, String> args = AiToolSupport.parseArgs(argumentsJson, mapper);
-        String category = AiToolSupport.stringArg(args, "category");
-        int limit = AiToolSupport.intArg(args, "limit", DEFAULT_LIMIT, MAX_LIMIT);
+    @Tool(name = "news_list", description = "列出工作室已发布的新闻/动态卡片（标题、slug、分类、摘要、发布时间）。"
+            + "当用户问「最近有什么动态」「新闻」「活动」时调用。")
+    public Map<String, Object> newsList(
+            @ToolParam(description = "新闻分类，如「工作室动态」「学术活动」", required = false) String category,
+            @ToolParam(description = "返回条数，默认 5，上限 10", required = false) Integer limit) {
+        category = AiToolSupport.textArg(category);
+        int maxItems = AiToolSupport.boundedLimit(limit, DEFAULT_LIMIT, MAX_LIMIT);
 
         // 获取新闻列表
         // ⚠️ 现在返回卡片 VO（同样是不让 MEDIUMTEXT 正文随列表整列进内存）
@@ -61,7 +49,7 @@ public class NewsListTool implements AiTool {
         for (NewsCardVO n : source) {
             matched++;
             // ⚠️ continue 不能 break：break 会让后面的不再计数，total 就变成"本页条数"了
-            if (items.size() >= limit) {
+            if (items.size() >= maxItems) {
                 continue;
             }
             Map<String, Object> item = new LinkedHashMap<>();
@@ -77,6 +65,6 @@ public class NewsListTool implements AiTool {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("total", matched);
         data.put("items", items);
-        return AiToolSupport.ok(mapper, data);
+        return AiToolSupport.ok(data);
     }
 }

@@ -252,16 +252,16 @@ public class AiConfigService {
             return "模型名不存在：请核对模型名是否与供应商文档一致";
         }
         if (connectTimeout) {
-            return "连接超时：后端无法连接 AI 接口，请检查 API URL、网络及 AI_HTTP_PROXY 代理配置";
+            return "连接超时：请检查 API URL 及后端能否访问 AI 接口；若已配置代理，请确认代理可用";
         }
         if (responseTimeout || lower.contains("timeout") || lower.contains("timed out")) {
-            return "请求超时：AI 接口未在时限内返回，请稍后重试；若使用代理，请检查 AI_HTTP_PROXY 配置";
+            return "请求超时：AI 接口未在时限内返回，请稍后重试";
         }
         if (unknownHost) {
-            return "域名解析失败：请检查 API URL、DNS 及代理设置";
+            return "域名解析失败：请检查 API URL 和 DNS 设置";
         }
         if (tlsFailure) {
-            return "TLS 连接失败：请检查服务器证书、系统时间及代理设置";
+            return "TLS 连接失败：请检查服务器证书及系统时间";
         }
         if (connectionFailure || lower.contains("connection") || lower.contains("connect") || lower.contains("unknownhost")
                 || lower.contains("nodename")) {

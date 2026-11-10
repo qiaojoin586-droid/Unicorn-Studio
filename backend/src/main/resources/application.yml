@@ -1,5 +1,4 @@
 server:
-  port: 8080
   address: 127.0.0.1
   # HTTP 响应压缩（B-14）：此前 server 段只有 port/address，compression 默认关闭，
   # 所有 JSON 以明文传输。后台列表接口、仪表盘汇总、站点配置等高度可压缩的文本收益明显。
@@ -41,12 +40,10 @@ spring:
         await-termination-period: 60s
   datasource:
     url: jdbc:mysql://127.0.0.1:3306/unicorn_studio?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    driver-class-name: com.mysql.cj.jdbc.Driver
     username: root
     password: 123456
 
-    type: com.alibaba.druid.pool.DruidDataSource
-    druid:   # 使用德鲁伊是为了防止SQL注入
+    druid:
       initial-size: 2
       min-idle: 5
       # 连接数 10 → 20（B-06）：此前 200 个 Tomcat 工作线程抢 10 个连接，
@@ -71,28 +68,21 @@ spring:
   data:
     redis:
       host: localhost
-      port: 6379
-      password:
-      database: 0   # 使用0号库
-      timeout: 300ms  # 连接超时时间
+      timeout: 300ms  # Redis 命令超时
       connect-timeout: 200ms
       lettuce:
         pool:
           max-active: 16
-          max-idle: 8
           min-idle: 2
           max-wait: 200ms
 
 # MyBatis Plus
 mybatis-plus:
   configuration:
-    map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   global-config:
     banner: false
     db-config:
-      id-type: auto
-      db-type: mysql
       # 全列更新（等价 JPA save 语义）：允许显式置 null 的清字段场景（登出清 token/解锁/解禁）。
       # 约定：update 路径必须先 selectById 加载完整实体再改字段；个别字段可用 @TableField(updateStrategy = NOT_NULL) 局部覆盖
       update-strategy: ignored
@@ -114,9 +104,9 @@ app:
     # 生产环境请用 APP_CORS_ORIGIN_PATTERNS 显式收窄，设为空串则仅按 allowed-origins 精确匹配。
     allowed-origin-patterns: ${APP_CORS_ORIGIN_PATTERNS:http://localhost:[*],http://127.0.0.1:[*]}
   ai:
-    # AI 请求专用 HTTP 代理（HTTPS 目标通过 CONNECT 隧道访问）；留空时使用 JVM 默认代理策略。
-    # Windows 的系统代理不会被 Java 默认继承，需要时显式设置，例如 http://127.0.0.1:7890。
-    http-proxy: '${AI_HTTP_PROXY:http://127.0.0.1:9674}'
+    # 仅在部署环境需要代理访问 AI 服务时设置，例如 http://127.0.0.1:7890。
+    # 留空使用 JVM 默认网络策略。
+    http-proxy: '${AI_HTTP_PROXY:}'
     # ==================== AI 助手（com.unicorn.studio.AIWorker，基于 Spring AI）====================
     # 记忆（§10 预留契约）：带入模型的历史轮数。
     # ⚠️ 这是【上下文窗口】不是【历史】：历史全量落库（90 天清理），记忆只取最近几轮，
@@ -135,8 +125,6 @@ app:
     # 保留天数固定 90，不进后台可调列表：可调 = 多一个出错面（误设成 7 天，用户历史突然消失）。
     history-cleanup:
       retention-days: ${AI_HISTORY_RETENTION_DAYS:90}
-      # 单批删除行数，与 RetentionService.BATCH_SIZE 一致
-      batch-size: 2000
       # 默认每日 04:30，错开既有定时任务：01:00 统计 / 02:00 备份 / 03:00 封禁清理 / 03:30 数据保留。
       # ⚠️ 不要挪到 03:45 —— 距 retention 的 03:30 只差 15 分钟，两者共用 Druid 池（max-active 20）。
       cron: ${AI_HISTORY_CLEANUP_CRON:0 30 4 * * *}
@@ -206,7 +194,6 @@ app:
   admin:
     # 后台管理 JWT/账号配置；jwt-secret 为空时 JwtService 拒绝启动
     jwt-secret: '${ADMIN_JWT_SECRET:2oxbUQO2mn77QvjZA0Y6nlAhDU7k5XFAGXit7AWQw2vCk}'
-    jwt-expire-hours: 2
     refresh-expire-days: ${ADMIN_JWT_REFRESH_EXPIRE_DAYS:7}
     # 初始密码为空时由 AdminBootstrap 生成随机密码并打印日志（仅本地开发）
     init-password: ${ADMIN_INIT_PASSWORD:}
@@ -231,12 +218,6 @@ app:
     # 单轮最多删除行数，防止首次接入时一次性删空历史数据造成长事务/主从延迟
     max-delete-per-run: ${RETENTION_MAX_DELETE:50000}
   ratelimit:
-    login-per-minute: 5
-    register-per-hour: 10
-    comment-per-minute: 10
-    guest-comment-per-hour: 10
-    message-per-hour: 5
-    stats-per-minute: 60
     # AI 对话（/api/ai/chat）：每次调用产生真实外部 API 费用，按 §3.4 C6① 限流。
     # ⚠️ 这是【用户维度】的上限（按 userId 计），IP 维度是它的 3 倍（见 RateLimitFilter）。
     #   用户维度 15 次/分：正常人一分��问 15 个问题已经远超实际使用量，
@@ -258,22 +239,6 @@ app:
     namespace: ${CACHE_NAMESPACE:}
     warmup:
       enabled: ${CACHE_WARMUP_ENABLED:true}
-    ttl:
-      site: 30m
-      content: 30m
-      detail: 60m
-      comment: 5m
-      dashboard: 60s
-      user: 5m
-      permission: 10m
-      null-marker: 60s
-      views-dirty: 7d
-    null-marker:
-      enabled: true
-    jitter-ratio: 0.10
-    circuit-breaker:
-      failure-threshold: 10
-      open-duration: 30s
 
 # ==================== 运维可观测性（B-19 / S-6）====================
 # 为什么需要：改动前后没有量化基线，收益无法证明、回归无法发现。
@@ -298,20 +263,13 @@ management:
         #   shutdown —— 远程关停能力，没有任何场景需要它
         include: health,metrics,threaddump,loggers
   health:
-    # 关掉邮件健康指示器：本项目的 SMTP 是【明确可选】的
-    # （application.yml 的 spring.mail 段自述「不配置 SMTP_* 则留言回复不发送邮件」），
-    # 但 Boot 的 MailHealthIndicator 在 host 为空时会判定为 DOWN，
-    # 从而把一个可选功能的缺失渲染成「整个应用不健康」——实测就是这样：
-    # DB 与 Redis 全绿，聚合状态却是 DOWN，该端点因此失去监控价值。
+    # 邮件通知可选。健康状态由核心依赖决定，即使 SMTP 已配置也不探测邮件服务器。
     mail:
       enabled: false
   endpoint:
     health:
       # 不对外暴露依赖细节（哪个库连不上、版本号等），只给聚合状态
       show-details: never
-    # 指标端点默认关闭全部「写」能力
-    loggers:
-      enabled: true
   metrics:
     # 给 HTTP 指标打上 URI 标签，便于按接口看 P95/P99
     tags:
@@ -337,7 +295,6 @@ logging:
   # 可通过 LOGGING_CHARSET_CONSOLE 显式覆盖；文件日志始终使用 UTF-8。
   charset:
     console: ${stdout.encoding:${native.encoding:UTF-8}}
-    file: UTF-8
   level:
     com.unicorn.studio: INFO
     # 接口访问日志（[ACCESS] 行）走独立 logger，见 AccessLogFilter 类注释。
