@@ -6,6 +6,7 @@
          v-if="store.isOpen"，对话面板关闭时整棵子树不渲染，顶部导航的「登录」就点不动了。
          本组件只依赖 Pinia store（useAiChatStore / useAiChat），与父子关系无关，挪上来无影响。 -->
     <AiLoginPrompt />
+    <AiConfirmDialog />
   </div>
 </template>
 
@@ -13,4 +14,5 @@
 import AiAvatar from './AiAvatar.vue'
 import AiChatDialog from './AiChatDialog.vue'
 import AiLoginPrompt from './AiLoginPrompt.vue'
+import AiConfirmDialog from './AiConfirmDialog.vue'
 </script>

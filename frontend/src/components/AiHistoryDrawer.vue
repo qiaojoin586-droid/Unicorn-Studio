@@ -84,10 +84,11 @@
                 {{ s.messageCount }} 条 · {{ relativeTime(s.lastActiveAt) }}
               </p>
             </button>
-            <!-- 清空：悬浮出现，点击走二次确认（§8.2 + §7.1 文案要求） -->
+            <!-- 保持入口可见，触屏和键盘用户都能删除自己的对话。 -->
             <button
               type="button"
-              class="opacity-0 group-hover:opacity-100 focus:opacity-100 transition p-1.5 text-[var(--ai-panel-muted)] hover:text-red-400"
+              :disabled="store.clearing"
+              class="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-[var(--ai-panel-muted)] transition hover:bg-red-400/10 hover:text-red-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-400 disabled:cursor-not-allowed disabled:opacity-50"
               title="清空对话"
               aria-label="清空对话"
               @click.stop="onAskClear(s)"
@@ -201,7 +202,7 @@ async function onPick(s) {
 }
 
 function onNewChat() {
-  store.startNewSession()
+  store.startNewSession({ clearHistory: false })
   emit('close')
 }
 

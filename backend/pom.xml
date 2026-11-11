@@ -183,8 +183,8 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <!-- @{...} 是 surefire 的延迟求值语法，用于引用本插件之外产生的属性 -->
-                    <argLine>-javaagent:@{net.bytebuddy:byte-buddy-agent:jar}</argLine>
+                    <!-- Mockito agent 的版本沿用 Spring Boot，路径跟随 Maven 本地仓库。 -->
+                    <argLine>"-javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/${byte-buddy.version}/byte-buddy-agent-${byte-buddy.version}.jar"</argLine>
                 </configuration>
             </plugin>
         </plugins>

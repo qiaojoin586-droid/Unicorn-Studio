@@ -81,9 +81,6 @@
           <AiHistoryDrawer v-if="store.drawerOpen" @close="store.closeDrawer()" />
 
         <div class="ai-conversation relative flex flex-1 min-w-0 min-h-0 flex-col overflow-hidden">
-          <!-- 清空失败提示（就地展示；前台没有 toast 组件） -->
-          <p v-if="clearNotice" class="px-4 pt-2 text-xs text-red-400">{{ clearNotice }}</p>
-
           <!-- Messages area -->
           <div
             ref="messagesContainer"
@@ -109,7 +106,7 @@
 
             <!-- Streaming message（同样走 Markdown 渲染，边流边排版） -->
             <div v-if="store.streamingText" class="flex gap-3">
-              <BrandMark class="ai-symbol ai-symbol-sm mt-0.5" aria-hidden="true" />
+              <AiMessageAvatar class="mt-0.5" />
               <!-- 气泡样式必须与 ChatMessage 的 assistant 分支保持一致（含 text-gray-200），
                    否则流式阶段文字会继承默认黑色，在深色气泡上变成「一片黑框」。 -->
               <div class="bg-[var(--ai-field-bg)] border border-[var(--ai-panel-line)] text-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%] min-w-0">
@@ -120,7 +117,7 @@
 
             <!-- Thinking indicator -->
             <div v-if="store.isLoading && !store.streamingText" class="flex gap-3">
-              <BrandMark class="ai-symbol ai-symbol-sm" aria-hidden="true" />
+              <AiMessageAvatar />
               <div class="bg-[var(--ai-field-bg)] border border-[var(--ai-panel-line)] rounded-2xl rounded-tl-sm px-4 py-3">
                 <div class="flex gap-1">
                   <span class="w-2 h-2 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0ms" />
@@ -148,7 +145,7 @@
             @send="handleSend"
             @stop="stopStream"
             :loading="store.isLoading"
-            :disabled="store.isLoading"
+            :disabled="store.isLoading || store.clearing"
           />
 
         </div>
@@ -208,19 +205,14 @@ import { useAiChat } from '@/composables/useAiChat'
 import { renderMarkdown, hardenLinks } from '@/composables/useMarkdown'
 import { useResizablePanel } from '@/composables/useResizablePanel'
 import ChatMessage from './ChatMessage.vue'
+import AiMessageAvatar from './AiMessageAvatar.vue'
 import ChatInput from './ChatInput.vue'
   import BrandMark from './BrandMark.vue'
 import AiHistoryDrawer from './AiHistoryDrawer.vue'
 
 const store = useAiChatStore()
-const { streamChat, stopStream, openHistory, clearSession } = useAiChat()
+const { streamChat, stopStream, openHistory, loadAssistantAppearance } = useAiChat()
 
-/**
- * 操作失败提示（就地展示）。
- * ⚠️ 前台没有 UI 库（只有 vue/vue-router/pinia/tailwind）⇒ 没有 ElMessage/toast，
- *    跟登录弹窗（AiLoginPrompt）用同一套路：在原地显示一行文字。
- */
-const clearNotice = ref('')
 const messagesContainer = ref(null)
 const streamingBody = ref(null)
 const dialogPanel = ref(null)
@@ -263,6 +255,7 @@ const {
   panelStyle,
   startPairDrag,
   startResize,
+  stopInteractions,
   toggleDefaultSize,
   resetToDefault,
   attach,
@@ -286,33 +279,48 @@ const RESIZE_HANDLES = [
 
 // 流式文本同样走 Markdown 渲染，避免「流式阶段是纯文本、结束后才变格式」的跳变。
 //
-// W-07 方案 B（rAF 尾沿节流）：原先用 computed，每个 SSE 分片都会把【累积全文】重跑一遍
-// marked.parse + DOMPurify.sanitize 并整块替换 v-html 的 DOM，一段 2000 字回答 = 几百次
-// 全量解析 + DOM 重建，越到后面越卡（O(n²)）。节流后：
-//   - 距上次渲染已超过 THROTTLE_MS → 立即渲染（首片、以及稀疏分片无额外延迟）；
-//   - 窗口内 → 合并到下一个动画帧，只在最后一帧真正渲染（尾沿）。
-// 回调里实时读 store.streamingText 而不是闭包捕获，因此永远不会写入过期内容。
+// 首片立即显示；连续分片至少间隔100ms才解析累计全文，末次更新不会因后续分片而推迟。
+// 定时器等待剩余间隔，再在 rAF 中更新；仅合并到「下一帧」无法保证100ms的解析间隔。
+// 结束/停止时完整正文由 ChatMessage 显示；关闭面板时取消解析，重新打开再读取最新全文。
 const streamingHtml = ref('')
 const THROTTLE_MS = 100
 let streamRafId = 0
-let lastRenderAt = 0
+let streamTimer = 0
+let lastRenderAt = -Infinity
+
+function cancelStreamingRender() {
+  clearTimeout(streamTimer)
+  cancelAnimationFrame(streamRafId)
+  streamTimer = 0
+  streamRafId = 0
+}
 
 function flushStreamingHtml() {
-  streamRafId = 0
+  cancelStreamingRender()
+  if (!store.isOpen) return
   lastRenderAt = performance.now()
   streamingHtml.value = renderMarkdown(store.streamingText)
 }
 
 watch(
-  () => store.streamingText,
-  () => {
-    if (performance.now() - lastRenderAt >= THROTTLE_MS) {
-      cancelAnimationFrame(streamRafId)
+  () => [store.streamingText, store.isOpen],
+  ([text, open], previous) => {
+    if (!text || !open) {
+      cancelStreamingRender()
+      streamingHtml.value = ''
+      lastRenderAt = -Infinity
+      return
+    }
+    const elapsed = performance.now() - lastRenderAt
+    if (!previous?.[0] || !previous?.[1] || elapsed >= THROTTLE_MS) {
       flushStreamingHtml()
       return
     }
-    cancelAnimationFrame(streamRafId)
-    streamRafId = requestAnimationFrame(flushStreamingHtml)
+    if (streamTimer || streamRafId) return
+    streamTimer = setTimeout(() => {
+      streamTimer = 0
+      streamRafId = requestAnimationFrame(flushStreamingHtml)
+    }, THROTTLE_MS - elapsed)
   },
   { immediate: true },
 )
@@ -328,20 +336,16 @@ function handleSend(message) {
  *    （用户看到的现象就是"清空了又回来了"）。
  * ⚠️ <b>为什么清完要丢掉 sessionId</b>：软删只标记消息、会话行还在（§7.3），
  *    若继续用旧 sessionId，下一条消息会写回那个已被清空的会话 ⇒ 它又"复活"了。
- *    clearSession 成功后已经调了 store.startNewSession()，这里不用重复做。
+ *    确认框调用 clearSession，成功后重置当前会话并保留其余历史。
  */
-async function handleClear() {
+function handleClear() {
   if (!store.sessionId) {
     // 还没发过消息 ⇒ 没有会话可清
     store.clearMessages()
     return
   }
-  const ok = await clearSession(store.sessionId)
-  if (!ok) {
-    clearNotice.value = '清空失败，请稍后重试'
-    return
-  }
-  clearNotice.value = ''
+  store.openConfirm(store.sessions.find((session) => session.id === store.sessionId)
+    || { id: store.sessionId, title: '当前对话' })
 }
 
 /** 双击角把手 → 在默认/放大尺寸间切换；边把手不参与（避免误触） */
@@ -357,16 +361,11 @@ function onMessagesScroll() {
 }
 
 watch(
-  () => [store.messages.length, store.streamingText],
+  () => [store.messages.length, streamingHtml.value],
   async () => {
     await nextTick()
     const el = messagesContainer.value
-    // W-07：改用 scrollTo + behavior:'auto'。原先裸赋 scrollTop，而消息容器的
-    // scroll-behavior 是 smooth，于是每个分片都会重新触发一次平滑滚动动画并立刻被
-    // 下一片打断，表现为「追着滚但一卡一卡」。模板里的平滑滚动类已一并移除；
-    // 这里仍显式写 behavior:'auto'，避免将来有人把它加回来时再次踩坑。
-    // （注意：注释里不要再出现那个样式类名 —— Tailwind 的提取器会把注释里的字符串
-    //   也当作候选类名，凭空生成一段用不到的死 CSS。）
+    // 跟随已渲染的正文更新，避免每个原始分片都读取滚动尺寸；上翻阅读时保持位置。
     if (el && stickToBottom.value) el.scrollTo({ top: el.scrollHeight, behavior: 'auto' })
   },
 )
@@ -407,6 +406,7 @@ watch(
   () => store.isOpen,
   (open) => {
     if (open) {
+      void loadAssistantAppearance()
       returnFocus = document.querySelector('[data-ai-trigger]') || document.activeElement
       syncCompact()
       syncBackground()
@@ -415,6 +415,7 @@ watch(
         focusDialog()
       })
     } else {
+      stopInteractions()
       window.removeEventListener('keydown', onKeydown)
       syncBackground()
       if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus({ preventScroll: true })
@@ -423,6 +424,7 @@ watch(
 )
 
 onMounted(() => {
+  if (store.isOpen) void loadAssistantAppearance()
   attach()
   syncCompact()
   window.addEventListener('resize', syncCompact, { passive: true })
@@ -434,8 +436,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', syncCompact)
   for (const el of document.querySelectorAll('#main-content, .site-header, .site-footer, [data-ai-icon]')) el.inert = false
   document.body.classList.remove('ai-modal-open')
-  // 取消挂起的节流帧，避免卸载后仍触发一次渲染
-  cancelAnimationFrame(streamRafId)
+  cancelStreamingRender()
 })
 </script>
 <style scoped>

@@ -200,9 +200,11 @@ class LoggingConfigurationTest {
     }
 
     private ConfigurableApplicationContext start(String... extraArgs) {
-        List<String> args = new ArrayList<>(List.of(
-                "--spring.config.location=classpath:/application.yml",
-                "--LOG_DIR=" + logDir));
+        List<String> args = new ArrayList<>(List.of("--spring.config.location=classpath:/application.yml"));
+        // 使用 Boot 的标准文件名覆盖，测试始终隔离在临时目录，不依赖部署文件的路径写法。
+        if (List.of(extraArgs).stream().noneMatch(arg -> arg.startsWith("--logging.file.name="))) {
+            args.add("--logging.file.name=" + logDir.resolve("app.log"));
+        }
         args.addAll(List.of(extraArgs));
         return newApplication().run(args.toArray(String[]::new));
     }

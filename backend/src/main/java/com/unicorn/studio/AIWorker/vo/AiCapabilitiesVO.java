@@ -15,7 +15,8 @@ public record AiCapabilitiesVO(String name,
                                boolean available,
                                boolean streaming,
                                List<String> tools,
-                               String model) {
+                               String model,
+                               String messageAvatarUrl) {
 
     public static final String ASSISTANT_NAME = "小独角兽";
 }

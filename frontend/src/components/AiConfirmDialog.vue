@@ -24,9 +24,12 @@
         ></div>
 
         <div
+          ref="dialog"
           role="alertdialog"
           aria-modal="true"
           aria-labelledby="ai-clear-title"
+          aria-describedby="ai-clear-description"
+          :aria-busy="store.clearing"
           class="relative w-full max-w-[380px] overflow-hidden rounded-2xl border border-[var(--ai-panel-line)] bg-gray-900/95 shadow-2xl shadow-black/50 backdrop-blur-xl"
         >
           <!-- 顶部一条红→透明细线：不用更多颜色就点明"这是个不可逆操作" -->
@@ -55,16 +58,19 @@
               <svg class="mt-px h-3.5 w-3.5 shrink-0 text-amber-300/70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
               </svg>
-              <p class="text-[12px] leading-relaxed text-amber-50/70">
+              <p id="ai-clear-description" class="text-[12px] leading-relaxed text-amber-50/70">
                 清空只是把这段对话<strong class="font-medium text-amber-100/90">从你的列表中移除</strong>；
                 为满足平台内容合规要求，记录会在服务端保留最多 90 天后自动删除。
               </p>
             </div>
 
+            <p v-if="clearError" role="alert" class="mt-3 text-sm text-red-300">{{ clearError }}</p>
             <div class="mt-5 flex justify-end gap-2">
               <button
+                ref="cancelButton"
                 type="button"
-                class="rounded-full border border-white/15 px-4 py-1.5 text-[13px] text-[var(--ai-panel-muted)] transition hover:bg-white/10"
+                :disabled="store.clearing"
+                class="min-h-11 rounded-full border border-white/15 px-4 text-[13px] text-[var(--ai-panel-muted)] transition hover:bg-white/10 disabled:opacity-50"
                 @click="store.closeConfirm()"
               >
                 取消
@@ -72,7 +78,7 @@
               <button
                 type="button"
                 :disabled="store.clearing"
-                class="rounded-full bg-red-500/90 px-4 py-1.5 text-[13px] font-medium text-[var(--ai-panel-text)] transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
+                class="min-h-11 rounded-full bg-red-500/90 px-4 text-[13px] font-medium text-[var(--ai-panel-text)] transition hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60"
                 @click="onConfirm"
               >
                 {{ store.clearing ? '清空中…' : '确认清空' }}
@@ -86,7 +92,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
 import { useAiChatStore } from '@/stores/aiChat'
 import { useAiChat } from '@/composables/useAiChat'
 
@@ -94,17 +100,38 @@ const store = useAiChatStore()
 const { clearSession } = useAiChat()
 
 const targetTitle = computed(() => store.confirmTarget?.title || '当前对话')
+const clearError = ref('')
+const dialog = ref(null)
+const cancelButton = ref(null)
+let previousFocus = null
+
+watch(() => store.confirmTarget?.id, async (id) => {
+  clearError.value = ''
+  if (id) {
+    previousFocus = document.activeElement
+    await nextTick()
+    cancelButton.value?.focus()
+  } else {
+    await nextTick()
+    const target = previousFocus?.isConnected ? previousFocus : document.querySelector('[aria-label="历史对话"]')
+    target?.focus()
+  }
+})
 
 async function onConfirm() {
   const id = store.confirmTarget?.id
-  if (!id) return
+  if (!id || store.clearing) return
+  clearError.value = ''
   store.clearing = true
   try {
     const done = await clearSession(id)
-    store.confirmTarget = null
-    if (!done) {
-      store.historyError = '清空失败，请稍后重试'
+    if (done || store.showLoginPrompt) {
+      store.confirmTarget = null
+    } else {
+      clearError.value = '清空失败，请稍后重试'
     }
+  } catch {
+    clearError.value = '网络连接失败，请重试；对话尚未删除'
   } finally {
     store.clearing = false
   }
@@ -115,9 +142,26 @@ async function onConfirm() {
  * 否则按 ESC 会先把整个对话框关掉，而不是只关这个确认框。
  */
 function onKeydown(e) {
-  if (e.key !== 'Escape' || !store.confirmTarget) return
-  e.stopImmediatePropagation()
-  store.closeConfirm()
+  if (!store.confirmTarget) return
+  if (e.key === 'Escape') {
+    e.stopImmediatePropagation()
+    store.closeConfirm()
+  } else if (e.key === 'Tab') {
+    const buttons = dialog.value?.querySelectorAll('button:not(:disabled)')
+    if (!buttons?.length) {
+      e.preventDefault()
+      return
+    }
+    const first = buttons[0]
+    const last = buttons[buttons.length - 1]
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault()
+      last.focus()
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault()
+      first.focus()
+    }
+  }
 }
 
 onMounted(() => window.addEventListener('keydown', onKeydown, true))

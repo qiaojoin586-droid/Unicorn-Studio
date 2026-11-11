@@ -35,36 +35,41 @@
 
 <script setup>
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { createFrameTask } from '@/utils/frameTask'
 
 const props = defineProps({ imageSrc: { type: String, default: '' }, imageTitle: { type: String, default: '' }, showAnnotation: { type: Boolean, default: true } })
 const stage = ref(null)
 const imageFailed = ref(false)
 let motionPreference
 let pointerCapability
-let frameId = 0
-let offsetX = 0
-let offsetY = 0
+let pointerX = 0
+let pointerY = 0
+let pointerTarget = null
+const visualFrame = createFrameTask(() => {
+  const bounds = pointerTarget?.getBoundingClientRect()
+  if (!bounds?.width || !bounds.height) return
+  const offsetX = ((pointerX - bounds.left) / bounds.width - .5) * 12
+  const offsetY = ((pointerY - bounds.top) / bounds.height - .5) * 12
+  stage.value?.style.setProperty('--visual-x', offsetX + 'px')
+  stage.value?.style.setProperty('--visual-y', offsetY + 'px')
+})
 
 watch(() => props.imageSrc, () => { imageFailed.value = false })
 
 function resetPosition() {
-  cancelAnimationFrame(frameId)
-  frameId = 0
+  visualFrame.cancel()
+  pointerTarget = null
   stage.value?.style.setProperty('--visual-x', '0px')
   stage.value?.style.setProperty('--visual-y', '0px')
 }
 
 function onPointerMove(event) {
   if (event.pointerType !== 'mouse' || motionPreference?.matches || !pointerCapability?.matches) return
-  const bounds = event.currentTarget.getBoundingClientRect()
-  offsetX = ((event.clientX - bounds.left) / bounds.width - .5) * 12
-  offsetY = ((event.clientY - bounds.top) / bounds.height - .5) * 12
-  if (frameId) return
-  frameId = requestAnimationFrame(() => {
-    stage.value?.style.setProperty('--visual-x', offsetX + 'px')
-    stage.value?.style.setProperty('--visual-y', offsetY + 'px')
-    frameId = 0
-  })
+  // currentTarget 仅在事件派发期间有效，提前保存元素和最新坐标，布局读取放到唯一帧回调。
+  pointerTarget = event.currentTarget
+  pointerX = event.clientX
+  pointerY = event.clientY
+  visualFrame.schedule()
 }
 
 onMounted(() => {
@@ -74,7 +79,8 @@ onMounted(() => {
   pointerCapability.addEventListener('change', resetPosition)
 })
 onBeforeUnmount(() => {
-  cancelAnimationFrame(frameId)
+  visualFrame.cancel()
+  pointerTarget = null
   motionPreference?.removeEventListener('change', resetPosition)
   pointerCapability?.removeEventListener('change', resetPosition)
 })

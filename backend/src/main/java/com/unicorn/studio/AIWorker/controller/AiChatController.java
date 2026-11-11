@@ -11,11 +11,9 @@ import com.unicorn.studio.AIWorker.vo.MessageVO;
 import com.unicorn.studio.AIWorker.vo.SessionVO;
 import com.unicorn.studio.common.BusinessException;
 import com.unicorn.studio.common.PageResult;
-import com.unicorn.studio.common.SecurityUtils;
 import com.unicorn.studio.common.security.RequireSiteUser;
 import com.unicorn.studio.model.ApiResponse;
 import com.unicorn.studio.model.PublicUser;
-import com.unicorn.studio.model.SysUser;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,7 +22,6 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.bind.support.SessionStatus;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import reactor.core.Disposable;
 
@@ -186,7 +183,8 @@ public class AiChatController {
                 chatService.available(),
                 true,
                 toolRegistry.registeredNames(),
-                null));
+                null,
+                chatService.messageAvatarUrl()));
     }
 
     /** 发送分片；对端已断开时忽略异常（属正常路径，不刷错误日志）。 */

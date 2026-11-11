@@ -25,6 +25,8 @@ export interface AiConfig {
   usable: boolean
   /** 是否启用了加密存储（false = 无密钥降级模式，需提示运维配置 APP_CRYPTO_SECRET） */
   cryptoEnabled: boolean
+  messageAvatarMode: 'default' | 'custom'
+  messageAvatarUrl: string
 }
 
 /** 保存请求体：apiKey 留空或回传脱敏串均表示「未修改」 */
@@ -36,6 +38,8 @@ export interface AiConfigForm {
   maxTokens?: number
   temperature?: number
   enabled?: boolean
+  messageAvatarMode?: 'default' | 'custom'
+  messageAvatarUrl?: string
 }
 
 /** 测试连通性结果（与后端 AiTestResultVO 对应） */
@@ -58,9 +62,17 @@ export const aiApi = {
   /** 保存配置（服务端加密 API Key 后落库） */
   update: (data: AiConfigForm) => http.put<void>('/api/admin/ai-config', data),
 
+  uploadMessageAvatar: (file: File) => {
+    const data = new FormData()
+    data.append('file', file)
+    return http.post<{ url: string; name: string; size: number }>('/api/admin/ai-config/message-avatar', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
   /** 测试连通性：带表单值则测表单值（先测再存），否则测已保存配置 */
   test: (data: { apiKey?: string; apiUrl?: string; model?: string }) =>
-    http.post<AiTestResult>('/api/admin/ai-config/test', data),
+    http.post<AiTestResult>('/api/admin/ai-config/test', data, { timeout: 30000, silent: true }),
 }
 
 /* ==================== AI 会话后台（§6.5 接口 1~5） ==================== */

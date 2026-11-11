@@ -75,7 +75,7 @@ public class AiToolRegistry {
     private final AiToolInvocationMapper auditMapper;
 
     public AiToolRegistry(List<AiTool> candidates,
-                          @Value("${app.ai.tools.enabled:false}") boolean toolsEnabled,
+                          @Value("${app.ai.tools.enabled:true}") boolean toolsEnabled,
                           AiToolConfigMapper configMapper,
                           ApiToolInvoker apiInvoker,
                           ToolCircuitBreaker breaker,

@@ -2,12 +2,14 @@ package com.unicorn.studio.AIWorker.tool.impl;
 
 import com.unicorn.studio.AIWorker.tool.AiTool;
 import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
-/** 无参工具示例，未注册为 Spring Bean。 */
+/** 为模型提供服务器当前时间。 */
+@Component
 public class CurrentTimeTool implements AiTool {
 
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");

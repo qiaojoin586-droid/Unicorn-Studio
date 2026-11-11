@@ -1,5 +1,6 @@
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { safeLink } from '@/utils/links'
 
 /**
  * Markdown 渲染（用于 AI 助手回复气泡）。
@@ -121,8 +122,8 @@ const PURIFY_CONFIG = {
     'a', 'img', 'span', 'sup', 'sub',
   ],
   ALLOWED_ATTR: ['href', 'title', 'alt', 'src', 'class', 'type', 'checked', 'disabled', 'start', 'align'],
-  // 只允许安全协议，杜绝 javascript:/data: 伪协议
-  ALLOWED_URI_REGEXP: /^(?:https?|mailto|tel):/i,
+  // 允许安全协议、站内根路径和页内锚点；拒绝 // 形式的外部地址。
+  ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|\/(?!\/)|#)/i,
   // 强制外链在新标签打开；配合 rel 防 tabnabbing
   ADD_ATTR: ['target', 'rel'],
   // 显式点名危险标签，与 ALLOWED_TAGS 白名单形成双保险（意图更清晰、改白名单时不易误放）
@@ -152,7 +153,12 @@ export function renderMarkdown(text) {
     return escapeHtml(source).replace(/\n/g, '<br>')
   }
   try {
-    return DOMPurify.sanitize(html, PURIFY_CONFIG)
+    const fragment = DOMPurify.sanitize(html, { ...PURIFY_CONFIG, RETURN_DOM_FRAGMENT: true })
+    linkifyTextUrls(fragment)
+    hardenLinks(fragment)
+    const container = fragment.ownerDocument.createElement('div')
+    container.appendChild(fragment)
+    return container.innerHTML
   } catch {
     // 消毒器异常时宁可只显示纯文本，也不冒险注入未消毒 HTML
     return escapeHtml(source).replace(/\n/g, '<br>')
@@ -172,7 +178,69 @@ function escapeHtml(s) {
 export function hardenLinks(container) {
   if (!container) return
   container.querySelectorAll('a[href]').forEach((a) => {
+    let href = a.getAttribute('href') || ''
+    // GFM 自动链接可能把句尾中文标点一起吃进去；保留标点的显示，修正实际地址。
+    let displayHref = href
+    try { displayHref = decodeURI(href) } catch { /* 保留原地址，随后进行安全校验。 */ }
+    if ((a.textContent === href || a.textContent === displayHref) && /^https?:\/\//i.test(href)) {
+      const text = a.textContent || ''
+      const clean = trimUrlPunctuation(text)
+      if (clean !== text) {
+        const punctuation = text.slice(clean.length)
+        const suffix = href.endsWith(punctuation) ? punctuation : encodeURI(punctuation)
+        if (href.toLowerCase().endsWith(suffix.toLowerCase())) {
+          href = href.slice(0, -suffix.length)
+          a.textContent = clean
+          a.after(a.ownerDocument.createTextNode(punctuation))
+        }
+      }
+    }
+    const safe = safeLink(href, true)
+    if (!safe) {
+      a.removeAttribute('href')
+      a.removeAttribute('target')
+      return
+    }
+    a.setAttribute('href', safe)
     a.setAttribute('target', '_blank')
     a.setAttribute('rel', 'noopener noreferrer')
   })
+}
+
+function trimUrlPunctuation(value) {
+  let url = value.replace(/[.,!?;:，。！？；：、]+$/u, '')
+  for (const [open, close] of [['(', ')'], ['[', ']'], ['{', '}']]) {
+    while (url.endsWith(close) && url.split(close).length > url.split(open).length) url = url.slice(0, -1)
+  }
+  return url
+}
+
+/** 只识别正文文本；已有链接、代码和代码块保持原样，避免嵌套链接或改写示例。 */
+function linkifyTextUrls(fragment) {
+  const document = fragment.ownerDocument
+  const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT)
+  const nodes = []
+  while (walker.nextNode()) nodes.push(walker.currentNode)
+  for (const node of nodes) {
+    if (node.parentElement?.closest('a, code, pre')) continue
+    const text = node.textContent || ''
+    const pattern = /(^|[\s（(【\[：:，,；;])((?:https?:\/\/|\/(?!\/)(?=[a-z0-9]))[^\s<>"'`，。！？；：、（）【】《》]+)/giu
+    const replacement = document.createDocumentFragment()
+    let cursor = 0
+    for (const match of text.matchAll(pattern)) {
+      const url = trimUrlPunctuation(match[2])
+      const href = safeLink(url, true)
+      if (!href) continue
+      replacement.append(document.createTextNode(text.slice(cursor, match.index) + match[1]))
+      const anchor = document.createElement('a')
+      anchor.setAttribute('href', href)
+      anchor.textContent = url
+      replacement.append(anchor, document.createTextNode(match[2].slice(url.length)))
+      cursor = match.index + match[0].length
+    }
+    if (cursor) {
+      replacement.append(document.createTextNode(text.slice(cursor)))
+      node.replaceWith(replacement)
+    }
+  }
 }

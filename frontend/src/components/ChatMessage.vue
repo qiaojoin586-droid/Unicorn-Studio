@@ -1,15 +1,14 @@
 <template>
   <div class="flex gap-3" :class="isUser ? 'flex-row-reverse' : ''">
-    <!-- Avatar：助手用独角兽标志（跟页头/对话框左上角同一个）；
-         用户侧保留「我」字样的红色圆点 —— 那是"人"的标识，不是品牌标识。 -->
+    <AiMessageAvatar v-if="!isUser" class="mt-0.5" />
     <div
+      v-else
       class="w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5"
       :class="isUser
         ? 'bg-[#C92D3B] text-[var(--ai-panel-text)]'
         : 'bg-[var(--ai-panel-hover)] text-[var(--ai-panel-text)]'"
     >
-      <BrandMark v-if="!isUser" aria-hidden="true" />
-      <span v-else aria-hidden="true">我</span>
+      <span aria-hidden="true">我</span>
     </div>
 
     <!-- Bubble -->
@@ -37,6 +36,7 @@
 <script setup>
 import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import { renderMarkdown, hardenLinks } from '@/composables/useMarkdown'
+import AiMessageAvatar from './AiMessageAvatar.vue'
 
 const props = defineProps({
   role: {

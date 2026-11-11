@@ -2,8 +2,6 @@ package com.unicorn.studio.AIWorker.service;
 
 import com.unicorn.studio.AIWorker.config.AiConfigProvider;
 import com.unicorn.studio.AIWorker.config.AiRuntimeConfig;
-import com.unicorn.studio.AIWorker.entity.AiMessage;
-import com.unicorn.studio.AIWorker.entity.AiToolInvocation;
 import com.unicorn.studio.AIWorker.memory.ChatMessage;
 import com.unicorn.studio.AIWorker.memory.ChatMemoryProvider;
 import com.unicorn.studio.AIWorker.tool.AiToolCaller;
@@ -24,7 +22,6 @@ import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -221,10 +218,8 @@ public class AiChatService {
     /**
      * 非流式对话（供「测试连通性」等需要一次性完整回答的场景使用）。
      * <p>
-     * 用 {@code probeClient} 而非 {@code client}（B-29）：本方法跑在 <b>Tomcat 请求线程</b>上
-     * 且完全同步，而「测试连通性」是「先测再存」的按钮、可被反复点击 ——
-     * 用对话的 120s 读超时意味着一处填错的地址就能占住一个请求线程两分钟。
-     * 探测路径改用 5s/20s 的短超时。
+     * 用 {@code probeClient} 而非 {@code client}：连通性测试在独立的有界线程池中调用本方法，
+     * 连接（含 TLS 握手）10s、请求20s，不自动重试，不调用工具，不写入聊天历史。
      *
      * @param config    显式指定的配置（连通性测试用表单值），为 null 时用库中配置
      * @param userMessage 探测消息
@@ -238,5 +233,9 @@ public class AiChatService {
     /** 当前是否具备对话能力（供能力概览接口使用，不抛异常）。 */
     public boolean available() {
         return configProvider.usable();
+    }
+
+    public String messageAvatarUrl() {
+        return configProvider.messageAvatar().effectiveUrl();
     }
 }

@@ -14,6 +14,8 @@
     "verify:preview-policy": "node scripts/verify-preview-policy.mjs",
     "verify:footer-links": "node scripts/verify-footer-links.mjs",
     "verify:aichat": "node scripts/verify-aichat-interaction.mjs",
+    "verify:ai-history": "node scripts/verify-ai-history.mjs",
+    "verify:render-scheduling": "node scripts/verify-render-scheduling.mjs",
     "test": "npm run build && node scripts/smoke-test.js"
   },
   "dependencies": {

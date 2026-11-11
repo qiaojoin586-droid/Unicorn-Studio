@@ -8,7 +8,6 @@ import com.unicorn.studio.AIWorker.mapper.AiConfigMapper;
 import com.unicorn.studio.AIWorker.mapper.AiConversationMapper;
 import com.unicorn.studio.AIWorker.mapper.AiMessageMapper;
 import com.unicorn.studio.model.SiteSettings;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

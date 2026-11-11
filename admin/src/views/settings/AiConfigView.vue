@@ -3,10 +3,10 @@
     <div class="page-header">
       <span class="page-title">AI 配置</span>
       <div>
-        <el-button :loading="testing" @click="testConnection">
-          <el-icon><Connection /></el-icon>&nbsp;测试连通性
+        <el-button :loading="testing" :disabled="loading" @click="testConnection">
+          <el-icon><Connection /></el-icon>&nbsp;{{ testing ? '测试中，最多等待 25 秒' : '测试连通性' }}
         </el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
+        <el-button type="primary" :loading="saving" :disabled="loading || avatarUploading" @click="save">保存配置</el-button>
       </div>
     </div>
 
@@ -98,6 +98,10 @@
       </el-col>
 
       <el-col :xs="24" :md="9">
+        <el-card shadow="never" v-loading="loading" class="block-gap">
+          <template #header><span class="card-title">助手消息头像</span></template>
+          <AiMessageAvatarSettings v-model:mode="form.messageAvatarMode" v-model:url="form.messageAvatarUrl" @uploading-change="avatarUploading = $event" />
+        </el-card>
         <el-card shadow="never" v-loading="loading">
           <template #header><span class="card-title">状态</span></template>
           <el-descriptions :column="1" border>
@@ -127,6 +131,7 @@
             <template #title>{{ testResult.message }}</template>
             <div class="report-meta">
               模型：{{ testResult.model }} · 耗时：{{ testResult.latencyMs }} ms
+              <br />接口：{{ testResult.apiUrl }}
               <template v-if="testResult.reply"><br />样例回复：{{ testResult.reply }}</template>
             </div>
           </el-alert>
@@ -146,11 +151,11 @@
         </li>
         <li>
           <strong>测试连通性</strong>——会用表单中「尚未保存」的值发起一次真实请求（先测再存），
-          表单为空时则测试已保存的配置；该操作会消耗少量 API 额度，成功后可放心保存。
+          表单为空时则测试已保存的配置；由后端访问供应商，最多等待 25 秒，不自动重试，会消耗少量 API 额度。
         </li>
         <li>
-          <strong>常见的测试失败原因</strong>——401 表示 Key 无效；404 表示 API 地址填成了完整端点或路径有误；
-          模型名不存在请核对供应商文档；连接超时请检查服务器能否访问外网。
+          <strong>常见的测试失败原因</strong>——401 表示 Key 无效；404 请检查 API 路径；
+          模型名不存在请核对供应商文档；连接超时请检查后端机器的网络和代理，浏览器能访问不代表后端能访问。
         </li>
         <li>
           <strong>工具层扩展位</strong>——助手预留了 Function Calling 工具层（<code>AIWorker/tool</code>），
@@ -165,10 +170,12 @@
 import { onMounted, reactive, ref } from 'vue'
 import { Connection } from '@element-plus/icons-vue'
 import { aiApi, type AiConfig, type AiConfigForm, type AiTestResult } from '@/api/ai'
+import AiMessageAvatarSettings from '@/components/AiMessageAvatarSettings.vue'
 
 const loading = ref(false)
 const saving = ref(false)
 const testing = ref(false)
+const avatarUploading = ref(false)
 const config = ref<AiConfig | null>(null)
 const testResult = ref<AiTestResult | null>(null)
 const tools = ref<string[]>([])
@@ -184,6 +191,8 @@ const form = reactive<AiConfigForm>({
   maxTokens: 1024,
   temperature: 0.7,
   enabled: true,
+  messageAvatarMode: 'default',
+  messageAvatarUrl: '',
 })
 
 async function load() {
@@ -199,6 +208,8 @@ async function load() {
     form.maxTokens = data.maxTokens || 1024
     form.temperature = data.temperature ?? 0.7
     form.enabled = data.enabled
+    form.messageAvatarMode = data.messageAvatarMode === 'custom' ? 'custom' : 'default'
+    form.messageAvatarUrl = data.messageAvatarUrl || ''
     try {
       const t = await aiApi.tools()
       tools.value = t.registered ?? []
@@ -215,6 +226,7 @@ async function load() {
  * 这样用户只改模型名时不会误清空已存密钥。
  */
 async function save() {
+  if (loading.value || avatarUploading.value) return
   saving.value = true
   try {
     const payload: AiConfigForm = {
@@ -224,6 +236,8 @@ async function save() {
       maxTokens: form.maxTokens,
       temperature: form.temperature,
       enabled: form.enabled,
+      messageAvatarMode: form.messageAvatarMode,
+      messageAvatarUrl: form.messageAvatarUrl,
     }
     if (form.apiKey && form.apiKey.trim()) {
       payload.apiKey = form.apiKey.trim()
@@ -240,6 +254,7 @@ async function save() {
 
 /** 测试连通性：优先用表单当前值（支持「先测再存」） */
 async function testConnection() {
+  if (testing.value || loading.value) return
   testing.value = true
   testResult.value = null
   try {
@@ -256,6 +271,14 @@ async function testConnection() {
     } else {
       ElMessage.error(testResult.value.message)
     }
+  } catch (error: any) {
+    const message = error?.code === 'ECONNABORTED' || error?.code === 'ETIMEDOUT'
+      ? '管理端等待后端测试结果超时，请检查后端是否已更新、反向代理是否正常'
+      : error?.response?.data?.message || error?.message || '无法获取测试结果，请检查管理端与后端之间的网络'
+    testResult.value = {
+      success: false, message, model: form.model || '-', apiUrl: form.apiUrl || '-', latencyMs: 0, reply: null,
+    }
+    ElMessage.error(message)
   } finally {
     testing.value = false
   }

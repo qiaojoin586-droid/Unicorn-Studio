@@ -1,6 +1,7 @@
 package com.unicorn.studio.AIWorker.service;
 
 import com.unicorn.studio.AIWorker.config.AiRuntimeConfig;
+import com.unicorn.studio.AIWorker.config.AiProbePolicy;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.model.tool.ToolCallingManager;
@@ -52,17 +53,6 @@ public class ChatClientFactory {
     private static final Duration CHAT_CONNECT_TIMEOUT = Duration.ofSeconds(15);
     private static final Duration CHAT_READ_TIMEOUT = Duration.ofSeconds(120);
 
-    /**
-     * 连通性探测：连接 5s / 读 <b>20s</b>（B-29）。
-     * <p>
-     * 探测是同步阻塞调用，跑在 <b>Tomcat 请求线程</b>上（「测试连通性」按钮），
-     * 且「先测再存」的设计让它可以被反复点击。用对话的 120s 读超时意味着
-     * 一次填错地址就能占住一个请求线程两分钟，连点几次即可占满线程池。
-     * 连通性探测不需要等那么久 —— 20s 足够覆盖首字慢的推理模型。
-     */
-    private static final Duration PROBE_CONNECT_TIMEOUT = Duration.ofSeconds(5);
-    private static final Duration PROBE_READ_TIMEOUT = Duration.ofSeconds(20);
-
     private final Map<String, ChatClient> cache = new ConcurrentHashMap<>();
     private final ToolCallingManager toolCallingManager;
     private final ProxySelector httpProxy;
@@ -97,13 +87,14 @@ public class ChatClientFactory {
     }
 
     /**
-     * 连通性探测专用客户端：读超时收紧到 20s（B-29）。
+     * 连通性探测专用客户端：连接（含 TLS）10s、请求20s，总时限由异步探测入口兜底。
      * <p>
      * 与 {@link #client} 共用缓存但指纹带 {@code |probe} 后缀，因此两者互不覆盖 ——
      * 否则管理员点一次「测试连通性」就会把对话用的 120s 客户端挤掉（或反之）。
      */
     public ChatClient probeClient(AiRuntimeConfig config) {
-        return cached(fingerprint(config) + "|probe", config, PROBE_CONNECT_TIMEOUT, PROBE_READ_TIMEOUT, true);
+        return cached(fingerprint(config) + "|probe", config,
+                AiProbePolicy.CONNECT_TIMEOUT, AiProbePolicy.REQUEST_TIMEOUT, true);
     }
 
     private ChatClient cached(String fingerprint, AiRuntimeConfig config,

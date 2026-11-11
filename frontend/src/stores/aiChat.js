@@ -8,6 +8,8 @@ export const useAiChatStore = defineStore('aiChat', {
     seq: 0, // 消息自增 id（timestamp 作 key 有同毫秒碰撞可能，优化方案 F-21）
     avatarState: 'idle',
     streamingText: '',
+    /** 后台配置的助手消息头像；空字符串表示使用主页默认品牌图标。 */
+    messageAvatarUrl: '',
     /** 当前会话 id（ULID）；空表示"还没建会话"，发第一条消息前会先建 */
     sessionId: '',
     /** 登录/注册弹窗显隐 */
@@ -105,15 +107,17 @@ export const useAiChatStore = defineStore('aiChat', {
      * 开新对话：清空本地消息并丢掉 sessionId。
      * 下次发送前会重新 POST /api/ai/sessions —— 旧会话的历史仍在服务端（方案 §7.3 会话行不删）。
      */
-    startNewSession() {
+    startNewSession({ clearHistory = true } = {}) {
       this.clearMessages()
       this.sessionId = ''
       this.pendingMessage = ''
       // ⚠️ 会话列表也要清：退出登录时若不清，store 里还留着上一个账号的会话标题，
       // 下次打开抽屉、而列表接口恰好失败时，就会把别人的会话标题显示出来。
-      this.sessions = []
-      this.hasMoreSessions = false
-      this.sessionPage = 1
+      if (clearHistory) {
+        this.sessions = []
+        this.hasMoreSessions = false
+        this.sessionPage = 1
+      }
     },
 
     setSessionId(id) {

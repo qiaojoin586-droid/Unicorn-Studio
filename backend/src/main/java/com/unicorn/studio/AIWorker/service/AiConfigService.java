@@ -3,6 +3,8 @@ package com.unicorn.studio.AIWorker.service;
 import com.unicorn.studio.AIWorker.config.AiApiUrlValidator;
 import com.unicorn.studio.AIWorker.config.AiConfigProvider;
 import com.unicorn.studio.AIWorker.config.AiRuntimeConfig;
+import com.unicorn.studio.AIWorker.config.AiMessageAvatar;
+import com.unicorn.studio.AIWorker.config.AiProbePolicy;
 import com.unicorn.studio.AIWorker.dto.AiConfigUpdateRequest;
 import com.unicorn.studio.AIWorker.dto.AiTestRequest;
 import com.unicorn.studio.AIWorker.mapper.AiConfigMapper;
@@ -24,6 +26,7 @@ import java.net.UnknownHostException;
 import java.net.http.HttpConnectTimeoutException;
 import java.net.http.HttpTimeoutException;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -88,7 +91,8 @@ public class AiConfigService {
         return AiConfigVO.of(runtime,
                 keySet ? crypto.mask(storedKey) : "",
                 keySet,
-                !crypto.isPlainFallback());
+                !crypto.isPlainFallback(),
+                AiMessageAvatar.from(raw));
     }
 
     /**
@@ -103,6 +107,15 @@ public class AiConfigService {
             return;
         }
         Map<String, String> values = new LinkedHashMap<>();
+        if (form.messageAvatarMode() != null) {
+            if (!List.of("default", "custom").contains(form.messageAvatarMode())) {
+                throw BusinessException.badRequest("头像模式只能为 default 或 custom");
+            }
+            values.put(AiMessageAvatar.KEY_MODE, form.messageAvatarMode());
+        }
+        if (form.messageAvatarUrl() != null) {
+            values.put(AiMessageAvatar.KEY_URL, AiMessageAvatar.validateUrl(form.messageAvatarUrl()));
+        }
         // S-3：保存路径同样必须校验 —— 否则可以「先存一个内网/攻击者地址，再触发对话」绕开探测路径的检查
         apiUrlValidator.validate(form.apiUrl());
         if (!form.apiKeyUnchanged()) {
@@ -141,6 +154,7 @@ public class AiConfigService {
         }
         // 配置改了：事务提交后统一失效快照缓存（避免「清完缓存又回滚」竞态）
         cache.evictAfterCommit(AiConfigProvider.CACHE_KEY);
+        cache.evictAfterCommit(AiMessageAvatar.CACHE_KEY);
         log.info("AI 配置已更新，字段：{}", values.keySet());
     }
 
@@ -174,10 +188,10 @@ public class AiConfigService {
             return AiTestResultVO.fail(probe.model(), probe.normalizedBaseUrl(), 0, e.getMessage());
         }
 
-        long start = System.currentTimeMillis();
+        long start = System.nanoTime();
         try {
             String reply = chatService.callOnce(probe, PROBE_MESSAGE);
-            long latency = System.currentTimeMillis() - start;
+            long latency = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
             if (reply == null || reply.isBlank()) {
                 // 走到这里说明「HTTP 通了、鉴权过了、模型也响应了」，只是没拿到正文 —— 属于推理模型
                 // 思考过程占满预算的典型表现，语义上应算「连通成功」，但需明确提示以免误以为完全正常。
@@ -190,10 +204,11 @@ public class AiConfigService {
                     probe.model(), probe.normalizedBaseUrl(), latency);
             return AiTestResultVO.ok(probe.model(), probe.normalizedBaseUrl(), latency, reply);
         } catch (Exception e) {
-            long latency = System.currentTimeMillis() - start;
+            long latency = java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - start);
             String reason = humanizeError(e);
-            log.warn("AI 连通性测试失败：model={}, url={}, 原因={}",
-                    probe.model(), probe.normalizedBaseUrl(), e.getMessage());
+            log.warn("AI 连通性测试失败：model={}, url={}, latency={}ms, connectTimeout={}ms, requestTimeout={}ms, 原因={}",
+                    probe.model(), probe.normalizedBaseUrl(), latency, AiProbePolicy.CONNECT_TIMEOUT.toMillis(),
+                    AiProbePolicy.REQUEST_TIMEOUT.toMillis(), reason);
             return AiTestResultVO.fail(probe.model(), probe.normalizedBaseUrl(), latency, reason);
         }
     }
@@ -225,6 +240,7 @@ public class AiConfigService {
         boolean unknownHost = false;
         boolean tlsFailure = false;
         boolean connectionFailure = false;
+        boolean interrupted = false;
         // SDK/HTTP 客户端会包装底层异常，不能只检查最外层的 "Retry exhausted"。
         Throwable cause = e;
         for (int depth = 0; cause != null && depth < 20; depth++, cause = cause.getCause()) {
@@ -234,8 +250,13 @@ public class AiConfigService {
             unknownHost |= cause instanceof UnknownHostException;
             tlsFailure |= cause instanceof SSLException;
             connectionFailure |= cause instanceof ConnectException;
+            interrupted |= cause instanceof InterruptedException;
         }
         String lower = details.toString().toLowerCase(Locale.ROOT);
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+            return "测试已取消：已达到总时限或请求已结束";
+        }
         if (lower.contains("401") || lower.contains("unauthorized") || lower.contains("invalid api key")
                 || lower.contains("authentication")) {
             return "鉴权失败（401）：API Key 无效或已过期，请检查后重新填写";
@@ -252,10 +273,10 @@ public class AiConfigService {
             return "模型名不存在：请核对模型名是否与供应商文档一致";
         }
         if (connectTimeout) {
-            return "连接超时：请检查 API URL 及后端能否访问 AI 接口；若已配置代理，请确认代理可用";
+            return "连接超时：10 秒内未完成 TCP/TLS 连接。请在后端所在机器检查网络、代理和供应商可达性";
         }
         if (responseTimeout || lower.contains("timeout") || lower.contains("timed out")) {
-            return "请求超时：AI 接口未在时限内返回，请稍后重试";
+            return "请求超时：20 秒内未收到完整响应，可能是供应商拥堵、模型生成较慢或网络不稳定";
         }
         if (unknownHost) {
             return "域名解析失败：请检查 API URL 和 DNS 设置";

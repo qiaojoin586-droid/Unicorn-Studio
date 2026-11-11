@@ -4,6 +4,8 @@ import { createSseParser } from '@/utils/sse'
 
 const BASE_URL = import.meta.env.VITE_API_BASE || ''
 let controller = null
+let streamCompletion = Promise.resolve()
+let appearanceRequest = null
 
 export function useAiChat() {
   const store = useAiChatStore()
@@ -42,8 +44,24 @@ export function useAiChat() {
     return userStore.token ? { Authorization: `Bearer ${userStore.token}` } : {}
   }
 
+  /** 外观来自公开能力接口；读取失败时保留当前头像或默认图标，不阻断聊天。 */
+  function loadAssistantAppearance() {
+    if (!appearanceRequest) {
+      appearanceRequest = fetch(BASE_URL + '/api/ai/capabilities')
+        .then(async (response) => {
+          if (!response.ok) return
+          const body = await response.json()
+          store.messageAvatarUrl = typeof body?.data?.messageAvatarUrl === 'string' ? body.data.messageAvatarUrl : ''
+        })
+        .catch(() => {})
+        .finally(() => { appearanceRequest = null })
+    }
+    return appearanceRequest
+  }
+
   async function streamChat(userMessage) {
-    if (!userMessage.trim() || store.isLoading) return
+    if (!userMessage.trim() || store.isLoading || store.clearing) return
+    void loadAssistantAppearance()
 
     // 本地先判一次登录：省掉一次必然 401 的请求，用户也不会被"网络错误"误导。
     // 后端仍会独立拦（@RequireSiteUser），这里只是体验优化（方案 §4.2）。
@@ -61,6 +79,8 @@ export function useAiChat() {
     store.avatarState = 'thinking'
     store.setStreamingText('')
 
+    let finishStream
+    streamCompletion = new Promise((resolve) => { finishStream = resolve })
     try {
       const sessionId = await ensureSessionId(userMessage)
 
@@ -141,6 +161,7 @@ export function useAiChat() {
       store.isLoading = false
       store.avatarState = 'idle'
       controller = null
+      finishStream()
     }
   }
 
@@ -228,6 +249,11 @@ export function useAiChat() {
    * @returns 是否成功——失败时调用方要提示，不能静默从列表移除
    */
   async function clearSession(sessionId) {
+    // 删除当前会话前等流式请求退出，避免迟到的分片写回已经清空的界面。
+    if (store.sessionId === sessionId && controller) {
+      stopStream()
+      await streamCompletion
+    }
     const res = await fetch(`${BASE_URL}/api/ai/sessions/${sessionId}`, {
       method: 'DELETE',
       headers: authHeaders(),
@@ -237,11 +263,11 @@ export function useAiChat() {
       store.openLoginPrompt()
       return false
     }
-    if (!res.ok) return false
+    if (!res.ok && res.status !== 404) return false
     // 当前正开着这个会话时一并清本地并丢掉 sessionId：下次发送会新建会话，
     // 否则会继续往一个已被清空的会话里写消息
     if (store.sessionId === sessionId) {
-      store.startNewSession()
+      store.startNewSession({ clearHistory: false })
     }
     store.removeSession(sessionId)
     return true
@@ -271,5 +297,6 @@ export function useAiChat() {
     loadSessions,
     loadHistoryMessages,
     clearSession,
+    loadAssistantAppearance,
   }
 }

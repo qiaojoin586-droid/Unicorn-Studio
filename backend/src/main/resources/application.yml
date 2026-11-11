@@ -121,11 +121,9 @@ app:
       monthly-limit: ${AI_QUOTA_MONTHLY_LIMIT:1000}
     # ==================== AI 工具（§7.6 / §11）====================
     # 工具层的作用：让模型能查本站的实时数据，而不是凭训练时的记忆编（设计方案 §11.1）。
-    # ⚠️ 整个段落的总开关默认关闭：打开前得先把内置工具写出来（工具层建议 §4 的 P0 十个），
-    #    否则模型"看得见工具却没什么可调"，反而显得更没能力。
     tools:
-      # 总开关。false 时 callbacks() 返回空数组 ⇒ 行为与纯问答完全一致（§13 验收项：可一键回退）。
-      enabled: ${AI_TOOLS_ENABLED:false}
+      # 默认提供已注册的内置只读工具；可通过环境变量关闭，单工具仍受后台启停控制。
+      enabled: ${AI_TOOLS_ENABLED:true}
       # 允许 http 明文（默认 false）。内网自建服务常只有 http，确需时显式打开；
       # 与 app.crypto.allow-plaintext 同性质——默认安全，放开要显式。
       allow-http: ${AI_TOOLS_ALLOW_HTTP:false}
@@ -178,30 +176,30 @@ app:
 
   admin:
     # 后台管理 JWT/账号配置；jwt-secret 为空时 JwtService 拒绝启动
-    jwt-secret: '${ADMIN_JWT_SECRET:2oxbUQO2mn77QvjZA0Y6nlAhDU7k5XFAGXit7AWQw2vCk}'
-    refresh-expire-days: ${ADMIN_JWT_REFRESH_EXPIRE_DAYS:7}
+    jwt-secret: 2oxbUQO2mn77QvjZA0Y6nlAhDU7k5XFAGXit7AWQw2vCk
+    refresh-expire-days: 7
     # 初始密码为空时由 AdminBootstrap 生成随机密码并打印日志（仅本地开发）
-    init-password: ${ADMIN_INIT_PASSWORD:}
-  upload:
-    dir: ${FILE_UPLOAD_DIR:data/uploads}
-    max-size: ${FILE_UPLOAD_MAX_SIZE:10485760}
+    init-password: 
+  upload:   
+    dir: data/uploads   # 上传文件保存的目录
+    max-size: 10485760
     # 视频（动态壁纸）独立上限：50MB，与 spring.servlet.multipart.max-file-size 对齐
-    video-max-size: ${FILE_UPLOAD_VIDEO_MAX_SIZE:52428800}
+    video-max-size: 52428800
     # 富文本外链图白名单域（空=仅允许本站 /uploads/）
-    image-allow-origins: ${IMAGE_ALLOW_ORIGINS:}
+    image-allow-origins:
   backup:
-    dir: ${BACKUP_DIR:data/backups}
-    retention-count: ${BACKUP_RETENTION_COUNT:7}
-    mysqldump-path: ${MYSQLDUMP_PATH:mysqldump}
-    cron: ${BACKUP_CRON:0 0 2 * * *}
+    dir: data/backups   # 备份文件保存的目录
+    retention-count: 7  # 保留最近 7 个备份文件
+    mysqldump-path: mysqldump  # mysqldump 可执行文件路径
+    cron: 0 0 2 * * *   # 每日 02:00 执行备份
   retention:
     # 数据保留清理（审计日志 / SQL 监控）：保留期限本身存 site_settings(retention.days)，
     # 后台「数据保留」页面可改为 7/15/30/90 天，改后即时生效（每次执行都重新读取）。
     # 这里只放部署级参数：执行周期与单轮删除上限。
     # 默认每日 03:30，错开 01:00 埋点聚合、02:00 备份、03:00 统计聚合等既有定时任务。
-    cron: ${RETENTION_CRON:0 30 3 * * *}
+    cron: 0 30 3 * * *
     # 单轮最多删除行数，防止首次接入时一次性删空历史数据造成长事务/主从延迟
-    max-delete-per-run: ${RETENTION_MAX_DELETE:50000}
+    max-delete-per-run: 50000
   ratelimit:
     # AI 对话（/api/ai/chat）：每次调用产生真实外部 API 费用，按 §3.4 C6① 限流。
     # ⚠️ 这是【用户维度】的上限（按 userId 计），IP 维度是它的 3 倍（见 RateLimitFilter）。
@@ -213,7 +211,7 @@ app:
   cache:
     # V15 Redis 缓存方案（docs/Redis缓存设计设计方案.md 附录 A）
     # enabled=false 必须能一键回到「全部直读 MySQL」—— 灰度上线与故障应急的生命线。
-    enabled: ${CACHE_ENABLED:true}
+    enabled: true
     # 缓存键环境隔离（2026-09-22 实测故障后新增）：
     # 本地开发与线上服务器共用同一台 Redis 的同一个 db，而键名里原本没有任何环境标识，
     # 于是两边互相读写对方的缓存 —— 服务器写进去的学习资料（7 条，带它自己的 /uploads/... 封面）
@@ -221,9 +219,9 @@ app:
     # 反过来线上读到本地写的缓存也一样。TTL 续期让它表现为「过一段时间才 404」，极难定位。
     # 现在每个键都带 "<profile>:" 前缀（见 CacheHelper.buildPrefix），两套环境天然隔离，
     # 即使共用一台 Redis 也不会互相污染。要再加固可加本项（如 unicorn），或给本地换 REDIS_DATABASE。
-    namespace: ${CACHE_NAMESPACE:}
+    namespace:
     warmup:
-      enabled: ${CACHE_WARMUP_ENABLED:true}
+      enabled: true
 
 # ==================== 运维可观测性（B-19 / S-6）====================
 # 为什么需要：改动前后没有量化基线，收益无法证明、回归无法发现。
@@ -237,7 +235,7 @@ app:
 management:
   server:
     # 不复用 8080：管理端点与业务流量的暴露面必须分开
-    port: ${MANAGEMENT_PORT:8081}
+    port: 8081
     address: 127.0.0.1
   endpoints:
     web:
@@ -264,7 +262,7 @@ logging:
   # 启动、运行、接口访问和管理审计统一写入 app.log，同时保留控制台输出。
   # ./logs 相对启动工作目录；服务器建议设置 LOG_DIR=/opt/unicorn-studio/logs。
   file:
-    name: ${LOG_DIR:./logs}/app.log
+    name: ./logs/app.log
   logback:
     rollingpolicy:
       file-name-pattern: ${logging.file.name}.%d{yyyy-MM-dd}.%i.gz
