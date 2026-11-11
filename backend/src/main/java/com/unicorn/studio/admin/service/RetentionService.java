@@ -41,11 +41,9 @@ import java.util.stream.Stream;
  *   <li><b>SQL 监控（内存）</b>：Druid 连接池统计为 JVM 内存聚合，无逐条时间戳，无法按记录裁剪；
  *       采用「距上次重置满 N 天则整体 {@code resetAll()}」的方式，保证统计窗口不超过保留期
  *       （重置时间落库 {@code retention.sql_monitor_last_reset}，重启不丢）；</li>
- *   <li><b>清理操作自身产生的日志</b>：清理任务本身是 {@code @AuditLog} 写接口，其产生的
- *       ① DB 审计行会被下一次清理按同一规则删除；② 管理端审计文件（{@code logs/admin/yyyy-MM-dd/}）
- *       由本任务按同一保留期裁剪整个日期目录 —— 即「清理日志也被定期清理」，不会自我堆积。
- *       注意：审计文件另受 logback {@code maxHistory=30} 硬上限约束，故保留期设为 90 天时
- *       文件侧实际仍为 30 天；数据库中的审计日志不受此限制。</li>
+ *   <li><b>旧版审计文件</b>：兼容裁剪 {@code logs/admin/yyyy-MM-dd/} 下的历史日期目录。
+ *       新版审计摘要与运行日志统一写入 {@code app.log}，由 Spring Boot 的滚动策略独立管理，
+ *       本任务不会删除应用日志或其归档。</li>
  * </ol>
  * 配置存储：复用 {@code site_settings} 的 {@code retention} 组，键 {@code retention.days} /
  * {@code retention.enabled}；每次清理都实时读取，改配置无需重启即生效。
@@ -102,14 +100,14 @@ public class RetentionService {
                            SiteSettingsService settingsService,
                            @Value("${app.retention.cron:0 30 3 * * *}") String cron,
                            @Value("${app.retention.max-delete-per-run:50000}") int maxDeletePerRun,
-                           @Value("${logging.file.path:./logs}") String logPath) {
+                           @Value("${logging.file.name:${logging.file.path:./logs}/app.log}") String logFile) {
         this.logMapper = logMapper;
         this.toolInvocationCleaner = toolInvocationCleaner;
         this.settingsService = settingsService;
         this.cron = cron;
         this.maxDeletePerRun = Math.max(BATCH_SIZE, maxDeletePerRun);
-        // 审计文件目录：${logging.file.path}/admin/yyyy-MM-dd/app-admin.log.N（%i 文件名索引，见 logback-spring.xml）
-        this.logRoot = Path.of(logPath).resolve("admin").toAbsolutePath().normalize();
+        // 仅兼容清理统一日志文件旁边的旧版 admin 日期目录。
+        this.logRoot = Path.of(logFile).toAbsolutePath().normalize().getParent().resolve("admin");
     }
 
     // =====================================================================
@@ -216,7 +214,7 @@ public class RetentionService {
             for (Path dir : dirs) {
                 bytes += directorySize(dir);
             }
-            String msg = "预演：将删除审计日志 " + expired + " 条、裁剪审计文件目录 " + dirs.size()
+            String msg = "预演：将删除审计日志 " + expired + " 条、裁剪旧版审计文件目录 " + dirs.size()
                     + " 个（约 " + humanSize(bytes) + "）";
             return new RetentionRunReport(trigger, true, false, msg, startedAt, LocalDateTime.now(),
                     cfg.days(), cutoff, 0, 0, expired > maxDeletePerRun, false, 0, System.currentTimeMillis() - start);
@@ -265,7 +263,7 @@ public class RetentionService {
             }
         }
 
-        // ---- 3. 审计文件：裁剪超过保留期的日期目录 ----
+        // ---- 3. 旧版审计文件：裁剪历史日期目录，统一应用日志由 Logback 管理 ----
         int deletedDirs = pruneAuditLogDirs(cutoff.toLocalDate());
 
         // ---- 4. 落库本次执行摘要（供重启后观测；该行本身会在后续清理中被删除） ----
@@ -283,7 +281,7 @@ public class RetentionService {
                 + "，工具调用审计 " + toolOutcome.deleted() + " 条"
                 + (toolOutcome.capped() ? "（达单轮上限，剩余待下次）" : "")
                 + "，SQL 监控统计" + (sqlReset ? "已重置" : "未到重置周期")
-                + "，裁剪审计文件目录 " + deletedDirs + " 个";
+                + "，裁剪旧版审计文件目录 " + deletedDirs + " 个";
         log.info("数据保留清理完成: trigger={} cutoff={} deleted={} batches={} sqlReset={} dirs={}",
                 trigger, cutoff, deleted, batches, sqlReset, deletedDirs);
 

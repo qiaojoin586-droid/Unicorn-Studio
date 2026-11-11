@@ -1,7 +1,7 @@
 <template>
   <div class="background-video" :class="{ 'background-video--sticky': sticky }">
     <div ref="frame" class="background-video__media" :class="{ 'has-played': shouldLoad && hasPlayed }" aria-hidden="true">
-      <img :src="poster" alt="" decoding="async" />
+      <img v-if="displayPoster" :src="displayPoster" alt="" decoding="async" @error="posterFailed = true" />
       <video
         v-if="shouldLoad"
         ref="videoEl"
@@ -30,8 +30,9 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 
 const props = defineProps({
-  src: { type: String, required: true },
+  src: { type: String, default: '' },
   poster: { type: String, required: true },
+  fallbackPoster: { type: String, default: '' },
   desktopOnly: Boolean,
   sticky: Boolean,
 })
@@ -45,7 +46,9 @@ const hasPlayed = ref(false)
 const pageHidden = ref(false)
 const userPaused = ref(false)
 const failed = ref(false)
-const shouldLoad = computed(() => permitted.value && hasEntered.value && !failed.value)
+const posterFailed = ref(false)
+const displayPoster = computed(() => posterFailed.value ? props.fallbackPoster : props.poster)
+const shouldLoad = computed(() => Boolean(props.src) && permitted.value && hasEntered.value && !failed.value)
 let observer
 let motionQuery
 let mobileQuery
@@ -75,6 +78,7 @@ function syncPlayback() {
 }
 
 watch([videoEl, visible, pageHidden, userPaused], syncPlayback, { flush: 'post' })
+watch(() => props.poster, () => { posterFailed.value = false })
 watch(() => props.src, () => {
   failed.value = false
   hasPlayed.value = false

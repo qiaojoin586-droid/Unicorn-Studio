@@ -9,7 +9,7 @@
     <el-alert v-if="saveStatus" :title="saveStatus" :type="saveSucceeded ? 'success' : 'warning'" :closable="false" />
     <el-card shadow="never" v-loading="loading">
       <p class="page-tip">
-        此处维护主站「关于我们」的介绍、配图、理念条目和加入邀请。保存即时生效，未保存预览不改变线上内容。
+        此处维护主站「关于我们」的介绍、配图、整页背景、理念条目和加入邀请。桌面与手机预览随表单更新，点击保存后发布到主站。
         正文段落之间用<b>空行</b>分隔。
       </p>
 
@@ -65,6 +65,15 @@
           </div>
         </el-form-item>
       </el-form>
+      <el-divider content-position="left">整页背景</el-divider>
+      <el-form :model="extra" label-position="top" class="about-form" :disabled="saving || !ready || !!loadError || !canEdit">
+        <p class="field-tip">四个区块共用一张背景。第二块的介绍配图仍在上方「介绍配图」中维护。</p>
+        <WallpaperFields
+          v-model:mode="extra.backgroundMode"
+          v-model:image-url="extra.backgroundImageUrl"
+          v-model:video-url="extra.backgroundVideoUrl"
+        />
+      </el-form>
       <el-divider content-position="left">理念与加入邀请</el-divider>
       <el-form :model="extra" label-position="top" class="about-form" :disabled="saving || !ready || !!loadError || !canEdit">
         <p class="field-tip">可选标签、说明与入口文字清空后隐藏；标题为必填。基础介绍与扩展配置由两个独立接口保存。</p>
@@ -92,7 +101,8 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { aboutApi, type AboutPage } from '@/api/about'
 import ImageUpload from '@/components/ImageUpload.vue'
 import SitePreview from '@/components/SitePreview.vue'
-import { presentationApi, clonePresentation, describeSectionSave, isPresentationUrl, useConfigDraft } from '@/api/presentation'
+import WallpaperFields from '@/components/WallpaperFields.vue'
+import { presentationApi, clonePresentation, describeSectionSave, isPresentationUrl, useConfigDraft, wallpaperError } from '@/api/presentation'
 import { useAuthStore } from '@/stores/auth'
 
 /** 与后端 AboutPageService.MAX_STATS 保持一致 */
@@ -165,6 +175,9 @@ async function save() {
   }
   if (!extra.principlesTitle.trim() || !extra.invitationTitle.trim() || extra.principles.some((item) => !item.title.trim())) { ElMessage.warning('请填写理念章节、各理念条目与加入邀请的标题'); return }
   if (!isPresentationUrl(extra.invitationUrl)) { ElMessage.warning('邀请链接只支持站内路径、锚点或 HTTP(S) 地址'); return }
+  const backgroundError = wallpaperError(extra)
+  if (backgroundError) { ElMessage.warning(backgroundError); return }
+  const draft = JSON.parse(JSON.stringify({ form, extra }))
   saving.value = true
   try {
     const legacy = legacyPayload()
@@ -176,10 +189,10 @@ async function save() {
     ])
     if (results[0].status === 'fulfilled') savedLegacy = legacySnapshot
     if (results[1].status === 'fulfilled') savedExtra = extraSnapshot
-    const outcome = describeSectionSave(results, ['基础介绍', '理念与邀请'])
+    const outcome = describeSectionSave(results, ['基础介绍', '背景、理念与邀请'])
     saveStatus.value = outcome.message
     saveSucceeded.value = outcome.success
-    if (outcome.success) { markSaved(); ElMessage.success('关于页配置已保存') }
+    if (outcome.success) { markSaved(draft); ElMessage.success('关于页配置已保存') }
   } finally {
     saving.value = false
   }

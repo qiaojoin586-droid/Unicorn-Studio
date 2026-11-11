@@ -1,8 +1,9 @@
-import { inject, reactive, onMounted } from 'vue'
+import { inject, reactive, ref, onMounted } from 'vue'
 import { createPresentation, mergePresentation } from '../../../shared/presentation-contract.js'
 import { useApi } from './useApi'
 
 const state = reactive(createPresentation())
+const loaded = ref(false)
 let pending = null
 let lastLoaded = 0
 let listening = false
@@ -15,7 +16,10 @@ async function refresh(force = false) {
     if (result?.error || !result?.data) return
     Object.assign(state, mergePresentation(result.data))
     lastLoaded = Date.now()
-  }).catch(() => {}).finally(() => { pending = null })
+  }).catch(() => {}).finally(() => {
+    loaded.value = true
+    pending = null
+  })
   return pending
 }
 
@@ -29,5 +33,5 @@ export function usePresentation() {
       window.addEventListener('focus', () => { if (Date.now() - lastLoaded > 5000) refresh(true) })
     }
   })
-  return { presentation }
+  return { presentation, ready: preview ? ref(true) : loaded }
 }

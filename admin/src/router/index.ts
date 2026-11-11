@@ -82,7 +82,7 @@ export const permissionRoutes: RouteRecordRaw[] = [
         path: 'carousel',
         name: 'Carousel',
         component: () => import('@/views/carousel/CarouselListView.vue'),
-        meta: { title: '首页媒体与背景', icon: 'Monitor', permission: 'carousel:list' },
+        meta: { title: '作品档案背景', icon: 'Monitor', permission: 'carousel:list' },
       },
       {
         path: 'services',

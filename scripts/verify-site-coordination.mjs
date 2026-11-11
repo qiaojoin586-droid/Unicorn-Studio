@@ -15,7 +15,10 @@ const defaults = JSON.parse(fs.readFileSync(path.join(project, 'scripts/fixtures
 let presentation = structuredClone(defaults)
 let brandName = '共同品牌'
 let failAboutOnce = false
-const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.png': 'image/png' }
+const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.jpg': 'image/jpeg', '.png': 'image/png', '.mp4': 'video/mp4' }
+const asset = (prefix, extension) => '/assets/' + fs.readdirSync(path.join(project, 'frontend/frontend/assets')).find(name => name.startsWith(prefix) && name.endsWith(extension))
+const customPoster = asset('index-poster-', '.jpg')
+const customVideo = asset('index-', '.mp4')
 let productionServer = null
 let productionOrigin = ''
 const server = http.createServer((req, res) => {
@@ -54,7 +57,7 @@ const browser = await engine.launch({ headless: true, ...(process.env.CHROME_PAT
 const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, reducedMotion: 'reduce' })
 const errors = [], results = [], writes = [], previewMessages = [], publicAuth = []
 const check = (name, passed, detail = '') => { results.push({ name, passed, detail }); console.log(`${passed ? 'PASS' : 'FAIL'} ${name}${detail ? ' ' + detail : ''}`) }
-const work = { id: 1, slug: 'fixture-work', title: '协同验收样本作品', summary: '这是未保存预览应该完整展示的摘要。', coverUrl: '', content: '<h2>样本正文</h2><p>仅用于本地验收。</p>', tagType: 'project', authors: '验收样本', dateLabel: '2026', category: '项目', status: 'published', featured: 1, sortOrder: 0, clientName: 'PRIVATE_CLIENT_MARKER' }
+const work = { id: 1, slug: 'fixture-work', title: '协同验收样本作品', summary: '这是未保存预览应该完整展示的摘要。', coverUrl: customPoster, content: '<h2>样本正文</h2><p>仅用于本地验收。</p>', tagType: 'project', authors: '验收样本', dateLabel: '2026', category: '项目', status: 'published', featured: 1, sortOrder: 0, clientName: 'PRIVATE_CLIENT_MARKER' }
 work.content += '<p>' + '长文验收'.repeat(28000) + '完整正文结束标记</p>'
 const about = { eyebrow: '', title: '样本工作室', subtitle: '', content: '样本介绍', imageUrl: '', stats: [] }
 const join = { eyebrow: '', title: '一起来创造', subtitle: '', paragraphs: [], qrImage: '', qrCaption: '' }
@@ -81,7 +84,7 @@ await context.route('**/api/**', async route => {
   else if (p === '/api/works') { const { content, clientName, ...publicCard } = work; data = { list: Array.from({ length: 6 }, (_, i) => ({ ...publicCard, id: i + 1, slug: work.slug + '-' + i })) } }
   else if (p.startsWith('/api/admin/works/')) data = { work, seo: {} }
   else if (p === '/api/admin/works') data = { records: [work], total: 1, list: [work] }
-  else if (p === '/api/carousel') data = { list: [1, 2].map(i => ({ id: i, title: `轮播标题 ${i}`, subtitle: `轮播说明 ${i}`, imageUrl: '/unicorn.svg', linkUrl: '/join' })) }
+  else if (p === '/api/admin/files/upload') data = { url: customPoster }
   else if (p === '/api/capabilities') data = { list: [{ id: 1, title: '能力样本', description: '配置的图标应呈现', icon: 'code' }] }
   else if (p === '/api/services') data = { list: [{ id: 1, title: '方向样本', description: '配置的图标应呈现', icon: 'research' }] }
   else if (p === '/api/about' || p === '/api/admin/about') { if (method === 'PUT') Object.assign(about, request.postDataJSON()); data = about }
@@ -89,9 +92,9 @@ await context.route('**/api/**', async route => {
   else if (p === '/api/footer' || p === '/api/admin/footer') { if (method === 'PUT') Object.assign(footer, request.postDataJSON()); data = footer }
   else if (p === '/api/admin/learning/categories') data = []
   else if (p.startsWith('/api/admin/carousel') || p.startsWith('/api/admin/capabilities') || p.startsWith('/api/admin/services') || p.startsWith('/api/admin/learning')) data = { records: [], total: 0, list: [] }
-  else if (p.startsWith('/api/learning')) data = { resources: [] }
+  else if (p.startsWith('/api/learning')) data = { resources: [{ id: 42, title: '已发布学习资料', description: '资料说明', coverUrl: customPoster }] }
   else if (p.startsWith('/api/page-background/')) data = { enabled: false }
-  if (method !== 'GET' && p.startsWith('/api/admin/') && !p.includes('/presentation/')) writes.push({ p, body: request.postDataJSON() })
+  if (method !== 'GET' && p.startsWith('/api/admin/') && !p.includes('/presentation/') && p !== '/api/admin/files/upload') writes.push({ p, body: request.postDataJSON() })
   await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ code: 200, data }) })
 })
 const page = await context.newPage()
@@ -101,8 +104,35 @@ await page.addInitScript(() => window.addEventListener('message', e => { if (e.d
 try {
   await page.goto(base, { waitUntil: 'networkidle' })
   check('global brand and SEO consumed', await page.title() === '全站 SEO 标题' && await page.locator('.brand-type strong').textContent() === '共同品牌')
-  await page.getByRole('button', { name: '下一张精选内容' }).click()
-  check('carousel caption and link reflect active slide', await page.locator('.media-caption p').textContent() === '轮播标题 2' && await page.locator('.media-link').getAttribute('href') === '/join')
+  check('home recommendation uses the published work title, cover and link',
+    await page.locator('.recommendation strong').textContent() === work.title &&
+    await page.locator('.recommendation img').getAttribute('src') === work.coverUrl &&
+    await page.locator('.recommendation').getAttribute('href') === '/works/fixture-work-0')
+  presentation.home.recommendationId = '999'
+  await page.reload({ waitUntil: 'networkidle' })
+  check('missing recommendation falls back to brand art', await page.locator('.recommendation').count() === 0 && await page.locator('.brand-visual__annotation').isVisible())
+  presentation.home.recommendationType = 'learning'
+  presentation.home.recommendationId = '42'
+  await page.reload({ waitUntil: 'networkidle' })
+  check('learning recommendation links to its detail', await page.locator('.recommendation').getAttribute('href') === '/learning/42')
+  presentation.home.recommendationType = 'join'
+  presentation.home.recommendationId = ''
+  await page.reload({ waitUntil: 'networkidle' })
+  check('recruitment recommendation links to join', await page.locator('.recommendation').getAttribute('href') === '/join')
+  Object.assign(presentation.about, { backgroundMode: 'video', backgroundImageUrl: customPoster, backgroundVideoUrl: customVideo })
+  const videoRequests = []
+  page.on('request', request => { if (request.url().endsWith('.mp4')) videoRequests.push(request.url()) })
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto(base + '/about', { waitUntil: 'networkidle' })
+  check('mobile about uses a single poster without requesting any MP4',
+    await page.locator('.about-page > .background-video img').getAttribute('src') === customPoster &&
+    await page.locator('.about-page video').count() === 0 && videoRequests.length === 0)
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await page.locator(`.about-page > .background-video video[src="${customVideo}"]`).waitFor({ state: 'attached' })
+  check('desktop about loads the selected video on the shared background', await page.locator('.about-page > .background-video').count() === 1)
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  await page.goto(base, { waitUntil: 'networkidle' })
   check('configured icons rendered', await page.locator('.capability__number svg').count() === 1 && await page.locator('.direction-row__number svg').count() === 1)
   check('legacy relative footer links resolve to site root', await page.getByRole('link', { name: '旧版相对链接', exact: true }).getAttribute('href') === '/works')
   check('global slogan and description consumed', (await page.locator('.brand-type > span').textContent()).includes('让好奇心') && await page.locator('meta[name=description]').getAttribute('content') === '全站 SEO 描述')
@@ -144,6 +174,17 @@ try {
   await page.getByLabel('首屏说明', { exact: true }).fill('')
   await page.waitForTimeout(400)
   check('explicit empty field hides in preview', await iframe.locator('.hero__description').count() === 0)
+  async function selectOption(label, option) {
+    await page.locator('.el-form-item').filter({ has: page.getByLabel(label, { exact: true }) }).locator('.el-select').click()
+    await page.getByRole('option', { name: option, exact: true }).click()
+  }
+  await selectOption('本期推荐', '学习资料')
+  await selectOption('已发布学习资料', '已发布学习资料')
+  await iframe.locator('.recommendation[href="/learning/42"]').waitFor()
+  await selectOption('背景类型', '自定义静态图片')
+  await page.locator('#config-wallpaper input[type=file]').setInputFiles({ name: 'wallpaper.jpg', mimeType: 'image/jpeg', buffer: fs.readFileSync(path.join(project, 'frontend/frontend', customPoster)) })
+  await iframe.locator(`.home-middle .background-video img[src="${customPoster}"]`).waitFor({ state: 'attached' })
+  check('mobile preview renders draft wallpaper and recommendation before any configuration write', writes.length === 0 && await iframe.locator('.home-middle video').count() === 0)
   const popupPromise = page.waitForEvent('popup')
   await page.getByRole('button', { name: '放大预览', exact: false }).click()
   const popup = await popupPromise
@@ -155,21 +196,31 @@ try {
   check('featured limit accepts six and matches preview', await iframe.locator('.work-gallery .work-card').count() === 6)
   await page.getByRole('button', { name: '保存并更新主站' }).click()
   await page.getByText('首页配置已保存并更新主站，请刷新线上页面核验。').waitFor()
-  check('save persists current draft and empty string', writes.some(w => w.p.endsWith('/home') && w.body.title.startsWith('未保存标题') && w.body.description === '' && w.body.featuredLimit === 6))
+  check('save persists current draft, empty string and media fields', writes.some(w => w.p.endsWith('/home') && w.body.title.startsWith('未保存标题') && w.body.description === '' && w.body.featuredLimit === 6 && w.body.recommendationId === '42' && w.body.backgroundImageUrl === customPoster))
   await page.screenshot({ path: path.join(out, 'admin-home-desktop.png'), fullPage: false })
   await page.goto(base, { waitUntil: 'networkidle' })
-  check('saved configuration reaches public renderer', (await page.locator('#home-title').textContent()).includes('未保存标题') && await page.locator('.hero__description').count() === 0 && await page.locator('.work-gallery .work-card').count() === 6)
+  check('saved configuration reaches public renderer',
+    (await page.locator('#home-title').textContent()).includes('未保存标题') &&
+    await page.locator('.hero__description').count() === 0 &&
+    await page.locator('.work-gallery .work-card').count() === 6 &&
+    await page.locator('.recommendation').getAttribute('href') === '/learning/42' &&
+    await page.locator('.home-middle .background-video img').getAttribute('src') === customPoster)
   await page.goto(base + '/admin/about', { waitUntil: 'networkidle' })
   await page.getByLabel('主标题', { exact: true }).fill('部分保存验收标题')
   await page.getByLabel('理念章节标题', { exact: true }).fill('部分保存验收理念')
   const legacyWritesBefore = writes.filter(w => w.p === '/api/admin/about').length
   failAboutOnce = true
   await page.getByRole('button', { name: '保存并更新主站', exact: true }).click()
-  await page.getByText('基础介绍已保存；理念与邀请未保存。两部分独立生效，请重试未完成配置。', { exact: true }).waitFor()
+  await page.getByText('基础介绍已保存；背景、理念与邀请未保存。两部分独立生效，请重试未完成配置。', { exact: true }).waitFor()
   check('partial save reports both results and retains draft', (await page.locator('.config-actions').textContent()).includes('未保存修改'))
   await page.getByRole('button', { name: '保存并更新主站', exact: true }).click()
   await page.getByText('全部配置已保存并更新主站，请刷新线上页面核验。', { exact: true }).waitFor()
   check('retry saves failed section without replaying successful section', writes.filter(w => w.p === '/api/admin/about').length === legacyWritesBefore + 1 && presentation.about.principlesTitle === '部分保存验收理念')
+  const archiveRequest = page.waitForRequest(request => new URL(request.url()).pathname === '/api/admin/carousel')
+  await page.goto(base + '/admin/carousel', { waitUntil: 'networkidle' })
+  check('archive background editor queries only works records',
+    new URL((await archiveRequest).url()).searchParams.get('group') === 'works' &&
+    await page.getByRole('heading', { name: '作品档案背景', exact: true }).isVisible())
   for (const route of ['/admin/home', '/admin/about', '/admin/join', '/admin/footer', '/admin/works/edit/1']) {
     await page.goto(base + route, { waitUntil: 'networkidle' })
     await page.locator('.site-preview iframe').waitFor()
@@ -189,6 +240,7 @@ try {
       await workFrame.getByRole('heading', { name: work.title, exact: true }).waitFor()
       await workFrame.getByRole('heading', { name: '样本正文', exact: true }).waitFor()
       check('work detail preview renders current rich text', await workFrame.getByRole('heading', { name: '样本正文', exact: true }).count() === 1)
+      check('work detail places the work cover inside its hero', await workFrame.locator('.detail-intro .detail-cover img').getAttribute('src') === work.coverUrl)
       check('legal long rich text is not silently truncated', (await workFrame.locator('.detail-article').textContent()).includes('完整正文结束标记'))
       check('work detail retains public category', await workFrame.getByText('项目', { exact: true }).count() > 0)
       check('rich text uses backend save sanitizer', (await page.locator('.preview-status').textContent()).includes('服务端保存规则'))

@@ -8,6 +8,12 @@ export function safeLink(value, contacts = false) {
   } catch { return '' }
 }
 
+export function mediaUrl(value) {
+  const url = safeLink(value)
+  if (url.startsWith('/uploads/')) return (import.meta.env.VITE_API_BASE || '') + url
+  return url.startsWith('#') ? '' : url
+}
+
 /** Legacy footer paths are rooted consistently, including inside /preview/footer. */
 export function safeFooterLink(value) {
   if (typeof value !== 'string' || /[\u0000-\u001f\u007f\\]/.test(value)) return ''

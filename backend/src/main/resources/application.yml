@@ -46,16 +46,7 @@ spring:
     druid:
       initial-size: 2
       min-idle: 5
-      # 连接数 10 → 20（B-06）：此前 200 个 Tomcat 工作线程抢 10 个连接，
-      # 一旦并发超过 10，请求延迟就不再是「查询时间」而是「排队时间」，
-      # 且 max-wait 超时后抛 GetConnectionTimeoutException → 500。
-      # 整个应用的吞吐上限 ≈ max-active / 平均查询耗时。
-      # 注意 @Async 线程也吃连接：一个带 @AuditLog 的写请求会同时占用 2 条
-      # （业务事务 1 条 + 异步审计落库 1 条），备份任务运行期间同样额外占用。
-      # 经验公式：连接数 ≈ (核心数 × 2) + 有效磁盘数，本站规模 20 足够。
       max-active: 20
-      # 等待时间 10000 → 3000：快速失败优于长时间挂起 ——
-      # 让请求在 3 秒内明确失败，而不是让 190 个线程在 10 秒的等待里堆积。
       max-wait: 3000
       filter:
         stat:
@@ -113,18 +104,9 @@ app:
     #    两者长度独立、互不影响。轮数直接决定每次调用的 input token 成本。
     # ⚠️ 默认 10 轮 = 20 条消息，与功能②落地时的硬编码值一致 ⇒ 行为不变。
     memory:
-      max-turns: ${AI_MEMORY_MAX_TURNS:10}
-    # 运行时配置（API Key / API 地址 / 模型 / 提示词 / 采样参数）自 V16 起统一存
-    # site_settings 的 ai 组，由后台「AI 配置」页（/admin/ai-config）维护，
-    # 保存后即时生效、无需重启；此处仅保留部署级开关。
-    #
-    # 工具层（Function Calling 扩展位，见 AIWorker/tool）：
-    # false=只做基础问答（当前默认，符合「现阶段先实现最基础的问答功能」）；
-    # true=把已注册的 AiTool 实现装配给模型，启用前请确认工具实现已就绪。
-    # ==================== AI 历史 90 天清理（§7.4 / §7.5）====================
-    # 保留天数固定 90，不进后台可调列表：可调 = 多一个出错面（误设成 7 天，用户历史突然消失）。
+      max-turns: ${AI_MEMORY_MAX_TURNS:10} #  AI带入对话的记忆选择最近十轮
     history-cleanup:
-      retention-days: ${AI_HISTORY_RETENTION_DAYS:90}
+      retention-days: ${AI_HISTORY_RETENTION_DAYS:90}  #  最大日志保存的时间为90天
       # 默认每日 04:30，错开既有定时任务：01:00 统计 / 02:00 备份 / 03:00 封禁清理 / 03:30 数据保留。
       # ⚠️ 不要挪到 03:45 —— 距 retention 的 03:30 只差 15 分钟，两者共用 Druid 池（max-active 20）。
       cron: ${AI_HISTORY_CLEANUP_CRON:0 30 4 * * *}
@@ -191,6 +173,9 @@ app:
     # 本应用 server.address=127.0.0.1 只监听回环、必然经代理，故这个值不能留 0（留 0 取到的是
     # 代理自身 IP，全站共用一个限流桶）；配大则等于采信攻击者伪造的 XFF。
     trusted-proxy-count: '${TRUSTED_PROXY_COUNT:1}'
+
+
+
   admin:
     # 后台管理 JWT/账号配置；jwt-secret 为空时 JwtService 拒绝启动
     jwt-secret: '${ADMIN_JWT_SECRET:2oxbUQO2mn77QvjZA0Y6nlAhDU7k5XFAGXit7AWQw2vCk}'
@@ -276,29 +261,25 @@ management:
       application: unicorn-studio
 
 logging:
-  # 日志文件目录。logback-spring.xml 按级别/日期分目录写入
-  # info/yyyy-MM-dd/app-info.log（全量，含接口访问日志）、warn/.../app-warn.log（仅警告）、
-  # error/.../app-error.log（仅错误）、admin/.../app-admin.log（管理端操作审计），各保留 30 天。
-  #
-  # ⚠️ 这个路径是【相对启动工作目录】解析的（默认 ./logs）：用 `java -jar xxx.jar` 直接起进程时，
-  # 工作目录取决于你在哪个目录敲的命令，未必是 jar 所在目录 —— 日志会落到别处；
-  # 若那个目录还不可写，logback 只会把错误打到自己内部状态里，表现就是
-  # 「控制台有日志、logs/ 里什么都没有」，看起来像「日志没保存」。
-  # 生产请显式给绝对路径：`LOG_DIR=/opt/unicorn-studio/logs`
-  # （backend/start.sh 已自动设为「脚本所在目录/logs」，用官方脚本启动就不必手配）。
-  # 同一个值也被 RetentionService 用来定位并清理 admin 审计文件，改这里即可。
+  # 启动、运行、接口访问和管理审计统一写入 app.log，同时保留控制台输出。
+  # ./logs 相对启动工作目录；服务器建议设置 LOG_DIR=/opt/unicorn-studio/logs。
   file:
-    path: ${LOG_DIR:./logs}
-  # 控制台日志与 JVM 标准输出使用相同编码，避免日志和 System.out/err 混用两种编码。
-  # 中文 Windows 的 stdout.encoding 可能是 GBK；UTF-8 终端及 Linux 通常为 UTF-8。
-  # 未提供 stdout.encoding 时依次回退到 native.encoding、UTF-8。
-  # 可通过 LOGGING_CHARSET_CONSOLE 显式覆盖；文件日志始终使用 UTF-8。
+    name: ${LOG_DIR:./logs}/app.log
+  logback:
+    rollingpolicy:
+      file-name-pattern: ${logging.file.name}.%d{yyyy-MM-dd}.%i.gz
+      max-file-size: 50MB
+      max-history: 30
+      total-size-cap: 2GB
+      clean-history-on-start: true
   charset:
-    console: ${stdout.encoding:${native.encoding:UTF-8}}
+    # 控制台和日志文件统一使用 UTF-8。
+    console: UTF-8
+    file: UTF-8
   level:
+    root: INFO
     com.unicorn.studio: INFO
-    # 接口访问日志（[ACCESS] 行）走独立 logger，见 AccessLogFilter 类注释。
-    # 单列出来是为了让「收紧业务包日志级别」时不会顺手把接口日志一起关掉 ——
-    # prod 环境把 com.unicorn.studio 收到 WARN、接口日志照常保留，就靠这条分离。
-    ACCESS_LOG: INFO
+    # 两类日志独立控制级别，仍写入同一个文件。
+    ACCESS_LOG: debug
+    ADMIN_AUDIT: INFO
     org.springframework.security: WARN

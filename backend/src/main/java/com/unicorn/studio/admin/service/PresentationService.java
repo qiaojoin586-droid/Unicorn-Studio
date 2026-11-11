@@ -108,6 +108,25 @@ public class PresentationService {
             if (url != null && !url.isNull() && !isSafeUrl(url.asText()))
                 throw BusinessException.badRequest(name + ": 仅支持站内路径、锚点或 http/https 链接");
         }
+        if (value instanceof PresentationVO.Home home) {
+            if (Set.of("work", "learning").contains(home.recommendationType()) && home.recommendationId().isEmpty()) {
+                throw BusinessException.badRequest("请选择要推荐的作品或学习资料");
+            }
+            validateBackground(home.backgroundMode(), home.backgroundImageUrl(), home.backgroundVideoUrl());
+        } else if (value instanceof PresentationVO.About about) {
+            validateBackground(about.backgroundMode(), about.backgroundImageUrl(), about.backgroundVideoUrl());
+        }
+    }
+    private void validateBackground(String mode, String image, String video) {
+        if (image.startsWith("#") || video.startsWith("#") || !isSafeUrl(image) || !isSafeUrl(video)) {
+            throw BusinessException.badRequest("背景图片和视频仅支持站内路径或 http/https 链接");
+        }
+        if (!mode.isEmpty() && image.isEmpty()) {
+            throw BusinessException.badRequest("请上传背景图片或视频封面");
+        }
+        if ("video".equals(mode) && video.isEmpty()) {
+            throw BusinessException.badRequest("请上传背景视频");
+        }
     }
     static boolean isSafeUrl(String value) {
         if (value == null || value.isEmpty()) return true;

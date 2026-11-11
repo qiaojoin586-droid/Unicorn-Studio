@@ -58,7 +58,7 @@
     <el-card shadow="never" class="block-gap-top">
       <template #header><span class="card-title">立即清理</span></template>
       <p class="desc">
-        清理将<strong>物理删除</strong>截止时间之前产生的审计日志（不可从库内恢复），裁剪超期的审计日志文件目录，
+        清理将<strong>物理删除</strong>截止时间之前产生的审计日志（不可从库内恢复），裁剪超期的旧版审计文件目录，
         并按保留周期重置 SQL 监控内存统计。建议先「预览待清理数据」确认影响范围后再执行。
       </p>
 
@@ -79,7 +79,7 @@
       >
         <template #title>
           截止 {{ formatDateTime(previewData.cutoff) }} 之前：审计日志 {{ previewData.expiredAuditRows }} 条待删除
-          （现有共 {{ previewData.totalAuditRows }} 条），审计文件目录 {{ previewData.logDirsToDelete }} 个待裁剪（约
+          （现有共 {{ previewData.totalAuditRows }} 条），旧版审计文件目录 {{ previewData.logDirsToDelete }} 个待裁剪（约
           {{ formatSize(previewData.logFilesBytes) }}）
         </template>
       </el-alert>
@@ -115,17 +115,16 @@
         </li>
         <li>
           <strong>清理对象三：清理操作自身的日志</strong>——清理任务本身是审计写接口，其产生的数据库审计行会在下一轮
-          按同一规则删除；管理端审计文件（<code>logs/admin/yyyy-MM-dd/</code>）由本任务按同一保留期裁剪整个日期目录，
-          因此清理日志不会自我堆积。
+          按同一规则删除；旧版管理端审计目录（<code>logs/admin/yyyy-MM-dd/</code>）仍按同一保留期清理。
+          新的审计摘要统一写入应用日志，由日志滚动策略自动归档和清理。
         </li>
         <li>
           <strong>触发方式</strong>——① 定时任务（执行周期见上，错开备份/统计等既有任务）；② 本页「立即执行清理」。
           手动执行不受「自动清理」开关限制。
         </li>
         <li>
-          <strong>注意：审计日志文件另受 logback 30 天上限约束</strong>——<code>logs/admin/</code> 下的日期目录由本任务按
-          保留期裁剪，但日志框架自身的 <code>maxHistory=30</code> 仍是硬上限，故保留期设为 90 天时文件侧实际仍为 30 天。
-          数据库中的审计日志不受此限制。
+          <strong>应用文件日志单独保留</strong>——默认保留 30 天归档，归档总量上限 2GB；本页保留期只影响数据库审计记录、
+          SQL 监控和旧版审计目录，不会删除统一应用日志。文件日志保留策略以服务器部署配置为准。
         </li>
         <li>
           <strong>安全与可恢复性</strong>——删除为物理删除，无法从数据库回滚；后台提供预览（dry-run）与单轮删除上限，

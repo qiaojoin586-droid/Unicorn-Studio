@@ -1,5 +1,10 @@
 // Presentation API types; empty forms contain no business content.
-export interface HomePresentation {
+export interface PresentationBackground {
+  backgroundMode: '' | 'image' | 'video'
+  backgroundImageUrl: string
+  backgroundVideoUrl: string
+}
+export interface HomePresentation extends PresentationBackground {
   eyebrow: string
   title: string
   description: string
@@ -7,7 +12,6 @@ export interface HomePresentation {
   primaryUrl: string
   secondaryLabel: string
   secondaryUrl: string
-  mediaMode: string
   featuredLimit: number | null
   worksEyebrow: string
   worksTitle: string
@@ -23,8 +27,10 @@ export interface HomePresentation {
   invitationDescription: string
   invitationLabel: string
   invitationUrl: string
+  recommendationType: '' | 'work' | 'learning' | 'join'
+  recommendationId: string
 }
-export interface AboutPresentation {
+export interface AboutPresentation extends PresentationBackground {
   principlesEyebrow: string
   principlesTitle: string
   principles: { title: string; description: string }[]

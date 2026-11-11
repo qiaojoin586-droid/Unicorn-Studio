@@ -8,7 +8,6 @@ export const presentationFields = {
     "primaryUrl",
     "secondaryLabel",
     "secondaryUrl",
-    "mediaMode",
     "featuredLimit",
     "worksEyebrow",
     "worksTitle",
@@ -23,7 +22,12 @@ export const presentationFields = {
     "invitationTitle",
     "invitationDescription",
     "invitationLabel",
-    "invitationUrl"
+    "invitationUrl",
+    "recommendationType",
+    "recommendationId",
+    "backgroundMode",
+    "backgroundImageUrl",
+    "backgroundVideoUrl"
   ],
   "about": [
     "principlesEyebrow",
@@ -32,7 +36,10 @@ export const presentationFields = {
     "invitationTitle",
     "invitationDescription",
     "invitationLabel",
-    "invitationUrl"
+    "invitationUrl",
+    "backgroundMode",
+    "backgroundImageUrl",
+    "backgroundVideoUrl"
   ],
   "footer": [
     "inheritBrand",

@@ -29,7 +29,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 审计切面：@AuditLog 标注的写接口执行后异步落库 + 同步写管理端审计文件。
+ * 审计切面：@AuditLog 标注的写接口执行后异步落库，并将脱敏摘要写入统一应用日志。
  * 参数 JSON 序列化后脱敏（password/token/refreshToken → "***"）。
  * 注意：SecurityContext/RequestContext 为 ThreadLocal，异步线程拿不到，
  * 故在请求线程内构建完整日志实体，@Async 仅负责落库（经代理调用才生效）。
@@ -39,7 +39,7 @@ import java.util.Set;
 public class AuditLogAspect {
 
     private static final Logger log = LoggerFactory.getLogger(AuditLogAspect.class);
-    /** 管理端操作审计专用 logger：写入 logs/admin/yyyy-MM-dd/app-admin.log.N（additivity=false，见 logback-spring.xml） */
+    /** 独立控制审计级别，通过 root logger 写入统一的 app.log。 */
     private static final Logger AUDIT_FILE_LOGGER = LoggerFactory.getLogger("ADMIN_AUDIT");
     /**
      * 需要脱敏的字段名（精确匹配，不区分大小写）。
@@ -105,8 +105,8 @@ public class AuditLogAspect {
     }
 
     /**
-     * 同步写审计文件（与异步落库解耦，任一失败互不影响；内部自捕获保证不影响业务主流程）。
-     * 一行一条、含脱敏参数，随 logback 按天归档到 logs/admin/yyyy-MM-dd/app-admin.log.N。
+     * 写入应用日志（与异步落库解耦，内部自捕获保证不影响业务主流程）。
+     * 一行一条、含脱敏参数，随 app.log 统一滚动归档。
      */
     private void writeAuditFile(SysOperationLog entry) {
         try {

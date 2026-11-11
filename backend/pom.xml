@@ -93,7 +93,7 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Redis 服务（V15 缓存方案：StringRedisTemplate + 显式 ObjectMapper） -->
+        <!--redis配置  -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
@@ -131,9 +131,6 @@
             <version>1.18.1</version>
         </dependency>
 
-        <!-- 限流：自 V15 迁至 Redis（common/cache/RedisRateLimiter，Lua INCR+EXPIRE），
-             原 bucket4j-core 内存版已移除（§4.5） -->
-
         <!-- AOP（审计切面 / 异步） -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -153,10 +150,7 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- ==================== Spring AI（AIWorker 模块） ====================
-             OpenAI 兼容协议 starter：同时支持 OpenAI 官方与各类兼容网关
-             （如 DeepSeek / 通义 / 智谱 / OneAPI 等，只需替换 base-url 与 model）。
-             ChatClient/工具调用（Function Calling）均由 Spring AI 提供。 -->
+<!--      AIWorker模块要使用的包-->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-openai</artifactId>
@@ -166,11 +160,6 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>
@@ -190,41 +179,6 @@
                 </configuration>
             </plugin>
 
-            <!--
-                Mockito 内联 mock maker 需要 Byte Buddy 以【Java agent】形式挂载。
-
-                为什么必须显式配：Mockito 会先尝试「自附加（self-attach）」，即在测试 JVM 里
-                另起一个进程去 attach 自己。这条路在很多环境下不通（JDK 21 已把动态 attach 标为
-                弃用并默认告警，且沙箱/受限环境直接失败），报错是：
-
-                    MockitoInitializationException:
-                    It appears as if your JDK does not supply a working agent attachment mechanism.
-                    Caused by: Could not self-attach to current VM using external process
-
-                后果是**所有**用 @Mock/MockitoExtension 的测试整体报
-                "Could not initialize plugin: interface org.mockito.plugins.MockMaker" ——
-                看着像测试写错了，其实是运行环境缺 agent，极易误判。
-                （IDEA 自己的测试运行器会替你挂上 agent，所以同一套代码在 IDE 里绿、在
-                 mvn 命令行里红 —— 这正是本项目遇到的情形。）
-
-                修法就是 Maven 官方推荐的两步：
-                  ① dependency-plugin 把 byte-buddy-agent 的 jar 绝对路径解析进 ${argLine}；
-                  ② surefire 把 -javaagent:... 传给测试 JVM。
-                只影响 test 阶段，不影响打出来的 jar。
-            -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>resolve-byte-buddy-agent</id>
-                        <phase>initialize</phase>
-                        <goals>
-                            <goal>properties</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
@@ -236,29 +190,4 @@
         </plugins>
     </build>
 
-    <!--
-      保留 jar profile 兼容现有打包命令。
-      后端统一使用 application.yml；排除额外的 profile YAML，避免意外引入配置覆盖。
-
-      用法：
-        mvn -Pjar clean package -DskipTests
-        java -jar target/unicorn-studio-1.0.1.jar
-    -->
-    <profiles>
-        <profile>
-            <id>jar</id>
-            <build>
-                <resources>
-                    <resource>
-                        <directory>src/main/resources</directory>
-                        <filtering>false</filtering>
-                        <excludes>
-                            <exclude>application-*.yml</exclude>
-                            <exclude>application-*.yaml</exclude>
-                        </excludes>
-                    </resource>
-                </resources>
-            </build>
-        </profile>
-    </profiles>
 </project>

@@ -1,6 +1,6 @@
 <template>
   <div class="about-page">
-    <BackgroundVideo :src="aboutVideo" :poster="aboutPoster" desktop-only sticky />
+    <PresentationWallpaper :config="extra" :default-video="aboutVideo" :default-poster="aboutPoster" :ready="ready" />
 
     <section class="page-shell about-intro" aria-labelledby="about-title">
       <div class="about-overline">
@@ -59,13 +59,13 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { usePageMeta } from '@/composables/usePageMeta'
-import BackgroundVideo from '@/components/BackgroundVideo.vue'
+import PresentationWallpaper from '@/components/PresentationWallpaper.vue'
 import logoUrl from '@/image/LOGO.jpg'
 import aboutVideo from '@/image/home.mp4'
 import aboutPoster from '@/image/home-poster.jpg'
 import SiteLink from '@/components/SiteLink.vue'
 import { usePresentation } from '@/composables/usePresentation'
-const { presentation } = usePresentation()
+const { presentation, ready } = usePresentation()
 const extra = computed(() => presentation.about)
 
 const { get } = useApi()

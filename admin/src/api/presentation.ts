@@ -2,8 +2,8 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { onBeforeRouteLeave } from 'vue-router'
 import { ElMessageBox } from 'element-plus'
 import { http } from '@/utils/request'
-import { createPresentationSection, type PresentationSections, type PresentationSection } from '../../../shared/presentation-contract.js'
-export type { HomePresentation, AboutPresentation, FooterPresentation, JoinPresentation, PresentationSections, PresentationSection } from '../../../shared/presentation-contract.js'
+import { createPresentationSection, type PresentationBackground, type PresentationSections, type PresentationSection } from '../../../shared/presentation-contract.js'
+export type { HomePresentation, AboutPresentation, FooterPresentation, JoinPresentation, PresentationBackground, PresentationSections, PresentationSection } from '../../../shared/presentation-contract.js'
 
 export function clonePresentation<K extends PresentationSection>(section: K): PresentationSections[K] {
   return createPresentationSection(section)
@@ -27,6 +27,12 @@ export function isPresentationUrl(value: string): boolean {
   try { return ['http:', 'https:'].includes(new URL(url).protocol) } catch { return false }
 }
 
+export function wallpaperError(config: PresentationBackground) {
+  if (config.backgroundMode && !config.backgroundImageUrl) return '请上传背景图片或视频封面'
+  if (config.backgroundMode === 'video' && !config.backgroundVideoUrl) return '请上传背景视频'
+  return ''
+}
+
 /** 两个独立配置端点不是事务；每个结果都要告诉编辑者。 */
 export function describeSectionSave(results: PromiseSettledResult<unknown>[], labels: string[]) {
   const saved = labels.filter((_, i) => results[i].status === 'fulfilled')
@@ -41,7 +47,7 @@ export function useConfigDraft(source: () => unknown) {
   const ready = ref(false)
   const snapshot = ref('')
   const dirty = computed(() => ready.value && JSON.stringify(source()) !== snapshot.value)
-  function markSaved() { snapshot.value = JSON.stringify(source()); ready.value = true }
+  function markSaved(value = source()) { snapshot.value = JSON.stringify(value); ready.value = true }
   function onBeforeUnload(event: BeforeUnloadEvent) {
     if (!dirty.value) return
     event.preventDefault()

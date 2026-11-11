@@ -19,7 +19,7 @@ public record PresentationVO(Home home, About about, Footer footer, Join join) {
         @Size(max=2000) String description,
         @Size(max=80) String primaryLabel, @Size(max=2048) String primaryUrl,
         @Size(max=80) String secondaryLabel, @Size(max=2048) String secondaryUrl,
-        @NotBlank @Pattern(regexp="single|carousel") String mediaMode,
+        @Pattern(regexp="|single|carousel") String mediaMode,
         @NotNull @Min(1) @Max(6) Integer featuredLimit,
         @Size(max=120) String worksEyebrow, @NotBlank @Size(max=160) String worksTitle,
         @Size(max=2000) String worksDescription,
@@ -29,13 +29,21 @@ public record PresentationVO(Home home, About about, Footer footer, Join join) {
         @Size(max=2000) String directionsDescription,
         @Size(max=120) String invitationEyebrow, @NotBlank @Size(max=160) String invitationTitle,
         @Size(max=2000) String invitationDescription,
-        @Size(max=80) String invitationLabel, @Size(max=2048) String invitationUrl) { }
+        @Size(max=80) String invitationLabel, @Size(max=2048) String invitationUrl,
+        @Pattern(regexp="|work|learning|join") String recommendationType,
+        @Pattern(regexp="|[1-9][0-9]{0,18}") String recommendationId,
+        @Pattern(regexp="|image|video") String backgroundMode,
+        @Size(max=2048) String backgroundImageUrl,
+        @Size(max=2048) String backgroundVideoUrl) { }
     public record About(
         @Size(max=120) String principlesEyebrow, @NotBlank @Size(max=160) String principlesTitle,
         @Valid @Size(max=8) List<@NotNull @Valid Principle> principles,
         @NotBlank @Size(max=160) String invitationTitle,
         @Size(max=2000) String invitationDescription,
-        @Size(max=80) String invitationLabel, @Size(max=2048) String invitationUrl) { }
+        @Size(max=80) String invitationLabel, @Size(max=2048) String invitationUrl,
+        @Pattern(regexp="|image|video") String backgroundMode,
+        @Size(max=2048) String backgroundImageUrl,
+        @Size(max=2048) String backgroundVideoUrl) { }
     public record Principle(@NotBlank @Size(max=160) String title, @Size(max=1200) String description) { }
     /** Empty footer additions hide optional blocks; false must survive default merging. */
     public record Footer(

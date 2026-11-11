@@ -4,7 +4,7 @@
       <h1 class="page-title">首页配置</h1>
       <div class="config-actions"><span class="draft-state">{{ dirty ? '未保存修改' : '已加载配置' }}</span><el-button type="primary" v-permission="'carousel:edit'" :loading="saving" :disabled="loading || !ready || !!loadError" @click="save">保存并更新主站</el-button></div>
     </div>
-    <el-alert title="这里维护首页文案与展示规则；保存即时生效。右侧预览使用当前未保存表单，不会更改线上内容。" type="info" :closable="false" show-icon />
+    <el-alert title="在这里维护首页文案、本期推荐和中段背景。桌面与手机预览随表单更新，点击保存后发布到主站。" type="info" :closable="false" show-icon />
     <el-alert v-if="loadError" :title="loadError" type="error" :closable="false" class="config-alert"><el-button link @click="load">重新加载配置</el-button></el-alert>
     <el-alert v-if="saveStatus" :title="saveStatus" :type="dirty ? 'warning' : 'success'" :closable="false" class="config-alert" />
     <div class="config-workspace">
@@ -16,10 +16,31 @@
               <el-input v-model="form[field.key]" :type="field.multiline ? 'textarea' : 'text'" :rows="field.multiline ? 3 : undefined" :maxlength="fieldMaxlength(field.key)" :placeholder="field.required ? '必填' : '可选，清空后隐藏对应文案或入口'" />
             </el-form-item>
             <template v-if="group.id === 'hero'">
-              <el-form-item label="首屏媒体模式"><el-radio-group v-model="form.mediaMode"><el-radio-button value="single">精选单图</el-radio-button><el-radio-button value="carousel">可控轮播</el-radio-button></el-radio-group></el-form-item>
-              <p class="field-tip">单图使用第一张已启用首页媒体；轮播展示全部有效媒体，提供前后切换，不自动播放。图片、标题、副标题和跳转链接在「首页媒体」维护。</p>
-              <router-link to="/carousel" class="config-manage-link">管理首页媒体与页面背景 →</router-link>
+              <el-form-item label="本期推荐">
+                <el-select v-model="form.recommendationType" :empty-values="[null, undefined]" @change="form.recommendationId = ''">
+                  <el-option label="品牌画面" value="" />
+                  <el-option label="作品" value="work" />
+                  <el-option label="学习资料" value="learning" />
+                  <el-option label="加入招募" value="join" />
+                </el-select>
+              </el-form-item>
+              <el-form-item v-if="needsRecommendation" :label="form.recommendationType === 'work' ? '已发布作品' : '已发布学习资料'" required>
+                <el-select v-model="form.recommendationId" filterable :loading="choicesLoading" placeholder="搜索标题并选择">
+                  <el-option v-if="unavailableChoice" :value="form.recommendationId" label="当前推荐不可用" disabled />
+                  <el-option v-for="item in choices" :key="item.id" :value="String(item.id)" :label="item.title" />
+                </el-select>
+              </el-form-item>
+              <el-alert v-if="choicesError" :title="choicesError" type="warning" :closable="false">
+                <el-button link @click="loadChoices">重新加载</el-button>
+              </el-alert>
+              <p class="field-tip">推荐卡片自动使用已发布内容的标题、封面和链接。内容下线后显示品牌画面。</p>
             </template>
+            <WallpaperFields
+              v-if="group.id === 'wallpaper'"
+              v-model:mode="form.backgroundMode"
+              v-model:image-url="form.backgroundImageUrl"
+              v-model:video-url="form.backgroundVideoUrl"
+            />
             <template v-if="group.id === 'works'">
               <el-form-item label="首页精选展示数量"><el-input-number v-if="ready" v-model="form.featuredLimit" :min="1" :max="6" /></el-form-item>
               <p class="field-tip">从已发布且标记为首页推荐的作品中，按公开接口的排序依次展示；超出数量的推荐作品保留为候选。</p>
@@ -36,11 +57,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { presentationApi, clonePresentation, isPresentationUrl, useConfigDraft, type HomePresentation } from '@/api/presentation'
+import { presentationApi, clonePresentation, isPresentationUrl, useConfigDraft, wallpaperError, type HomePresentation, type PresentationBackground } from '@/api/presentation'
 import { useAuthStore } from '@/stores/auth'
 import SitePreview from '@/components/SitePreview.vue'
+import WallpaperFields from '@/components/WallpaperFields.vue'
 const auth = useAuthStore()
 const canEdit = computed(() => auth.hasPerm('carousel:edit'))
 const form = reactive<HomePresentation>(clonePresentation('home'))
@@ -49,7 +71,35 @@ const saving = ref(false)
 const loadError = ref('')
 const saveStatus = ref('')
 const { ready, dirty, markSaved } = useConfigDraft(() => form)
-type TextKey = Exclude<keyof HomePresentation, 'mediaMode' | 'featuredLimit'>
+type TextKey = Exclude<keyof HomePresentation, keyof PresentationBackground | 'recommendationType' | 'recommendationId' | 'featuredLimit'>
+type Choice = { id: number; title: string }
+const choices = ref<Choice[]>([])
+const choicesLoading = ref(false)
+const choicesError = ref('')
+const needsRecommendation = computed(() => ['work', 'learning'].includes(form.recommendationType))
+const unavailableChoice = computed(() => !choicesLoading.value && !choicesError.value && form.recommendationId && !choices.value.some(item => String(item.id) === form.recommendationId))
+let choicesVersion = 0
+async function loadChoices() {
+  const version = ++choicesVersion
+  const type = form.recommendationType
+  choices.value = []
+  choicesError.value = ''
+  choicesLoading.value = needsRecommendation.value
+  if (!needsRecommendation.value) return
+  try {
+    const endpoint = type === 'work' ? '/api/works' : '/api/learning/resources'
+    const response = await fetch(endpoint, { signal: AbortSignal.timeout(15000) })
+    const result = await response.json()
+    if (!response.ok || result.code !== 200) throw new Error()
+    const items = type === 'work' ? result.data?.list : result.data?.resources
+    if (version === choicesVersion) choices.value = Array.isArray(items) ? items : []
+  } catch {
+    if (version === choicesVersion) choicesError.value = '已发布内容加载失败'
+  } finally {
+    if (version === choicesVersion) choicesLoading.value = false
+  }
+}
+watch(() => form.recommendationType, loadChoices)
 type TextField = { key: TextKey; label: string; required?: boolean; multiline?: boolean }
 function fieldMaxlength(key: TextKey) {
   const name = key.toLowerCase()
@@ -64,6 +114,7 @@ const fieldGroups: { id: string; title: string; tip: string; fields: TextField[]
     { key: 'eyebrow', label: '顶部小标签' }, { key: 'title', label: '主标题', required: true, multiline: true }, { key: 'description', label: '首屏说明', multiline: true },
     { key: 'primaryLabel', label: '主入口文字' }, { key: 'primaryUrl', label: '主入口链接' }, { key: 'secondaryLabel', label: '次入口文字' }, { key: 'secondaryUrl', label: '次入口链接' },
   ] },
+  { id: 'wallpaper', title: '首页中段背景', tip: '精选作品、成长方式和技术方向共用一张背景。默认使用内置的首页动态壁纸。', fields: [] },
   { id: 'works', title: '02 / 精选作品', tip: '维护作品画廊的章节文案，具体作品与推荐位置在作品管理中维护。', fields: [
     { key: 'worksEyebrow', label: '章节小标签' }, { key: 'worksTitle', label: '章节标题', required: true, multiline: true }, { key: 'worksDescription', label: '章节说明', multiline: true },
   ] },
@@ -90,10 +141,14 @@ async function save() {
     if (field.required && !String(form[field.key]).trim()) { ElMessage.warning(group.title + '：' + field.label + '不能为空'); return }
     if (field.key.toLowerCase().includes('url') && !isPresentationUrl(String(form[field.key]))) { ElMessage.warning(field.label + '只支持站内路径、锚点或 HTTP(S) 地址'); return }
   }
-  if (!['single', 'carousel'].includes(form.mediaMode) || !Number.isInteger(form.featuredLimit) || form.featuredLimit < 1 || form.featuredLimit > 6) { ElMessage.warning('请选择媒体模式，并设置 1 至 6 件精选作品'); return }
+  if (form.featuredLimit == null || !Number.isInteger(form.featuredLimit) || form.featuredLimit < 1 || form.featuredLimit > 6) { ElMessage.warning('请设置 1 至 6 件精选作品'); return }
+  if (needsRecommendation.value && !form.recommendationId) { ElMessage.warning('请选择要推荐的作品或学习资料'); return }
+  const backgroundError = wallpaperError(form)
+  if (backgroundError) { ElMessage.warning(backgroundError); return }
+  const snapshot = { ...form }
   saving.value = true
   saveStatus.value = ''
-  try { await presentationApi.update('home', form); markSaved(); saveStatus.value = '首页配置已保存并更新主站，请刷新线上页面核验。'; ElMessage.success('首页配置已保存') }
+  try { await presentationApi.update('home', snapshot); markSaved(snapshot); saveStatus.value = '首页配置已保存并更新主站，请刷新线上页面核验。'; ElMessage.success('首页配置已保存') }
   finally { saving.value = false }
 }
 onMounted(load)

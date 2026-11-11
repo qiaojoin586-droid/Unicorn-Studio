@@ -4,16 +4,19 @@
     <div v-else-if="error" class="page-shell detail-state" role="status"><p class="eyebrow">ARCHIVE UNAVAILABLE</p><h1>暂时无法打开这件作品。</h1><p>{{ error }}</p><div class="detail-actions"><button type="button" class="button button--primary" @click="loadWork">重新加载</button><router-link to="/works" class="button button--secondary">返回作品档案</router-link></div></div>
     <template v-else-if="work">
       <section class="detail-intro">
-        <div v-if="background" class="detail-intro__background"><BackgroundVideo v-if="background.mediaType === 'video'" :src="background.videoUrl" :poster="background.imageUrl" /><img v-else :src="background.imageUrl" alt="" /></div>
         <div class="page-shell detail-intro__inner">
           <router-link to="/works" custom v-slot="{ href, navigate }"><a :href="href" class="detail-back" @click="returnToArchive($event, navigate)"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6" stroke="currentColor" stroke-width="1.5"/></svg>返回作品档案</a></router-link>
-          <div class="detail-kicker"><p class="eyebrow">WORK IN FOCUS</p><div class="detail-tags"><span v-if="tag">{{ tag.label }}</span><span v-if="work.category && work.category !== tag?.label">{{ work.category }}</span></div></div>
-          <h1>{{ work.title }}</h1><p v-if="work.summary" class="detail-summary">{{ work.summary }}</p>
-          <dl class="detail-meta"><div v-if="work.authors"><dt>创作者</dt><dd>{{ work.authors }}</dd></div><div v-if="work.dateLabel"><dt>时间</dt><dd>{{ work.dateLabel }}</dd></div><div v-if="work.viewCount != null"><dt>阅读</dt><dd>{{ work.viewCount }} 次</dd></div></dl>
+          <div class="detail-intro__grid" :class="{ 'detail-intro__grid--cover': work.coverUrl && !coverFailed }">
+            <div>
+              <div class="detail-kicker"><p class="eyebrow">WORK IN FOCUS</p><div class="detail-tags"><span v-if="tag">{{ tag.label }}</span><span v-if="work.category && work.category !== tag?.label">{{ work.category }}</span></div></div>
+              <h1>{{ work.title }}</h1><p v-if="work.summary" class="detail-summary">{{ work.summary }}</p>
+              <dl class="detail-meta"><div v-if="work.authors"><dt>创作者</dt><dd>{{ work.authors }}</dd></div><div v-if="work.dateLabel"><dt>时间</dt><dd>{{ work.dateLabel }}</dd></div><div v-if="work.viewCount != null"><dt>阅读</dt><dd>{{ work.viewCount }} 次</dd></div></dl>
+            </div>
+            <figure v-if="work.coverUrl && !coverFailed" class="detail-cover"><img :src="work.coverUrl" :alt="work.title" width="1280" height="800" decoding="async" fetchpriority="high" @error="coverFailed = true" /></figure>
+          </div>
         </div>
       </section>
       <div class="page-shell detail-body">
-        <figure v-if="work.coverUrl && !coverFailed" class="detail-cover"><img :src="work.coverUrl" :alt="work.title" width="1280" height="800" decoding="async" fetchpriority="high" @error="coverFailed = true" /></figure>
         <div class="detail-reading-grid"><aside class="detail-side"><span class="meta-label">THE MAKING OF</span><span class="detail-side__line"></span><p>每一次实践，<br />都让想法更进一步。</p></aside><article ref="articleContent" class="detail-article"><div v-if="work.content && isHtmlContent" class="rich-content" v-html="work.content"></div><div v-else-if="work.content" class="detail-plain">{{ work.content }}</div><div v-else class="detail-empty"><h2>故事还在继续。</h2><p>这件作品的过程记录正在整理，欢迎稍后再来看看。</p></div><a v-if="work.externalLink" :href="work.externalLink" target="_blank" rel="noopener noreferrer" class="button button--primary detail-source">查看原文 <span aria-hidden="true">↗</span><span class="sr-only">（在新窗口打开）</span></a></article></div>
         <div class="detail-ending"><span class="meta-label">THERE'S MORE TO EXPLORE</span><router-link to="/works" custom v-slot="{ href, navigate }"><a :href="href" @click="returnToArchive($event, navigate)">继续探索作品 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" stroke="currentColor" stroke-width="1.5"/></svg></a></router-link></div>
       </div>
@@ -25,13 +28,10 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useApi } from '@/composables/useApi'
 import { usePageMeta } from '@/composables/usePageMeta'
-import { usePageBackground } from '@/composables/usePageBackground'
 import { resolveWorkTag } from '@/constants/workTags'
-import BackgroundVideo from '@/components/BackgroundVideo.vue'
 const route = useRoute()
 const router = useRouter()
 const { get } = useApi()
-const { background } = usePageBackground('work-detail')
 const loading = ref(true)
 const error = ref('')
 const work = ref(null)
@@ -95,26 +95,14 @@ onBeforeUnmount(() => { requestVersion++ })
   padding-top: 38px;
   padding-bottom: 56px;
 }
-.detail-intro__background {
-  position: absolute;
-  inset: 0 0 0 auto;
-  width: 45%;
-  pointer-events: none;
+.detail-intro__grid {
+  margin-top: 54px;
 }
-
-.detail-intro__background :deep(img),
-.detail-intro__background :deep(video) {
-  opacity: .1;
-  mask-image: linear-gradient(to right, transparent, #000);
-}
-.detail-intro__background :deep(.video-toggle) {
-  pointer-events: auto;
-  z-index: 3;
-}
-.detail-intro__background>img {
-  height: 100%;
-  width: 100%;
-  object-fit: cover;
+.detail-intro__grid--cover {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(28px, 4vw, 68px);
 }
 .detail-back {
   display: inline-flex;
@@ -135,7 +123,6 @@ onBeforeUnmount(() => { requestVersion++ })
   align-items: baseline;
   justify-content: space-between;
   gap: 24px;
-  margin-top: 54px;
 }
 .detail-kicker .eyebrow {
   margin: 0;
@@ -194,7 +181,7 @@ onBeforeUnmount(() => { requestVersion++ })
   padding-bottom: 72px;
 }
 .detail-cover {
-  margin: 0 0 64px;
+  margin: 0;
   border-radius: 4px;
   overflow: hidden;
   background: var(--surface-soft, #e7e5df);
@@ -202,7 +189,7 @@ onBeforeUnmount(() => { requestVersion++ })
 .detail-cover img {
   width: 100%;
   height: auto;
-  max-height: 760px;
+  max-height: 520px;
   object-fit: contain;
 }
 .detail-reading-grid {
@@ -328,8 +315,13 @@ onBeforeUnmount(() => { requestVersion++ })
     padding-top: 24px;
     padding-bottom: 35px;
   }
-  .detail-kicker {
+  .detail-intro__grid {
     margin-top: 32px;
+  }
+  .detail-intro__grid--cover {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .detail-kicker {
     flex-direction: column;
     gap: 16px;
   }
@@ -347,9 +339,6 @@ onBeforeUnmount(() => { requestVersion++ })
   .detail-body {
     padding-top: 28px;
     padding-bottom: 48px;
-  }
-  .detail-cover {
-    margin-bottom: 36px;
   }
   .detail-reading-grid {
     grid-template-columns: 1fr;
@@ -375,9 +364,6 @@ onBeforeUnmount(() => { requestVersion++ })
   .detail-state {
     padding-top: 55px;
     padding-bottom: 70px;
-  }
-  .detail-intro__background {
-    width: 80%;
   }
 }
 @media(prefers-reduced-motion:reduce) {

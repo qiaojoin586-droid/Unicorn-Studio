@@ -1,7 +1,7 @@
 <template>
   <div class="works-page">
     <section class="archive-intro">
-      <div v-if="background" class="archive-intro__image"><BackgroundVideo v-if="background.mediaType === 'video'" :src="background.videoUrl" :poster="background.imageUrl" /><img v-else :src="background.imageUrl" alt="" decoding="async" /></div>
+      <div v-if="background" class="archive-intro__image"><BackgroundVideo v-if="background.mediaType === 'video'" :src="background.videoUrl" :poster="background.imageUrl" desktop-only /><img v-else :src="background.imageUrl" alt="" decoding="async" /></div>
       <div class="page-shell archive-intro__inner">
         <p class="eyebrow">THE WORK ARCHIVE <span>/ 01</span></p>
         <div class="archive-intro__row"><h1>想法的<br />另一种形状<span>。</span></h1><div class="archive-intro__aside"><span class="archive-index" aria-hidden="true">( U—W )</span><p>从一次探索，到一件作品。<br />在这里，看到技术与好奇心的落点。</p></div></div>

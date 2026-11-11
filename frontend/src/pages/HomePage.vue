@@ -16,7 +16,10 @@
             </div>
             <div class="hero__disciplines" aria-label="探索领域"><span>AI 智能应用</span><span>软件开发</span><span>学术研究</span></div>
           </div>
-          <div class="hero-visual-wrap"><BrandVisual :show-annotation="!mediaItems.length" /><StudioMedia :items="mediaItems" :mode="home.mediaMode" /></div>
+          <div class="hero-visual-wrap">
+            <BrandVisual :show-annotation="!recommendation" />
+            <HomeRecommendation v-if="recommendation" :item="recommendation" />
+          </div>
         </div>
         <div class="hero__bottomline">
           <p>从一个问题开始，<span>向下一种可能出发。</span></p>
@@ -26,7 +29,7 @@
     </section>
 
     <div class="home-middle">
-      <BackgroundVideo :src="indexVideo" :poster="indexPoster" desktop-only sticky />
+      <PresentationWallpaper :config="home" :default-video="indexVideo" :default-poster="indexPoster" :ready="ready" />
 
       <section id="selected-works" class="selected-works" aria-labelledby="works-heading" :aria-busy="worksLoading">
         <div class="page-shell">
@@ -93,13 +96,13 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import BrandVisual from '@/components/BrandVisual.vue'
 import WorkCard from '@/components/WorkCard.vue'
 import SiteLink from '@/components/SiteLink.vue'
 import StudioIcon from '@/components/StudioIcon.vue'
-import StudioMedia from '@/components/StudioMedia.vue'
-import BackgroundVideo from '@/components/BackgroundVideo.vue'
+import HomeRecommendation from '@/components/HomeRecommendation.vue'
+import PresentationWallpaper from '@/components/PresentationWallpaper.vue'
 import indexVideo from '@/image/index.mp4'
 import indexPoster from '@/image/index-poster.jpg'
 import { usePresentation } from '@/composables/usePresentation'
@@ -107,10 +110,10 @@ import { useApi } from '@/composables/useApi'
 import { usePageMeta, DEFAULT_DESCRIPTION } from '@/composables/usePageMeta'
 
 const { get } = useApi()
-const { presentation } = usePresentation()
+const { presentation, ready } = usePresentation()
 const home = computed(() => presentation.home)
 usePageMeta(() => ({ home: true, title: home.value.title.replace(/\n/g, ''), description: DEFAULT_DESCRIPTION }))
-const carouselItems = ref([])
+const recommendation = ref(null)
 const works = ref([])
 const worksLoading = ref(true)
 const worksError = ref('')
@@ -124,26 +127,35 @@ const featuredWorks = computed(() => {
   const limit = home.value.featuredLimit
   return Number.isInteger(limit) && limit >= 1 && limit <= 6 ? works.value.slice(0, limit) : []
 })
-const baseUrl = import.meta.env.VITE_API_BASE || ''
-
-function mediaUrl(url) {
-  if (!url) return ''
-  return /^(https?:|data:|blob:)/.test(url) ? url : baseUrl + url
-}
-// Existing carousel configuration supplies a curated still, with a complete non-network brand fallback.
-const mediaItems = computed(() => {
-  const carousel = carouselItems.value.filter(item => item.imageUrl)
-  const work = featuredWorks.value.find((item) => item.coverUrl)
-  return carousel.length ? carousel : work ? [{ id: 'featured-work', imageUrl: mediaUrl(work.coverUrl), title: work.title, subtitle: work.summary, linkUrl: '/works/' + work.slug }] : []
-})
+watch([() => home.value.recommendationType, () => home.value.recommendationId], async ([type, id], _, onCleanup) => {
+  recommendation.value = null
+  if (!['work', 'learning', 'join'].includes(type) || (type !== 'join' && !id)) return
+  let current = true
+  onCleanup(() => { current = false })
+  const endpoint = { work: '/api/works', learning: '/api/learning/resources', join: '/api/join' }[type]
+  const result = await get(endpoint)
+  if (!current || result.error) return
+  const data = result.data
+  if (type === 'join') {
+    if (data?.title) recommendation.value = { label: '招募', title: data.title, description: data.subtitle, link: '/join' }
+    return
+  }
+  const items = type === 'work' ? data?.list : data?.resources
+  const item = Array.isArray(items) && items.find(item => String(item.id) === id)
+  if (!item?.title || (type === 'work' && !item.slug)) return
+  recommendation.value = {
+    label: type === 'work' ? '作品' : '学习资料',
+    title: item.title,
+    description: type === 'work' ? item.summary : item.description,
+    coverUrl: item.coverUrl,
+    link: type === 'work' ? '/works/' + encodeURIComponent(item.slug) : '/learning/' + id,
+  }
+}, { immediate: true })
 function scrollToWorks() {
   const target = document.getElementById('selected-works')
   if (!target) return
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   target.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth' })
-}
-async function loadCarousel() {
-  try { const result = await get('/api/carousel'); if (!result.error) carouselItems.value = Array.isArray(result.data?.list) ? result.data.list : [] } catch { /* The brand composition is the non-network fallback. */ }
 }
 async function loadFeaturedWorks() {
   worksLoading.value = true
@@ -160,7 +172,7 @@ async function loadServices() {
   servicesError.value = ''
   try { const result = await get('/api/services'); if (result.error) throw new Error(result.message); services.value = Array.isArray(result.data?.list) ? result.data.list : [] } catch (error) { servicesError.value = error.message || '暂时无法加载招收方向，请稍后重试。' } finally { servicesLoading.value = false }
 }
-onMounted(() => { loadCarousel(); loadFeaturedWorks(); loadCapabilities(); loadServices() })
+onMounted(() => { loadFeaturedWorks(); loadCapabilities(); loadServices() })
 </script>
 
 <style scoped>
