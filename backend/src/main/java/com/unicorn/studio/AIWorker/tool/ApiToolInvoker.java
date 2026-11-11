@@ -98,7 +98,6 @@ public class ApiToolInvoker {
      */
     public String invoke(AiToolConfig config, String argumentsJson,
                          String conversationId, String invokerType, Long invokerId) {
-        long start = System.currentTimeMillis();
         String status = AiToolInvocation.OK;
         String resultJson;
 
