@@ -185,7 +185,7 @@
                   :disabled="loading || sendingCode || secondsLeft > 0"
                   @click="requestCode"
                 >
-                  {{ sendingCode ? '获取中…' : secondsLeft > 0 ? secondsLeft + ' 秒后重试' : '获取验证码' }}
+                  {{ sendingCode ? '获取中…' : secondsLeft > 0 ? cooldownLabel : '获取验证码' }}
                 </button>
               </div>
 
@@ -272,6 +272,9 @@ const now = ref(Date.now())
 const secondsLeft = computed(() => form.phone.trim() === cooldown.phone
   ? Math.max(0, Math.ceil((cooldown.until - now.value) / 1000))
   : 0)
+const cooldownLabel = computed(() => secondsLeft.value >= 120
+  ? Math.ceil(secondsLeft.value / 60) + ' 分钟后重试'
+  : secondsLeft.value + ' 秒后重试')
 let cooldownTimer
 let autoFocusing = false
 
@@ -331,7 +334,13 @@ async function requestCode() {
   const response = await sendRegistrationCode(phone)
   sendingCode.value = false
 
-  if (response.error || !response.data?.retryAfterSeconds) {
+  const retryAfter = Number(response.data?.retryAfterSeconds)
+  const hasWait = Number.isFinite(retryAfter) && retryAfter > 0
+  if (hasWait && (!response.error || response.status === 429)) {
+    startCodeCooldown(phone, retryAfter)
+  }
+
+  if (response.error || !hasWait) {
     if (form.phone.trim() === phone) {
       notice.tone = 'error'
       notice.text = response.message || '获取验证码失败，请稍后重试'
@@ -339,20 +348,24 @@ async function requestCode() {
     return
   }
 
+  if (form.phone.trim() === phone) {
+    form.phoneCode = ''
+    notice.tone = 'info'
+    notice.text = response.data.remainingHourlySends === 0
+      ? '验证码已发送，5 分钟内有效。该手机号每小时最多发送10条验证码，当前额度已用完'
+      : '请填写获取到的 6 位验证码，5 分钟内有效'
+  }
+}
+
+function startCodeCooldown(phone, seconds) {
   now.value = Date.now()
   cooldown.phone = phone
-  cooldown.until = now.value + response.data.retryAfterSeconds * 1000
+  cooldown.until = now.value + seconds * 1000
   clearInterval(cooldownTimer)
   cooldownTimer = setInterval(() => {
     now.value = Date.now()
     if (now.value >= cooldown.until) clearInterval(cooldownTimer)
   }, 250)
-
-  if (form.phone.trim() === phone) {
-    form.phoneCode = ''
-    notice.tone = 'info'
-    notice.text = '请填写获取到的 6 位验证码，5 分钟内有效'
-  }
 }
 
 async function submit() {

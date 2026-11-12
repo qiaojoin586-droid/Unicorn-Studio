@@ -168,8 +168,19 @@ async function copyGroupNumber() {
   }
   copyTimer = setTimeout(() => { copySuccess.value = false; copyStatus.value = '' }, 5000)
 }
-onMounted(() => { loadJoin(); loadContacts() })
-onBeforeUnmount(() => clearTimeout(copyTimer))
+function refreshJoinWhenVisible() {
+  if (!document.hidden) void loadJoin()
+}
+onMounted(() => {
+  loadJoin(); loadContacts()
+  window.addEventListener('focus', refreshJoinWhenVisible)
+  document.addEventListener('visibilitychange', refreshJoinWhenVisible)
+})
+onBeforeUnmount(() => {
+  clearTimeout(copyTimer)
+  window.removeEventListener('focus', refreshJoinWhenVisible)
+  document.removeEventListener('visibilitychange', refreshJoinWhenVisible)
+})
 usePageMeta(() => ({ title: page.title === DEFAULTS.title ? '加入我们' : page.title, description: page.subtitle }))
 </script>
 

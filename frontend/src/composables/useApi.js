@@ -33,13 +33,15 @@ export function useApi() {
 
       if (!res.ok) {
         let message = '请求失败，请稍后重试'
+        let details = null
         try {
           const data = await res.json()
           message = data.message || message
+          details = data.data ?? null
         } catch {
           // ignore parse error
         }
-        return { error: true, status: res.status, message }
+        return { error: true, status: res.status, message, data: details }
       }
 
       return res.json()

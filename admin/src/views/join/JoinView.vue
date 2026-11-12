@@ -38,7 +38,7 @@
         <el-form-item label="社群二维码">
           <div class="qr-field">
             <ImageUpload v-model="form.qrImage" />
-            <div class="field-tip">留空使用内置 QQ 二维码。自定义二维码加载失败时显示不可用提示，不回退到旧二维码或旧群号；请确认下方平台、群号与入口属于同一社群。</div>
+            <div class="field-tip">上传后请点击右上角「保存并更新主站」，新二维码才会替代内置图片。留空使用内置 QQ 二维码。自定义二维码加载失败时显示不可用提示，不回退到旧二维码或旧群号；请确认下方平台、群号与入口属于同一社群。</div>
             <div v-if="form.qrImage" class="qr-preview">
               <span class="qr-preview-label">当前预览</span>
               <img :src="form.qrImage" alt="社群二维码预览" />
