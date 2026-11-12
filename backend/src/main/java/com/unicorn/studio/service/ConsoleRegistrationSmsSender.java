@@ -1,11 +1,6 @@
 package com.unicorn.studio.service;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
-
-/** 本地测试通道，显式开启时只向进程控制台输出验证码。 */
-@Component
-@ConditionalOnProperty(name = "app.public.registration-sms.console-enabled", havingValue = "true")
+/** 联调通道，仅向后端进程控制台输出验证码，通过 REGISTRATION_SMS_PROVIDER=console 选择。 */
 public class ConsoleRegistrationSmsSender implements RegistrationSmsSender {
     @Override
     public void send(String phone, String code) {

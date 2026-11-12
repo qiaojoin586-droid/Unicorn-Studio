@@ -1,5 +1,6 @@
 <template>
   <div class="home-page">
+    <StarIntroEffect v-if="showStarIntro" @finished="showStarIntro = false" />
     <section class="hero" aria-labelledby="home-title">
       <div class="page-shell hero__shell">
         <div class="hero__topline">
@@ -8,7 +9,7 @@
         </div>
         <div class="hero__grid">
           <div class="hero__copy">
-            <h1 id="home-title" class="configured-lines">{{ home.title }}<span class="hero__period" aria-hidden="true"></span></h1>
+            <h1 ref="heroTitle" id="home-title" class="configured-lines" :class="{ 'is-title-animating': titleAnimationActive }"><span class="hero__title-text">{{ home.title }}</span><span class="hero__period" aria-hidden="true"></span></h1>
             <p v-if="home.description" class="hero__description configured-lines">{{ home.description }}</p>
             <div class="hero__actions">
               <SiteLink v-if="home.primaryLabel && home.primaryUrl" :to="home.primaryUrl" class="button button--primary hero__primary">{{ home.primaryLabel }}<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg></SiteLink>
@@ -96,8 +97,9 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import BrandVisual from '@/components/BrandVisual.vue'
+import StarIntroEffect from '@/components/StarIntroEffect.vue'
 import WorkCard from '@/components/WorkCard.vue'
 import SiteLink from '@/components/SiteLink.vue'
 import StudioIcon from '@/components/StudioIcon.vue'
@@ -110,6 +112,13 @@ import { useApi } from '@/composables/useApi'
 import { usePageMeta, DEFAULT_DESCRIPTION } from '@/composables/usePageMeta'
 
 const { get } = useApi()
+const showStarIntro = ref(true)
+const heroTitle = ref(null)
+const titleInView = ref(true)
+const pageVisible = ref(true)
+const titleAnimationActive = computed(() => titleInView.value && pageVisible.value)
+let titleObserver
+function updateTitleVisibility() { pageVisible.value = !document.hidden }
 const { presentation, ready } = usePresentation()
 const home = computed(() => presentation.home)
 usePageMeta(() => ({ home: true, title: home.value.title.replace(/\n/g, ''), description: DEFAULT_DESCRIPTION }))
@@ -172,14 +181,27 @@ async function loadServices() {
   servicesError.value = ''
   try { const result = await get('/api/services'); if (result.error) throw new Error(result.message); services.value = Array.isArray(result.data?.list) ? result.data.list : [] } catch (error) { servicesError.value = error.message || '暂时无法加载招收方向，请稍后重试。' } finally { servicesLoading.value = false }
 }
-onMounted(() => { loadFeaturedWorks(); loadCapabilities(); loadServices() })
+onMounted(() => {
+  loadFeaturedWorks(); loadCapabilities(); loadServices()
+  updateTitleVisibility()
+  document.addEventListener('visibilitychange', updateTitleVisibility)
+  if ('IntersectionObserver' in window) {
+    titleObserver = new IntersectionObserver(([entry]) => { titleInView.value = entry.isIntersecting })
+    if (heroTitle.value) titleObserver.observe(heroTitle.value)
+  }
+})
+onBeforeUnmount(() => {
+  titleObserver?.disconnect()
+  document.removeEventListener('visibilitychange', updateTitleVisibility)
+})
 </script>
 
 <style scoped>
 .hero-visual-wrap { position: relative; min-width: 0; }
-.home-page { --home-ink: var(--color-ink, #121316); --home-paper: var(--color-paper, #f4f2ec); --home-accent: var(--color-accent, #c92d3b); color: var(--home-ink); background: var(--home-paper); }
+.home-page { position: relative; isolation: isolate; --home-ink: var(--color-ink, #121316); --home-paper: var(--color-paper, #f4f2ec); --home-accent: var(--color-accent, #c92d3b); --hero-title-rose: #ff91a0; --hero-title-gold: #f7ce8b; --hero-title-violet: #bdabff; color: var(--home-ink); background: var(--home-paper); }
+:global(:root[data-theme='light'] .home-page) { --hero-title-rose: #b42339; --hero-title-gold: #925410; --hero-title-violet: #6942aa; }
 .hero { margin-top: calc(-1 * var(--header-height, 80px)); padding-top: var(--header-height, 80px); color: var(--feature-text); background: var(--feature-bg); overflow: hidden; }
-.hero__shell { display: flex; flex-direction: column; min-height: min(850px, calc(100svh - var(--header-height, 80px))); }
+.hero__shell { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: min(850px, calc(100svh - var(--header-height, 80px))); }
 .hero__topline { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding-top: 37px; }
 .hero__topline .eyebrow { display: flex; align-items: center; gap: 11px; color: #c1c0bf; font-size: 11px; letter-spacing: .12em; }
 .signal-dot { display: inline-block; width: 7px; height: 7px; flex: 0 0 7px; background: #ef4c58; border-radius: 50%; }
@@ -187,7 +209,15 @@ onMounted(() => { loadFeaturedWorks(); loadCapabilities(); loadServices() })
 .hero__grid { display: grid; grid-template-columns: 1.15fr 1fr; align-items: center; gap: 8px; flex: 1; min-height: 560px; padding: 34px 0 42px; }
 .hero__copy { position: relative; z-index: 2; padding: 15px 0 24px; }
 .hero h1 { position: relative; display: inline-block; max-width: 100%; margin: 0; font-size: clamp(58px, 6.65vw, 101px); font-weight: 650; line-height: 1.22; letter-spacing: -.065em; text-wrap: balance; overflow-wrap: anywhere; }
-.hero h1 > span:first-child { color: #aaa9a6; }
+.hero__title-text { color: var(--hero-title-rose); animation: hero-title-colors 9s ease-in-out infinite; animation-play-state: paused; }
+.is-title-animating .hero__title-text { animation-play-state: running; }
+@keyframes hero-title-colors {
+  0%, 100% { color: var(--hero-title-rose); }
+  33% { color: var(--hero-title-gold); }
+  66% { color: var(--hero-title-violet); }
+}
+@media (prefers-reduced-motion: reduce) { .hero__title-text { animation: none; } }
+@media (forced-colors: active) { .hero__title-text { animation: none; color: CanvasText; } }
 .hero__period { position: absolute; top: 2px; right: -25px; width: 10px; height: 10px; border-radius: 50%; background: var(--home-accent); }
 .hero__description { margin: 32px 0 0; color: #a7a8af; font-size: clamp(15px, 1.25vw, 17px); line-height: 1.95; letter-spacing: .015em; }
 .hero__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 29px; margin-top: 33px; }

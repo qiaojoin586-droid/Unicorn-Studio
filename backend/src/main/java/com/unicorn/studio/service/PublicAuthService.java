@@ -72,11 +72,10 @@ public class PublicAuthService {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
     }
 
-    public int sendRegistrationCode(String phone) {
+    public RegistrationCodeService.SendResult sendRegistrationCode(String phone) {
         phone = PhoneNumber.normalize(phone);
         requireUnregisteredPhone(phone);
-        registrationCodes.send(phone);
-        return RegistrationCodeService.RESEND_SECONDS;
+        return registrationCodes.send(phone);
     }
 
     public Map<String, Object> register(String nickname, String phone, String password, String code, String ip) {

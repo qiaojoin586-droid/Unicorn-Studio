@@ -16,9 +16,14 @@
     "verify:aichat": "node scripts/verify-aichat-interaction.mjs",
     "verify:ai-history": "node scripts/verify-ai-history.mjs",
     "verify:render-scheduling": "node scripts/verify-render-scheduling.mjs",
+    "verify:star-intro": "node scripts/verify-star-intro.mjs",
     "test": "npm run build && node scripts/smoke-test.js"
   },
   "dependencies": {
+    "@tsparticles/engine": "4.5.4",
+    "@tsparticles/plugin-interactivity": "4.5.4",
+    "@tsparticles/preset-meteors": "4.5.4",
+    "@tsparticles/shape-star": "4.5.4",
     "dompurify": "^3.4.15",
     "marked": "^18.0.13",
     "pinia": "^4.0.3",

@@ -93,9 +93,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if ("POST".equals(method) && "/api/auth/register".equals(uri)) {
             return !rateLimiter.isAllowed(CacheKeys.rate("register", ip), registerPerHour, Duration.ofHours(1));
         }
-        if ("POST".equals(method) && "/api/auth/register/code".equals(uri)) {
-            return !rateLimiter.isAllowed(CacheKeys.rate("register-code", ip), registerPerHour, Duration.ofHours(1));
-        }
+        // 注册验证码由 RegistrationCodeService 按手机号控制发送间隔和实际发送额度，
+        // 不能在这里按 IP 累计请求次数，避免失败重试和同一网络下的其他用户消耗额度。
         // 前台登录：IP 10 次/分
         if ("POST".equals(method) && "/api/auth/login".equals(uri)) {
             return !rateLimiter.isAllowed(CacheKeys.rate("auth-login", ip), 10, Duration.ofMinutes(1));

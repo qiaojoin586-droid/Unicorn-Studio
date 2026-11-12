@@ -159,8 +159,13 @@ app:
     # ⚠️ 轮换该值会使所有已签发的前台 token 立即失效（预期行为）。
     jwt-secret: '${PUBLIC_JWT_SECRET:LVV61kYbL4h8jManhR4zHWpAhBxJWZJqg7QdJqYhCtNi5HUE}'
     registration-sms:
-      # 本地测试时显式开启，验证码只输出到后端控制台。
-      console-enabled: ${REGISTRATION_SMS_CONSOLE_ENABLED:false}
+      # aliyun 使用号码认证的短信认证接口；console 仅用于本地联调。
+      provider: ${REGISTRATION_SMS_PROVIDER:aliyun}
+      aliyun:
+        access-key-id: ${ALIBABA_CLOUD_ACCESS_KEY_ID:}
+        access-key-secret: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET:}
+        sign-name: ${ALIYUN_SMS_SIGN_NAME:}
+        template-code: ${ALIYUN_SMS_TEMPLATE_CODE:100001}
   security:
     # 可信代理跳数（X-Forwarded-For 采信层数），从右往左取第 N 跳：
     #   0（默认，安全值）= 完全不信任 XFF，只用 remoteAddr

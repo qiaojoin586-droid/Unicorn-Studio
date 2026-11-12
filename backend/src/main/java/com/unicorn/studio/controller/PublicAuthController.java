@@ -36,7 +36,9 @@ public class PublicAuthController {
 
     @PostMapping("/register/code")
     public ApiResponse<Map<String, Integer>> sendRegistrationCode(@Valid @RequestBody RegistrationCodeRequest request) {
-        return ApiResponse.ok(Map.of("retryAfterSeconds", publicAuthService.sendRegistrationCode(request.phone())));
+        var sent = publicAuthService.sendRegistrationCode(request.phone());
+        return ApiResponse.ok(Map.of("retryAfterSeconds", sent.retryAfterSeconds(),
+                "remainingHourlySends", sent.remainingHourlySends()));
     }
 
     @PostMapping("/register")

@@ -1,9 +1,11 @@
 package com.unicorn.studio.common;
 
 import com.unicorn.studio.model.ApiResponse;
+import com.unicorn.studio.service.RegistrationCodeLimitException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
@@ -18,6 +20,8 @@ import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.NoHandlerFoundException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
+import java.util.Map;
+
 /**
  * 全局异常处理：所有错误响应统一 ApiResponse{code, message, data} 信封。
  * 未预期异常打印完整堆栈到日志（配合错误日志文件，出问题可快速定位），
@@ -27,6 +31,13 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(RegistrationCodeLimitException.class)
+    public ResponseEntity<ApiResponse<Map<String, Integer>>> handleRegistrationCodeLimit(RegistrationCodeLimitException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header(HttpHeaders.RETRY_AFTER, Integer.toString(e.getRetryAfterSeconds()))
+                .body(new ApiResponse<>(429, e.getReason(), Map.of("retryAfterSeconds", e.getRetryAfterSeconds())));
+    }
 
     /** 请求绑定错误属于客户端参数错误，保留 400，不能落到兜底 500。 */
     @ExceptionHandler({ServletRequestBindingException.class, MethodArgumentTypeMismatchException.class})
