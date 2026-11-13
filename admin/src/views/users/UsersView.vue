@@ -6,7 +6,7 @@
 
     <el-card shadow="never">
       <div class="table-toolbar">
-        <el-input v-model="query.keyword" placeholder="昵称 / 邮箱" clearable style="width: 220px" @keyup.enter="searchWithRange" />
+        <el-input v-model="query.keyword" placeholder="昵称 / 手机号 / 旧邮箱" clearable style="width: 220px" @keyup.enter="searchWithRange" />
         <el-select v-model="query.status" placeholder="状态" clearable style="width: 130px" @change="searchWithRange">
           <el-option label="正常" :value="1" />
           <el-option label="禁言" :value="0" />
@@ -30,7 +30,7 @@
         <el-table-column label="昵称" min-width="140">
           <template #default="{ row }">
             <div class="user-name">{{ row.nickname }}</div>
-            <div class="user-email">{{ row.email }}</div>
+            <div class="user-contact">{{ row.phone || row.email || '未绑定手机号' }}</div>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="90">
@@ -46,11 +46,12 @@
         <el-table-column label="注册时间" width="150">
           <template #default="{ row }">{{ formatDateTime(row.createdAt) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="218" fixed="right">
           <template #default="{ row }">
             <el-button size="small" link type="primary" v-permission="'user:view'" @click="$router.push(`/users/${row.id}`)">详情</el-button>
-            <el-button v-if="row.status !== 0" size="small" link type="warning" v-permission="'user:ban'" @click="openBan(row)">禁言</el-button>
-            <el-button v-else size="small" link type="success" v-permission="'user:ban'" @click="unban(row)">解禁</el-button>
+            <el-button v-if="canEdit" size="small" link type="primary" @click="$router.push({ path: `/users/${row.id}`, query: { edit: '1' } })">编辑</el-button>
+            <el-button v-if="row.status === 1" size="small" link type="warning" v-permission="'user:ban'" @click="openBan(row)">禁言</el-button>
+            <el-button v-if="row.status === 0" size="small" link type="success" v-permission="'user:ban'" @click="unban(row)">解禁</el-button>
             <el-button size="small" link type="danger" v-permission="'user:delete'" @click="remove(row)">注销</el-button>
           </template>
         </el-table-column>
@@ -90,13 +91,16 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { userApi } from '@/api/user'
 import { useTable } from '@/composables/useTable'
+import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/format'
 
 const table = useTable((params) => userApi.list(params))
 const { loading, list, total, query, load, search } = table
+const auth = useAuthStore()
+const canEdit = computed(() => auth.hasPerm('user:view') && auth.hasPerm('user:edit'))
 
 const registerRange = ref<string[]>([])
 const banVisible = ref(false)
@@ -163,7 +167,7 @@ onMounted(load)
 .user-name {
   font-weight: 600;
 }
-.user-email {
+.user-contact {
   font-size: 12px;
   color: #94a3b8;
 }

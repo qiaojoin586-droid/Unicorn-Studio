@@ -1,6 +1,7 @@
 package com.unicorn.studio.admin.controller;
 
 import com.unicorn.studio.admin.service.PublicUserAdminService;
+import com.unicorn.studio.admin.service.PublicUserAdminService.UserEdit;
 import com.unicorn.studio.common.PageResult;
 import com.unicorn.studio.common.audit.AuditLog;
 import com.unicorn.studio.model.ApiResponse;
@@ -25,6 +26,9 @@ public class PublicUserAdminController {
     public record BanRequest(@NotBlank(message = "禁言时长不能为空") String duration, String reason) {
     }
 
+    public record BindPhoneRequest(@NotBlank(message = "手机号不能为空") String phone) {
+    }
+
     @GetMapping
     @PreAuthorize("hasAuthority('user:list')")
     public ApiResponse<PageResult<Map<String, Object>>> list(
@@ -41,6 +45,22 @@ public class PublicUserAdminController {
     @PreAuthorize("hasAuthority('user:view')")
     public ApiResponse<Map<String, Object>> detail(@PathVariable Long id) {
         return ApiResponse.ok(userService.detail(id));
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAuthority('user:edit')")
+    @AuditLog(module = "用户", action = "编辑用户资料")
+    public ApiResponse<Void> update(@PathVariable Long id, @Valid @RequestBody UserEdit request) {
+        userService.update(id, request);
+        return ApiResponse.ok();
+    }
+
+    @PatchMapping("/{id}/phone")
+    @PreAuthorize("hasAuthority('user:bind-phone')")
+    @AuditLog(module = "用户", action = "为旧账号绑定手机号")
+    public ApiResponse<Void> bindPhone(@PathVariable Long id, @Valid @RequestBody BindPhoneRequest request) {
+        userService.bindPhone(id, request.phone());
+        return ApiResponse.ok();
     }
 
     @PatchMapping("/{id}/ban")

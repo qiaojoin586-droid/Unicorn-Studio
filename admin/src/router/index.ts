@@ -73,10 +73,16 @@ export const permissionRoutes: RouteRecordRaw[] = [
         meta: { title: '编辑新闻', hidden: true, permission: 'news:edit' },
       },
       {
+        path: 'home',
+        name: 'HomeConfig',
+        component: () => import('@/views/home/HomeView.vue'),
+        meta: { title: '首页配置', icon: 'House', permission: 'carousel:list' },
+      },
+      {
         path: 'carousel',
         name: 'Carousel',
         component: () => import('@/views/carousel/CarouselListView.vue'),
-        meta: { title: '轮播图管理', icon: 'Monitor', permission: 'carousel:list' },
+        meta: { title: '作品档案背景', icon: 'Monitor', permission: 'carousel:list' },
       },
       {
         path: 'services',
@@ -180,6 +186,20 @@ export const permissionRoutes: RouteRecordRaw[] = [
         component: () => import('@/views/settings/AiConfigView.vue'),
         meta: { title: 'AI 配置', icon: 'ChatDotSquare', permission: 'ai:view' },
       },
+        {
+          path: 'ai-console',
+          name: 'AiConsole',
+          component: () => import('@/views/ai/AiConsoleView.vue'),
+          meta: { title: 'AI 会话', icon: 'ChatLineSquare', permission: 'ai:view' },
+        },
+        {
+          path: 'ai-tools',
+          name: 'AiTools',
+          component: () => import('@/views/ai/AiToolsView.vue'),
+          // ⚠️ 菜单可见只要求 view；改与调由页面里的 v-permission 分别控制
+          // （ai:tool:edit 仅 SUPER_ADMIN，ai:tool:use 消耗外部额度）
+          meta: { title: 'AI 工具', icon: 'Connection', permission: 'ai:tool:view' },
+        },
       {
         path: 'logs',
         name: 'Logs',

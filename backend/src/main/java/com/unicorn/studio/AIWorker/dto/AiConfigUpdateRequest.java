@@ -16,7 +16,9 @@ public record AiConfigUpdateRequest(String apiKey,
                                     String systemPrompt,
                                     Integer maxTokens,
                                     Double temperature,
-                                    Boolean enabled) {
+                                    Boolean enabled,
+                                    String messageAvatarMode,
+                                    String messageAvatarUrl) {
 
     /**
      * 是否应视为「用户未修改密钥」。

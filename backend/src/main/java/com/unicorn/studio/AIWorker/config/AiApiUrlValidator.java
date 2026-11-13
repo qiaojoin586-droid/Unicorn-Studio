@@ -4,6 +4,7 @@ import com.unicorn.studio.common.BusinessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.net.InetAddress;
@@ -49,8 +50,15 @@ public class AiApiUrlValidator {
 
     /** 厂商域名白名单（逗号分隔，空 = 不限制域名，仅保留内网地址拦截） */
     private final List<String> allowedHosts;
+    private final HostResolver resolver;
 
+    @Autowired
     public AiApiUrlValidator(@Value("${app.ai.allowed-api-hosts:}") String allowedApiHosts) {
+        this(allowedApiHosts, InetAddress::getAllByName);
+    }
+
+    AiApiUrlValidator(String allowedApiHosts, HostResolver resolver) {
+        this.resolver = resolver;
         this.allowedHosts = Arrays.stream(allowedApiHosts.split(","))
                 .map(s -> s.trim().toLowerCase(Locale.ROOT))
                 .filter(s -> !s.isEmpty())
@@ -118,7 +126,7 @@ public class AiApiUrlValidator {
     private void validateResolvedAddresses(String host) {
         InetAddress[] addresses;
         try {
-            addresses = InetAddress.getAllByName(host);
+            addresses = resolver.resolve(host);
         } catch (UnknownHostException e) {
             throw BusinessException.badRequest("API 地址的主机名无法解析：" + host);
         }
@@ -128,6 +136,11 @@ public class AiApiUrlValidator {
                         + host + " → " + address.getHostAddress());
             }
         }
+    }
+
+    @FunctionalInterface
+    interface HostResolver {
+        InetAddress[] resolve(String host) throws UnknownHostException;
     }
 
     private static boolean isBlocked(InetAddress address) {

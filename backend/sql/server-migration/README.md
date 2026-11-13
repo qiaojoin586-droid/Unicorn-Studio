@@ -1,5 +1,18 @@
 # 本地库 → 服务器 MySQL 全量迁移手册
 
+> AI 工具入口（V20）：已有 `ai_tool_config` 和 `ai_tool_invocation` 的库若缺少「AI 工具」菜单，执行 `V20-ai-tool-permissions.sql` 补齐权限。导入不含这些权限的旧版 `02-data.sql` 后也需执行。超级管理员获得查看、编辑和测试权限，内容编辑默认只有查看权限。执行后等待权限缓存更新并刷新管理端。
+
+> 主站用户编辑升级（V23）：已有库在 V22 之后执行 `V23-public-user-edit.sql`，导入旧数据后同样需执行。超级管理员默认获得 `user:edit`，也可通过角色管理分配给其他管理员。
+
+> 主站手机号登录升级（V22）：已有库执行 `V22-public-user-phone.sql`，全新库使用 `01-schema-full.sql`。如果还要导入旧版 `02-data.sql`，导入后再执行 V22，补回被旧导出覆盖的绑定权限。旧用户可由拥有 `user:bind-phone` 权限的管理员核实身份后在用户详情绑定手机号。
+> 注册验证码已接入阿里云号码认证的短信认证接口 `SendSmsVerifyCode`，默认通道为 `aliyun`。AccessKey 从环境变量或外部 `.env` 读取，配置赠送签名 `ALIYUN_SMS_SIGN_NAME`，默认使用注册模板 `100001`。验证码仍由后端生成并在 Redis 保存5分钟、60秒重发间隔；真实通道不会打印验证码。本地联调可设置 `REGISTRATION_SMS_PROVIDER=console`，替代旧的 `REGISTRATION_SMS_CONSOLE_ENABLED` 开关。配置及部署步骤见 `backend/SMS_SETUP.md`，`.env` 不会打入 JAR。
+
+> 页面展示配置升级（V21）：部署移除默认 JSON 的版本前，先执行 `01-schema-full.sql`
+> 末尾的 V21 段，将原有展示内容补齐到 `site_settings` 的 `content.presentation.*` 四项配置。
+> 迁移可重复执行，保留已保存的非空值及显式空字符串、`false`、空列表；只补缺失/null 字段。
+> 运行时仅从数据库读取展示文案；配置缺失或无效时返回空内容，可在管理端补齐。
+> `scripts/sync-design.mjs` 现在仅同步品牌资源，不再生成页面默认配置文件。
+
 > 本目录只放「迁移到服务器」相关产物。日常增量迁移脚本仍在上一层的 `backend/sql/`。
 > 产物生成脚本见 `backend/sql/tools/`，可随时重新生成。
 
@@ -7,7 +20,7 @@
 
 ## 0. 一句话结论
 
-本地库结构已通过「重建 + 逐行比对」验证：**脚本链能 1:1 复现线上库**（21 表 / 194 列 / 74 索引 / 4 外键，
+本地库结构已通过「重建 + 逐行比对」验证：**脚本链能 1:1 复现线上库**（23 表 / 214 列 / 61 个索引对象（88 行 STATISTICS）/ 4 外键，
 排序规则 `utf8mb4_0900_ai_ci` 全部一致，连列顺序都一致），且**可重复执行**。
 迁移有两条路，**推荐路径 A（整库 dump）**，只有 300 KB 数据，最省事也最不容易出错。
 
@@ -19,10 +32,10 @@
 |---|---|
 | MySQL 版本 | **8.0.42**（`utf8mb4_0900_ai_ci` 需 MySQL 8.0+，服务器务必 8.0 以上） |
 | 库默认字符集 | `utf8mb4` / `utf8mb4_0900_ai_ci` |
-| 表 / 列 / 索引 / 外键 | 21 / 194 / 74 / 4 |
+| 表 / 列 / 索引对象（STATISTICS 行）/ 外键 | 23 / 214 / 61（88） / 4 |
 | 全部数据量 | 约 **300 KB**（纯文本，无大字段） |
 | 最大的表 | `visit_log` 1144 行、`sys_permission` 66 行、`sys_role_permission` 58 行、`site_settings` 40 行 |
-| 空表 | `comment`、`message`、`public_user`（迁移后仍为空，属正常） |
+| 空表 | `comment`、`message`、`public_user`、`ai_conversation`、`ai_message`（迁移后仍为空，属正常） |
 | 上传文件记录 | `upload_file` 15 行，但磁盘只有 **5 个文件**（见 §5） |
 | 权限表中文 | 正常，无乱码（历史乱码已修复过） |
 
@@ -32,13 +45,13 @@
 
 | 文件 | 可入库 | 说明 |
 |---|:---:|---|
-| `01-schema-full.sql` | ✅ | **全量建表脚本**。幂等、非破坏（无 DROP/DELETE），含种子数据（权限码/角色/site_settings 默认值）。 |
+| `01-schema-full.sql` | ✅ | **全量建表脚本**。幂等、非破坏（无 DROP/DELETE），含种子数据（权限码/角色/site_settings 默认值）+ V19 AI 记忆模块两张表。 |
 | `02-data.sql` | ❌ | **业务数据导出**。含口令散列、加密 AI Key、IP 哈希 → 已加进 `.gitignore`，切勿提交、切勿外传。 |
 | `03-verify.sql` | ✅ | 迁移后校验查询，逐项输出 `OK` / `FAIL`。 |
-| `../tools/gen_merged_schema.py` | ✅ | 由 `mysql-init.sql` + V8~V18 生成 `01-schema-full.sql`。 |
+| `../tools/gen_merged_schema.py` | ✅ | 由 `mysql-init.sql` + V8~V19 生成 `01-schema-full.sql`。 |
 | `../tools/gen_data_dump.py` | ✅ | 从本地库导出 `02-data.sql`。 |
 | `../tools/verify_merged_schema.py` | ✅ | 静态校验：幂等性 + 结构/列顺序/外键比对。 |
-| `../tools/verify_roundtrip.py` | ✅ | 端到端回归：建空库 → 导数据 → 21 表逐行比对。 |
+| `../tools/verify_roundtrip.py` | ✅ | 端到端回归：建空库 → 导数据 → 23 表逐行比对。 |
 
 ---
 
@@ -93,13 +106,13 @@ mysql --default-character-set=utf8mb4 -h<server> -u<user> -p unicorn_studio < 03
 **`02-data.sql` 的行为**（已刻意设计，勿随意改）：
 
 1. `SET FOREIGN_KEY_CHECKS = 0` —— RBAC 关联表有 4 个 `NO ACTION` 外键，删表顺序无法两全；
-2. 先 `DELETE FROM` 全部 21 张表 + `ALTER TABLE ... AUTO_INCREMENT = 1` ——
+2. 先 `DELETE FROM` 全部 23 张表 + `ALTER TABLE ... AUTO_INCREMENT = 1` ——
    `01` 会先写入种子行（权限/角色/site_settings 默认值），若不清空，`02` 的 INSERT 会撞唯一键；
    而改用 `INSERT IGNORE` 又会「保留脚本默认值、丢掉本地真实值」——**那正是要迁移的东西**，所以必须先清后插；
 3. 再插入源库数据（`--complete-insert`，显式列名，不怕服务器端列顺序差异）；
 4. 收尾恢复外键检查。
 
-> ⚠️ 第 2 步会**覆盖目标库这 21 张表的全部现有数据**。目标库若有需保留的数据，请先备份。
+> ⚠️ 第 2 步会**覆盖目标库这 23 张表的全部现有数据**。目标库若有需保留的数据，请先备份。
 
 ---
 
@@ -146,8 +159,9 @@ DELETE FROM upload_file WHERE url IN (
 
 ## 6. 服务器侧后端配置
 
-`application.yml` 里**没有默认凭据**，缺失即拒绝启动（`SecretsStartupValidator`）。
-模板见 `backend/src/main/resources/application-local.yml.example`。
+后端统一使用 `src/main/resources/application.yml`，不再加载独立的本地配置文件。
+当前文件包含本地连接配置与凭据；部署时通过下表环境变量覆盖，提交或分发前移除本地凭据。
+必要凭据为空时仍由 `SecretsStartupValidator` 拒绝启动。
 
 ### 6.1 必须显式配置的项
 
@@ -160,7 +174,7 @@ DELETE FROM upload_file WHERE url IN (
 | `PUBLIC_JWT_SECRET` | ≥32 位 | 轮换会使所有前台 token 立即失效 |
 | `APP_CORS_ORIGINS` | 见 §6.2 | 漏配 = `/api/**` 全 403 |
 | `TRUSTED_PROXY_COUNT` | **`1`** | 生产为 nginx → 后端 1 层代理；留 0 会让全站共用一个限流桶 |
-| `REDIS_HOST` / `REDIS_PASSWORD` | 非空 | 缺失时缓存整体降级（不阻断启动） |
+| `REDIS_HOST` / `REDIS_PASSWORD` | 主机非空；非回环主机必须配置密码 | 本机无密码 Redis 可将密码留空 |
 
 ### 6.2 CORS（本地出过线上故障，重点）
 
@@ -191,7 +205,7 @@ Redis 连接池配置里 `REDIS_DATABASE` 默认 `0`。若服务器与本地**�
 | 层 | 措施 | 说明 |
 |---|---|---|
 | 代码 | 缓存键自动带 profile 前缀 | `CacheHelper` 给每个键加 `<profile>:`，如 `local:cache:learning:list` / `prod:cache:carousel:home`。键空间天然分开，**不依赖运维记性** |
-| 配置 | 本地固定 `spring.data.redis.database: 1` | 与线上的 db `0` 物理隔离（已落在 `application-local.yml`） |
+| 配置 | 通过 `REDIS_DATABASE` 选择不同的数据库 | 当前统一配置默认 `0`；共用 Redis 时需显式隔离 |
 
 启动日志会打印一行便于确认：`缓存键环境隔离前缀: 'prod:'`。
 历史上已写入的无前缀键不会被再读取（自然过期即可），**无需手工清理**。
@@ -205,8 +219,7 @@ redis-cli -h <host> -p 6379 -a <pwd> -n <db> --scan --pattern 'prod:cache:*' | x
 
 ### 6.4 其他
 
-- `SPRING_PROFILES_ACTIVE`：`application.yml` 未指定默认 profile，务必显式设置（如 `prod`），
-  否则读不到对应 profile 的覆盖项。
+- `SPRING_PROFILES_ACTIVE`：不再用于加载拆分的 YAML；如需区分缓存键环境前缀，仍可设为 `prod` 或 `local`。
 - `MYSQLDUMP_PATH`：后台「备份」功能依赖 `mysqldump`，服务器上需装 MySQL 客户端或指向绝对路径。
 - `FILE_UPLOAD_DIR`：上传根目录，同时是 `FileService` 的**写入目录**与 `/uploads/**` 静态映射的**读取目录**。
   解析优先级（`UploadProperties`，单一来源）：
@@ -234,20 +247,53 @@ redis-cli -h <host> -p 6379 -a <pwd> -n <db> --scan --pattern 'prod:cache:*' | x
   - `上传文件 404（配置问题）` —— 文件在别处找到了，会打印它真正所在的路径 ⇒ 改配置或迁文件；
   - `上传文件 404（文件缺失）` —— 哪个候选目录里都没有 ⇒ 多半被清理或被部署动作删掉了。
   上传目录**不参与健康检查**，服务会照常返回健康状态，所以不能靠 `/actuator/health` 判断这一项。
-- `LOG_DIR`：日志目录，默认 `./logs`，**同样相对启动工作目录**
-  （详见 `application.yml` 的 `logging.file.path` 注释）。**强烈建议显式给绝对路径**：
-  `export LOG_DIR=/opt/unicorn-studio/logs`；用 `backend/start.sh` 启动时脚本已自动设为
-  `<应用目录>/logs`。否则「从别的目录 `java -jar`」会把日志写到那个目录下，
-  目录不可写时更是**完全没有文件日志**（logback 只会把错误写进自己的内部状态，不报错给你）。
-  该变量同时决定 heapdump 落点与 `RetentionService` 清理 admin 审计文件的目录。
-- 日志级别：`application-prod.yml` 把 `com.unicorn.studio` 收到 `WARN`（业务包），
+- `LOG_DIR`：日志目录，默认 `./logs`，**相对启动工作目录**。服务器建议设置绝对路径：
+  `export LOG_DIR=/opt/unicorn-studio/logs`，并确保运行账号有写权限。
+  日志统一写入 `app.log`，按天或达到 50MB 时滚动压缩为 `app.log.yyyy-MM-dd.N.gz`；
+  默认保留 30 天归档，归档总量上限 2GB，启动时也会清理过期归档。
+  配置集中在 `application.yml` 的 `logging` 段，无需自定义 XML。
+  可用 `LOGGING_FILE_NAME` 覆盖完整文件名；启动自检会输出实际绝对路径。
+  文件无法创建或打开时，Spring Boot 会中止启动；启动早期和 JVM 标准输出由 systemd / Docker 收集。
+  `RetentionService` 仅兼容清理日志文件旁的旧版 `admin/yyyy-MM-dd/` 目录，不删除统一应用日志。
+- 日志级别：统一配置中 `com.unicorn.studio` 默认 `INFO`，生产可将该项调整为 `WARN`（业务包），
   但**接口访问日志（`[ACCESS]` 行）走独立的 `ACCESS_LOG` logger，仍为 INFO** ——
-  它在 `logs/info/yyyy-MM-dd/app-info.log` 里，每行含方法/路径/状态码/客户端 IP/耗时，
+  它在统一的 `app.log` 里，每行含方法/路径/状态码/客户端 IP/耗时，
   是「接口到底有没有被调到、返回了几百」的第一现场。要连它一起关就单独设
   `logging.level.ACCESS_LOG=WARN`（历史上它挂在 `com.unicorn.studio.common.log` 下，
   被那条 WARN 顺带压掉，表现为「服务器上 logs/ 里没有接口日志」，请不要改回去）。
 
 ---
+
+### AI 消息头像与回复链接
+
+- 管理端「AI 配置 → 助手消息头像」可上传图片、切换默认/自定义头像并保存。
+  切回默认时保留已上传图片，之后可再次选用；未上传或图片加载失败时使用主页独角兽图标。
+  只影响助手消息（含流式回复、等待状态），不修改悬浮入口、对话框顶部或用户头像。
+- 配置保存为 `site_settings` 的 `ai.message_avatar_mode`、`ai.message_avatar_url` 两个键，
+  无需表结构迁移。已有客户端不提交这两个字段时，保存模型配置不会覆盖头像。
+  上传沿用 AI 编辑权限和原有图片存储服务，支持最大 5MB 的 JPG、PNG、WebP、GIF。
+- 前台在重新打开对话或发送下一条消息时读取最新头像。公开能力接口只返回当前生效的头像地址，
+  不公开模型凭据。历史消息、流式回复共用 Markdown 链接渲染，站内路径使用当前站点地址，
+  可点击链接在新标签页打开；代码示例和危险协议仍按原安全边界处理。
+
+### AI 连通性测试超时
+
+后台的「测试连通性」由后端向模型供应商发请求，浏览器可访问供应商不代表 Java 进程也可访问。
+测试独立使用 `aiProbeExecutor`：最多同时执行 2 个任务、零排队，满载立即提示繁忙，不影响审计、邮件或统计线程池。
+连接时限（含 TLS 握手）10 秒、HTTP 请求时限20秒、整体25秒；管理端等待30秒，测试只请求一次、不自动重试。
+整体超时或容器报告连接结束时会中断在途任务。各时限统一定义在 `AiProbePolicy`，不改变正式对话的超时设置。
+该调整不需要数据库迁移；更新后端并重启，同时更新管理端构建产物。
+
+如果仍然超时，在**后端所在机器**发送一次不带密钥的只读探测：
+
+```sh
+curl -I --connect-timeout 10 --max-time 25 https://open.bigmodel.cn/api/paas/v4/chat/completions
+```
+
+返回401/405等 HTTP 状态说明网络和 TLS 已到达接口，不代表 API Key 和模型配置通过验证。
+连接超时检查出站网络、防火墙、DNS和代理；响应超时再检查供应商负载、模型生成速度。
+若确实需要代理，使用已有的 `AI_HTTP_PROXY=http://host:port` 配置并重启后端，地址应是后端机器能访问的 HTTP 代理。
+`logs/app.log` 中的测试结果包含目标地址、模型、实际耗时和超时阈值；启动 IDE 时日志通常位于项目根目录。
 
 ## 7. 已知坑
 
@@ -276,7 +322,11 @@ UPDATE sys_user SET refresh_token = NULL, refresh_token_expires_at = NULL;
 写在了 `created_at` / `updated_at` **之前**，而实录库是 V11 `ALTER TABLE ADD COLUMN` 追加的，
 这三列排在末尾。二者列名相同但 `ORDINAL_POSITION` 不同，导致新建库与实录库**列顺序**不一致
 （`mysqldump --complete-insert` 出来的 INSERT 列序不同）。已把这三列在 `mysql-init.sql` 中移到末尾，
-现在 21 张表列顺序与实录库完全一致。
+现在 23 张表列顺序与实录库完全一致。
+
+> V19 补 `public_user.ai_enabled` 时按同一规则处理：该列在原建表语句里也是**追加在末尾**，
+> 并在 `01-schema-full.sql` 的 `public_user` 表定义处写了同样的 `★ 必须排在 created_at 之后` 注释
+> —— **新加列时务必沿用这条规矩**，否则脚本建的库与实录库列顺序就会不一致。
 
 ### 7.6 「上传的图片 404」排查清单（按顺序，5 分钟定位）
 
@@ -325,15 +375,18 @@ UPDATE sys_user SET refresh_token = NULL, refresh_token_expires_at = NULL;
 python backend\sql\tools\gen_merged_schema.py      :: 重新生成 01
 python backend\sql\tools\gen_data_dump.py          :: 重新生成 02
 python backend\sql\tools\verify_merged_schema.py   :: 幂等性 + 结构/列序/外键
-python backend\sql\tools\verify_roundtrip.py       :: 21 表逐行数据比对
+python backend\sql\tools\verify_roundtrip.py       :: 23 表逐行数据比对
 ```
 
-**最近一次运行结果（可通过证据）**：
+**最近一次实测结果**（⚠️ `sql/tools/` 被 `.gitignore` 忽略、未入库，本地没有该目录，
+上面四条命令当前**跑不了**；以下数字来自「重建空库 → 两遍导入 → 直接查 `information_schema`」）：
 
-- `verify_merged_schema.py`：两遍执行均 `rc=0`（幂等）；列 194/194、索引 74/74、表排序规则 21/21、
-  列顺序 0/21 差异、外键 4/4 —— 全部 `OK`。
-- `verify_roundtrip.py`：**21/21 张表数据逐行完全一致**（含 `visit_log` 1144 行、
-  `site_settings` 40 行、`sys_permission` 66 行）；`03-verify.sql` 无报错。
+- 幂等：同一脚本对同一库连跑两遍均 `rc=0`（实测）；列 214/214、索引 88/88、表排序规则 23/23、
+  外键 4/4 —— 全部 `OK`。
+- 结构：23 表 / 214 列 / 61 个索引对象（88 行 STATISTICS）/ 4 外键，
+  排序列规则只有 `utf8mb4_0900_ai_ci` 一种。
+- 校验：`03-verify.sql` 12 项均可正常执行，检查 2 = 23 / OK、检查 12 = 两表 3 / 6 个索引对象；
+  结构库上检查 8 的 `basic` 组为 `FAIL`（该组键由后台运行时写入、不在结构脚本里），导入 `02-data.sql` 后转 `OK`。
 
 > 说明：结构脚本只保证「结构 + 种子默认值」。源库 `site_settings` 比脚本多 4 个键
 > （`basic.icp`、`content.comment_enabled`、`seo.work.1`、`seo.work.2`），那是通过后台界面写的运行时数据，
@@ -357,7 +410,7 @@ mvnw.cmd clean package          :: 含测试；要跳过测试用 -DskipTests
 |---|---|
 | `JAVA_HOME` | 必须指向 JDK 21（只把 `java` 放进 PATH 不够，`mvnw` 会直接报 "JAVA_HOME is not defined correctly"） |
 | 离线构建 | 依赖已缓存时可加 `-o`：`mvnw.cmd -o clean package` |
-| 本地配置 | `src/main/resources/application-local.yml`（已 gitignore）需含真实 DB 口令；缺失则用 `-Dspring.datasource.password=...` 临时覆盖 |
+| 本地配置 | 统一在 `src/main/resources/application.yml`，支持环境变量或 `-Dspring.datasource.password=...` 覆盖 |
 
 ### 9.2 「Could not initialize plugin: interface org.mockito.plugins.MockMaker」
 

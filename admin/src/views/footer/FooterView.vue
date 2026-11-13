@@ -1,15 +1,19 @@
 <template>
-  <div class="page-container">
+  <div class="page-container" :class="{ 'is-saving': saving }">
     <div class="page-header">
       <span class="page-title">页脚设置</span>
       <el-button
         type="primary"
         v-permission="'footer:edit'"
         :loading="saving"
+        :disabled="!ready || loading || !!loadError"
         @click="save"
-      >保存</el-button>
+      >保存并更新主站</el-button>
     </div>
 
+    <p class="draft-state">{{ dirty ? '有未保存修改' : '已加载配置' }} · 保存即时生效，预览不改变线上内容</p>
+    <el-alert v-if="loadError" :title="loadError" type="error" :closable="false"><el-button link @click="load">重新加载</el-button></el-alert>
+    <el-alert v-if="saveStatus" :title="saveStatus" :type="saveSucceeded ? 'success' : 'warning'" :closable="false" />
     <el-card shadow="never" v-loading="loading">
       <p class="page-tip">
         此处维护前台页脚的全部文案、链接与社交图标，保存后前台刷新即可看到最新内容。
@@ -19,9 +23,10 @@
       <el-collapse v-model="activeSections">
         <!-- 1. 工作室信息区 -->
         <el-collapse-item name="brand" title="1. 工作室信息区（左侧）">
-          <el-form :model="form" label-width="130px" class="footer-form">
+          <el-form :model="form" label-width="130px" class="footer-form" :disabled="saving || !ready || !!loadError || !canEdit">
             <el-form-item label="工作室名称" required>
-              <el-input v-model="form.brandName" maxlength="50" placeholder="独角兽工作室" />
+              <el-input v-model="form.brandName" :disabled="extra.inheritBrand" maxlength="50" placeholder="独角兽工作室" />
+              <div v-if="extra.inheritBrand" class="field-tip">已跟随全局站点名称；这里保留原独立值，关闭跟随后继续使用。</div>
             </el-form-item>
             <el-form-item label="工作室简介">
               <el-input
@@ -34,16 +39,16 @@
               />
               <div class="field-tip">回车换行会在前台原样保留</div>
             </el-form-item>
-            <el-form-item label="装饰粒子动效">
+            <el-form-item label="品牌信号点">
               <el-switch v-model="form.showParticles" />
-              <span class="field-tip inline">显示左侧装饰粒子动效（默认关闭，保持现有样式）</span>
+              <span class="field-tip inline">兼容原动效开关；当前模板展示品牌信号点，尊重系统减少动态效果设置。</span>
             </el-form-item>
           </el-form>
         </el-collapse-item>
 
         <!-- 2. 快速链接区 -->
         <el-collapse-item name="links" title="2. 快速链接区（中间）">
-          <el-form :model="form" label-width="130px" class="footer-form">
+          <el-form :model="form" label-width="130px" class="footer-form" :disabled="saving || !ready || !!loadError || !canEdit">
             <el-form-item label="栏目标题">
               <el-input v-model="form.linksTitle" maxlength="30" placeholder="快速链接" />
             </el-form-item>
@@ -101,7 +106,7 @@
 
         <!-- 3. 关注我们区 -->
         <el-collapse-item name="social" title="3. 关注我们区（右侧）">
-          <el-form :model="form" label-width="130px" class="footer-form">
+          <el-form :model="form" label-width="130px" class="footer-form" :disabled="saving || !ready || !!loadError || !canEdit">
             <el-form-item label="栏目标题">
               <el-input v-model="form.socialTitle" maxlength="30" placeholder="关注我们" />
             </el-form-item>
@@ -189,14 +194,15 @@
               <el-input v-model="form.emailLabel" class="w-narrow" maxlength="20" placeholder="邮箱：" />
             </el-form-item>
             <el-form-item label="邮箱地址">
-              <el-input v-model="form.email" class="w-narrow" maxlength="100" placeholder="1351094759@qq.com" />
+              <el-input v-model="form.email" :disabled="extra.inheritContact" class="w-narrow" maxlength="100" placeholder="联系邮箱" />
+              <div v-if="extra.inheritContact" class="field-tip">已跟随全局联系方式，影响页脚与加入页。独立邮箱保留，关闭跟随后使用。</div>
             </el-form-item>
           </el-form>
         </el-collapse-item>
 
         <!-- 4. 底部版权栏 -->
         <el-collapse-item name="copyright" title="4. 底部版权栏">
-          <el-form :model="form" label-width="130px" class="footer-form">
+          <el-form :model="form" label-width="130px" class="footer-form" :disabled="saving || !ready || !!loadError || !canEdit">
             <el-form-item label="左侧版权文字">
               <el-input v-model="form.copyrightLeft" maxlength="200" />
               <div class="field-tip">
@@ -209,8 +215,22 @@
             </el-form-item>
           </el-form>
         </el-collapse-item>
+        <el-collapse-item name="presentation" title="5. 品牌标签、邀请与大字标识">
+          <el-form :model="extra" label-position="top" class="footer-form" :disabled="saving || !ready || !!loadError || !canEdit">
+            <el-form-item label="品牌名称跟随全局站点名称"><el-switch v-model="extra.inheritBrand" /><p class="field-tip">全局名称在「系统设置」维护。默认关闭，保留现有页脚独立名称。</p></el-form-item>
+            <el-form-item label="联系邮箱跟随全局联系方式"><el-switch v-model="extra.inheritContact" /><p class="field-tip">全局联系邮箱在「系统设置」维护，启用后影响页脚与加入页。原独立邮箱不会被覆盖。</p></el-form-item>
+            <el-form-item label="品牌附加标签"><el-input v-model="extra.brandTagline" maxlength="160" placeholder="可选，清空后隐藏" /></el-form-item>
+            <el-form-item label="邀请小标签"><el-input v-model="extra.noteEyebrow" maxlength="120" placeholder="可选，清空后隐藏" /></el-form-item>
+            <el-form-item label="邀请标题"><el-input v-model="extra.noteTitle" type="textarea" :rows="2" maxlength="160" placeholder="可选，清空后隐藏" /></el-form-item>
+            <el-form-item label="邀请入口文字"><el-input v-model="extra.noteLinkLabel" maxlength="80" placeholder="可选，清空后隐藏入口" /></el-form-item>
+            <el-form-item label="邀请入口链接"><el-input v-model="extra.noteLinkUrl" maxlength="2048" placeholder="/join 或 https://…；清空后隐藏入口" /></el-form-item>
+            <el-form-item label="大字品牌标识"><el-input v-model="extra.wordmark" maxlength="120" placeholder="UNICORN；清空后隐藏" /></el-form-item>
+            <p class="field-tip">以上文案允许明确清空；不会被默认值填回。基础页脚与扩展配置独立保存，部分失败会明确显示结果。列表可拖拽排序，主站按当前数组顺序展示。</p>
+          </el-form>
+        </el-collapse-item>
       </el-collapse>
     </el-card>
+    <SitePreview class="config-preview" kind="footer" :payload="{ footer: payload(), presentation: { footer: extra } }" public-path="/" title="页脚 · 未保存预览" />
 
     <!-- 底部保存栏 -->
     <div class="footer-actions">
@@ -219,17 +239,21 @@
         size="large"
         v-permission="'footer:edit'"
         :loading="saving"
+        :disabled="!ready || loading || !!loadError"
         @click="save"
-      >保存</el-button>
+      >保存并更新主站</el-button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { footerApi, type FooterConfig, type FooterLink, type FooterSocial } from '@/api/footer'
 import { SOCIAL_ICONS, SOCIAL_ICON_MAP, FALLBACK_ICON_KEY } from '@/constants/socialIcons'
 import { useDragSort } from '@/composables/useDragSort'
+import SitePreview from '@/components/SitePreview.vue'
+import { presentationApi, clonePresentation, describeSectionSave, isPresentationUrl, useConfigDraft } from '@/api/presentation'
+import { useAuthStore } from '@/stores/auth'
 
 /** 与后端 FooterService 的上限保持一致 */
 const MAX_LINKS = 20
@@ -270,15 +294,24 @@ const DEFAULT_SCALARS = {
 
 const loading = ref(false)
 const saving = ref(false)
+const loadError = ref('')
+const saveStatus = ref('')
+const saveSucceeded = ref(false)
+const extra = reactive(clonePresentation('footer'))
+const auth = useAuthStore()
+const canEdit = computed(() => auth.hasPerm('footer:edit'))
 
 /** 折叠面板默认全部展开 */
-const activeSections = ref(['brand', 'links', 'social', 'copyright'])
+const activeSections = ref(['brand', 'links', 'social', 'copyright', 'presentation'])
 
 const form = reactive({
   ...DEFAULT_SCALARS,
   links: DEFAULT_LINKS.map((l) => ({ ...l, _uid: nextUid() })) as LinkRow[],
   socials: DEFAULT_SOCIALS.map((s) => ({ ...s, _uid: nextUid() })) as SocialRow[],
 })
+const { ready, dirty, markSaved } = useConfigDraft(() => ({ form: payload(), extra }))
+let savedLegacy = ''
+let savedExtra = ''
 
 // 两个列表各自独立的拖拽状态
 const dragLinks = useDragSort(() => form.links)
@@ -365,8 +398,9 @@ function payload(): FooterConfig {
 
 async function load() {
   loading.value = true
+  loadError.value = ''
   try {
-    const data = await footerApi.get()
+    const [data, presentation] = await Promise.all([footerApi.get(), presentationApi.get('footer')])
     form.brandName = data?.brandName ?? DEFAULT_SCALARS.brandName
     form.brandIntro = data?.brandIntro ?? DEFAULT_SCALARS.brandIntro
     form.showParticles = !!data?.showParticles
@@ -390,21 +424,39 @@ async function load() {
       title: s?.title || '',
       _uid: nextUid(),
     }))
+    Object.assign(extra, clonePresentation('footer'), presentation)
+    savedLegacy = JSON.stringify(payload())
+    savedExtra = JSON.stringify(extra)
+    markSaved()
+  } catch {
+    loadError.value = '配置加载失败，为避免覆盖线上页脚，请重新加载后再保存。'
   } finally {
     loading.value = false
   }
 }
 
 async function save() {
+  if (saving.value || !ready.value || loadError.value || !canEdit.value) return
   const error = validate()
   if (error) {
     ElMessage.warning(error)
     return
   }
+  if (!isPresentationUrl(extra.noteLinkUrl)) { ElMessage.warning('邀请链接只支持站内路径、锚点或 HTTP(S) 地址'); return }
   saving.value = true
   try {
-    await footerApi.update(payload())
-    ElMessage.success('保存成功，前台刷新后生效')
+    const legacySnapshot = JSON.stringify(payload())
+    const extraSnapshot = JSON.stringify(extra)
+    const results = await Promise.allSettled([
+      legacySnapshot === savedLegacy ? Promise.resolve() : footerApi.update(JSON.parse(legacySnapshot)),
+      extraSnapshot === savedExtra ? Promise.resolve() : presentationApi.update('footer', JSON.parse(extraSnapshot)),
+    ])
+    if (results[0].status === 'fulfilled') savedLegacy = legacySnapshot
+    if (results[1].status === 'fulfilled') savedExtra = extraSnapshot
+    const outcome = describeSectionSave(results, ['基础页脚', '品牌与邀请配置'])
+    saveStatus.value = outcome.message
+    saveSucceeded.value = outcome.success
+    if (outcome.success) { markSaved(); ElMessage.success('页脚配置已保存') }
   } finally {
     saving.value = false
   }
@@ -417,6 +469,11 @@ onMounted(load)
 .footer-form {
   max-width: 860px;
 }
+.draft-state { font-size: 12px; color: var(--el-text-color-secondary); margin-bottom: 16px; }
+.config-preview { margin-top: 20px; }
+.page-container > :deep(.el-alert) { margin-bottom: 16px; }
+.is-saving .list-editor { pointer-events: none; }
+@media(max-width:640px) { .footer-form :deep(.el-form-item) { display: block; } .footer-form :deep(.el-form-item__label) { float: none; display: block; text-align: left; width: auto !important; } .footer-form :deep(.el-form-item__content) { margin-left: 0 !important; } .list-editor { overflow-x: auto; } .list-row, .list-head { min-width: 630px; } .social-row { flex-wrap: wrap; } }
 .page-tip {
   margin: 0 0 18px;
   padding: 10px 12px;

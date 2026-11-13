@@ -14,7 +14,7 @@
 <!--    每次更新前要更新版本号   -->
     <groupId>com.unicorn</groupId>
     <artifactId>unicorn-studio</artifactId>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
     <name>Unicorn Studio Backend</name>
     <description>Unicorn Studio backend service</description>
 
@@ -93,7 +93,7 @@
             <scope>runtime</scope>
         </dependency>
 
-        <!-- Redis 服务（V15 缓存方案：StringRedisTemplate + 显式 ObjectMapper） -->
+        <!--redis配置  -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
@@ -131,9 +131,6 @@
             <version>1.18.1</version>
         </dependency>
 
-        <!-- 限流：自 V15 迁至 Redis（common/cache/RedisRateLimiter，Lua INCR+EXPIRE），
-             原 bucket4j-core 内存版已移除（§4.5） -->
-
         <!-- AOP（审计切面 / 异步） -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -146,6 +143,13 @@
             <artifactId>spring-boot-starter-mail</artifactId>
         </dependency>
 
+        <!-- 个人开发者短信认证（号码认证 SendSmsVerifyCode），与普通短信 SendSms 使用不同 SDK。 -->
+        <dependency>
+            <groupId>com.aliyun</groupId>
+            <artifactId>dypnsapi20170525</artifactId>
+            <version>2.0.0</version>
+        </dependency>
+
         <!-- Lombok -->
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -153,10 +157,15 @@
             <optional>true</optional>
         </dependency>
 
-        <!-- ==================== Spring AI（AIWorker 模块） ====================
-             OpenAI 兼容协议 starter：同时支持 OpenAI 官方与各类兼容网关
-             （如 DeepSeek / 通义 / 智谱 / OneAPI 等，只需替换 base-url 与 model）。
-             ChatClient/工具调用（Function Calling）均由 Spring AI 提供。 -->
+        <!-- Spring @Nullable 的 JSR-305 元注解仅用于编译期分析。 -->
+        <dependency>
+            <groupId>com.google.code.findbugs</groupId>
+            <artifactId>jsr305</artifactId>
+            <version>3.0.2</version>
+            <scope>provided</scope>
+        </dependency>
+
+<!--      AIWorker模块要使用的包-->
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-starter-model-openai</artifactId>
@@ -168,15 +177,41 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-test</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
 
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>false</filtering>
+                <excludes>
+                    <exclude>**/.env*</exclude>
+                </excludes>
+            </resource>
+        </resources>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!-- 显式声明处理器，避免依赖 javac 自动扫描编译类路径。 -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+            <!-- 同时防止 IDE 先复制到 target/classes 的本地凭据进入最终 JAR。 -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <excludes><exclude>**/.env*</exclude></excludes>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
@@ -186,53 +221,23 @@
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
                         </exclude>
+                        <exclude>
+                            <groupId>com.google.code.findbugs</groupId>
+                            <artifactId>jsr305</artifactId>
+                        </exclude>
                     </excludes>
                 </configuration>
             </plugin>
 
-            <!--
-                Mockito 内联 mock maker 需要 Byte Buddy 以【Java agent】形式挂载。
-
-                为什么必须显式配：Mockito 会先尝试「自附加（self-attach）」，即在测试 JVM 里
-                另起一个进程去 attach 自己。这条路在很多环境下不通（JDK 21 已把动态 attach 标为
-                弃用并默认告警，且沙箱/受限环境直接失败），报错是：
-
-                    MockitoInitializationException:
-                    It appears as if your JDK does not supply a working agent attachment mechanism.
-                    Caused by: Could not self-attach to current VM using external process
-
-                后果是**所有**用 @Mock/MockitoExtension 的测试整体报
-                "Could not initialize plugin: interface org.mockito.plugins.MockMaker" ——
-                看着像测试写错了，其实是运行环境缺 agent，极易误判。
-                （IDEA 自己的测试运行器会替你挂上 agent，所以同一套代码在 IDE 里绿、在
-                 mvn 命令行里红 —— 这正是本项目遇到的情形。）
-
-                修法就是 Maven 官方推荐的两步：
-                  ① dependency-plugin 把 byte-buddy-agent 的 jar 绝对路径解析进 ${argLine}；
-                  ② surefire 把 -javaagent:... 传给测试 JVM。
-                只影响 test 阶段，不影响打出来的 jar。
-            -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-dependency-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <id>resolve-byte-buddy-agent</id>
-                        <phase>initialize</phase>
-                        <goals>
-                            <goal>properties</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <!-- @{...} 是 surefire 的延迟求值语法，用于引用本插件之外产生的属性 -->
-                    <argLine>-javaagent:@{net.bytebuddy:byte-buddy-agent:jar}</argLine>
+                    <!-- Mockito agent 的版本沿用 Spring Boot，路径跟随 Maven 本地仓库。 -->
+                    <argLine>"-javaagent:${settings.localRepository}/net/bytebuddy/byte-buddy-agent/${byte-buddy.version}/byte-buddy-agent-${byte-buddy.version}.jar"</argLine>
                 </configuration>
             </plugin>
         </plugins>
     </build>
+
 </project>

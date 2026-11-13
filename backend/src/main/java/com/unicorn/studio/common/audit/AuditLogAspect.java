@@ -29,7 +29,7 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * 审计切面：@AuditLog 标注的写接口执行后异步落库 + 同步写管理端审计文件。
+ * 审计切面：@AuditLog 标注的写接口执行后异步落库，并将脱敏摘要写入统一应用日志。
  * 参数 JSON 序列化后脱敏（password/token/refreshToken → "***"）。
  * 注意：SecurityContext/RequestContext 为 ThreadLocal，异步线程拿不到，
  * 故在请求线程内构建完整日志实体，@Async 仅负责落库（经代理调用才生效）。
@@ -39,7 +39,7 @@ import java.util.Set;
 public class AuditLogAspect {
 
     private static final Logger log = LoggerFactory.getLogger(AuditLogAspect.class);
-    /** 管理端操作审计专用 logger：写入 logs/admin/yyyy-MM-dd/app-admin.log.N（additivity=false，见 logback-spring.xml） */
+    /** 独立控制审计级别，通过 root logger 写入统一的 app.log。 */
     private static final Logger AUDIT_FILE_LOGGER = LoggerFactory.getLogger("ADMIN_AUDIT");
     /**
      * 需要脱敏的字段名（精确匹配，不区分大小写）。
@@ -50,7 +50,7 @@ public class AuditLogAspect {
      * 明文密钥会同时落到 {@code sys_operation_log.params} 与管理端审计文件，属于严重安全问题。
      */
     private static final Set<String> SENSITIVE_KEYS = Set.of(
-            "password", "token", "refreshToken", "oldPassword", "newPassword",
+            "password", "token", "refreshToken", "oldPassword", "newPassword", "phone",
             "apikey", "api_key", "secret", "cryptosecret", "accesskey", "access_key", "authorization");
     private static final String MASKED = "***";
 
@@ -86,7 +86,7 @@ public class AuditLogAspect {
     public Object around(ProceedingJoinPoint pjp, AuditLog auditLog) throws Throwable {
         long start = System.currentTimeMillis();
         // 请求线程内完成实体构建（用户/请求元信息/参数脱敏均依赖 ThreadLocal 上下文）
-        SysOperationLog entry = buildEntry(pjp, auditLog);
+        SysOperationLog entry = newEntry(auditLog.module(), auditLog.action(), serializeArgs(pjp.getArgs()));
         try {
             Object result = pjp.proceed();
             entry.setStatus("success");
@@ -105,8 +105,8 @@ public class AuditLogAspect {
     }
 
     /**
-     * 同步写审计文件（与异步落库解耦，任一失败互不影响；内部自捕获保证不影响业务主流程）。
-     * 一行一条、含脱敏参数，随 logback 按天归档到 logs/admin/yyyy-MM-dd/app-admin.log.N。
+     * 写入应用日志（与异步落库解耦，内部自捕获保证不影响业务主流程）。
+     * 一行一条、含脱敏参数，随 app.log 统一滚动归档。
      */
     private void writeAuditFile(SysOperationLog entry) {
         try {
@@ -142,11 +142,31 @@ public class AuditLogAspect {
         }
     }
 
-    private SysOperationLog buildEntry(ProceedingJoinPoint pjp, AuditLog auditLog) {
+    /**
+     * 手动记一条「读取」审计（文档 §9.2）。
+     * <p>
+     * 不给 GET 套 {@code @AuditLog}：语义上不像"操作"，且列表翻页会把审计表刷爆
+     * （管理员翻十页 = 十行），所以只审计"真正看到了正文"的动作。
+     *
+     * @param params 条件摘要 —— 别把消息正文或检索关键词放进来，否则审计表本身成了二次泄露点
+     */
+    public void recordRead(String module, String action, Object params){
+        SysOperationLog entry = newEntry(module, action, serializeParam(params));
+        entry.setStatus("success");
+        entry.setDurationMs(0);
+        writeAuditFile(entry);
+        selfProvider.getObject().persist(entry);
+    }
+
+    /**
+     * 新建审计日志实体：模块/操作/参数/当前管理员/请求元信息（方法/路径/客户端 IP）。
+     * 参数 JSON 序列化后脱敏（password/token/refreshToken → "***"）。
+     */
+    private SysOperationLog newEntry(String module, String action, String params) {
         SysOperationLog entry = SysOperationLog.builder()
-                .module(auditLog.module())
-                .action(auditLog.action())
-                .params(serializeArgs(pjp.getArgs()))
+                .module(module)
+                .action(action)
+                .params(params)
                 .build();
 
         // 当前管理员（过滤器已注入 Authentication）
@@ -168,6 +188,11 @@ public class AuditLogAspect {
         return entry;
     }
 
+    /**
+     * 序列化参数：脱敏后 JSON 字符串。
+     * @param args 要序列化的参数数组
+     * @return 脱敏后 JSON 字符串
+     */
     private String serializeArgs(Object[] args) {
         try {
             // 仅记录简单类型与 DTO 的一层结构，避免大对象刷库
@@ -187,6 +212,21 @@ public class AuditLogAspect {
         } catch (Exception e) {
             // 曾经这里是 `return null;` —— 静默失败正是「某些接口的审计参数一直是空的」
             // 能藏这么久的原因。审计日志的价值恰恰在于参数留痕，序列化失败必须留下痕迹。
+            log.warn("审计参数序列化失败，本次将不记录参数: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /** 单值参数序列化（与 serializeArgs 共用同一套脱敏），失败只告警不抛。 */
+    private String serializeParam(Object param){
+        try{
+            //先将参数转换为 JsonNode，方便后续脱敏
+            JsonNode node = objectMapper.valueToTree(param);
+            //对参数进行脱敏处理
+            maskSensitive(node);
+            //将脱敏后的参数转换为 JSON 字符串
+            return objectMapper.writeValueAsString(List.of(node));
+        } catch (Exception e){
             log.warn("审计参数序列化失败，本次将不记录参数: {}", e.getMessage());
             return null;
         }

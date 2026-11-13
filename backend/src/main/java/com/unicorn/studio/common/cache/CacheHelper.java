@@ -13,10 +13,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -36,15 +33,15 @@ public class CacheHelper {
 
     private final StringRedisTemplate redis;
     private final ObjectMapper mapper;
-    private final CacheCircuitBreaker breaker;
-    private final boolean enabled;
-    private final double jitterRatio;
+    private final CacheCircuitBreaker breaker;// 缓存熔断器
+    private final boolean enabled;// 缓存是否启用
+    private final double jitterRatio;// TTL 随机抖动比例
 
     /**
      * 键前缀：{@code app.cache.namespace} + 当前 profile（形如 {@code local:} / {@code prod:}）。
      * <p>
      * <b>为什么必须有它（2026-09-22 实测故障）</b>：本地开发与线上服务器<b>共用同一台 Redis 的
-     * 同一个 db</b>（见 {@code application-local.yml} 与 {@code REDIS_HOST}），而缓存键里
+     * 同一个 db</b>（见 {@code application.yml} 与 {@code REDIS_HOST}），而缓存键里
      * 没有任何环境标识 —— 于是两边互相读写对方的缓存：
      * <ol>
      *   <li>本地库只有 4 条学习资料，但本地实例的列表接口返回了 <b>7 条</b>；
@@ -103,6 +100,17 @@ public class CacheHelper {
     /** 加前缀。分隔符统一用 {@code :}，与既有键命名规范一致。 */
     private String k(String key) {
         return keyPrefix + key;
+    }
+
+    /**
+     * 暴露加过环境前缀的完整键名，供<b>需要自己拼键</b>的组件复用（当前只有 {@code RedisRateLimiter}）。
+     * <p>
+     * 限流器有自己独立的 {@code StringRedisTemplate}、不经过本类，若让它自己拼前缀就得把
+     * {@link #buildPrefix} 的逻辑复制一份——而「同一份前缀逻辑写两处」正是 §3.3 踩过的坑
+     * （本地与线上共用一台 Redis，缺前缀会互相消耗额度且全程不报错）。
+     */
+    public String prefixed(String key) {
+        return k(key);
     }
 
     public boolean isEnabled() {
@@ -276,6 +284,39 @@ public class CacheHelper {
             });
         } else {
             task.run();
+        }
+    }
+
+    /** 缓存计数器自增,用来实现单位时间内限流等场景
+     * 未命中/降级返回空 Optional(包装可能为 null 的值，避免空指针)
+     * */
+    public Optional<Long> increment(String key) {
+        if(!enabled || breaker.isOpen()){
+            // 未命中/降级返回空 Optional
+            return Optional.empty();
+        }
+        try {
+            //
+            Long value = redis.opsForValue().increment(k(key));
+            breaker.onSuccess();
+            // 返回 Optional.ofNullable(value), 如果 value 为 null，则返回 Optional.empty()，否则返回包住 value 的 Optional
+            return Optional.ofNullable(value);
+        } catch (Exception e) {
+            breaker.onFailure();
+            log.warn("缓存计数器自增降级 key={} : {}", key, e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    public void expireAt(String key, Date deadline){
+        if(!enabled || breaker.isOpen()){
+            return;
+        }
+        try {
+            // 设置过期时间,到时间key自动删除
+            redis.expireAt(k(key), deadline);
+        } catch (Exception e) {
+            log.warn("缓存设置过期时间降级 key={}: {}", key, e.getMessage());
         }
     }
 

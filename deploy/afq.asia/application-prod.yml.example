@@ -1,0 +1,38 @@
+# 复制为 application-prod.yml，在服务器填写数据库密码；实际文件已被 Git 忽略。
+server:
+  address: 0.0.0.0
+  port: 8080
+  forward-headers-strategy: native
+
+spring:
+  datasource:
+    url: jdbc:mysql://mysql-server:3306/unicorn_studio?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: '填写已有的MySQL用户名'
+    password: '填写已有的MySQL密码'
+  data:
+    redis:
+      host: redis-server
+      port: 6379
+      password: '填写已有的Redis密码'
+
+app:
+  site:
+    base-url: https://www.afq.asia
+  cors:
+    allowed-origins: https://www.afq.asia
+    allowed-origin-patterns: ''
+  security:
+    trusted-proxy-count: 1
+  upload:
+    dir: /app/data/uploads
+  admin:
+    jwt-secret: ${ADMIN_JWT_SECRET}
+  public:
+    jwt-secret: ${PUBLIC_JWT_SECRET}
+  crypto:
+    secret: ${APP_CRYPTO_SECRET}
+    allow-plaintext: false
+
+logging:
+  file:
+    name: /app/logs/app.log

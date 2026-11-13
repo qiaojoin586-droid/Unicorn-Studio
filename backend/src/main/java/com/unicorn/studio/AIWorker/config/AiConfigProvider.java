@@ -85,6 +85,15 @@ public class AiConfigProvider {
         return runtimeConfig().usable();
     }
 
+    /** 公开接口只使用头像地址，模型凭据不进入这份缓存或响应。 */
+    public AiMessageAvatar messageAvatar() {
+        return cache.get(AiMessageAvatar.CACHE_KEY, AiMessageAvatar.class).orElseGet(() -> {
+            AiMessageAvatar avatar = AiMessageAvatar.from(rawGroup());
+            cache.set(AiMessageAvatar.CACHE_KEY, avatar, CACHE_TTL);
+            return avatar;
+        });
+    }
+
     private AiRuntimeConfig loadFromDb() {
         Map<String, String> raw = rawGroup();
         String encryptedKey = raw.get(KEY_API_KEY);

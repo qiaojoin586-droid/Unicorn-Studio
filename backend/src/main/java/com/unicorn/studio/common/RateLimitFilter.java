@@ -3,6 +3,7 @@ package com.unicorn.studio.common;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.common.cache.RedisRateLimiter;
+import com.unicorn.studio.service.PublicAuthService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -15,6 +16,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Redis 限流（Redis 方案 §4.5，原内存版 Bucket4j 已迁 Redis，见 {@link RedisRateLimiter}）：
@@ -27,6 +29,7 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     private final ObjectMapper objectMapper;
     private final RedisRateLimiter rateLimiter;
+    private final PublicAuthService publicAuthService;
 
     // ---- 限流阈值（可环境变量覆盖，默认见实施方案 §3.7） ----
     private final long loginPerMinute;
@@ -45,9 +48,11 @@ public class RateLimitFilter extends OncePerRequestFilter {
                            @Value("${app.ratelimit.guest-comment-per-hour:10}") long guestCommentPerHour,
                            @Value("${app.ratelimit.message-per-hour:5}") long messagePerHour,
                            @Value("${app.ratelimit.stats-per-minute:60}") long statsPerMinute,
-                           @Value("${app.ratelimit.ai-per-minute:5}") long aiPerMinute) {
+                           @Value("${app.ratelimit.ai-per-minute:5}") long aiPerMinute,
+                           PublicAuthService publicAuthService) {
         this.objectMapper = objectMapper;
         this.rateLimiter = rateLimiter;
+        this.publicAuthService = publicAuthService;
         this.loginPerMinute = loginPerMinute;
         this.registerPerHour = registerPerHour;
         this.commentPerMinute = commentPerMinute;
@@ -88,6 +93,8 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if ("POST".equals(method) && "/api/auth/register".equals(uri)) {
             return !rateLimiter.isAllowed(CacheKeys.rate("register", ip), registerPerHour, Duration.ofHours(1));
         }
+        // 注册验证码由 RegistrationCodeService 按手机号控制发送间隔和实际发送额度，
+        // 不能在这里按 IP 累计请求次数，避免失败重试和同一网络下的其他用户消耗额度。
         // 前台登录：IP 10 次/分
         if ("POST".equals(method) && "/api/auth/login".equals(uri)) {
             return !rateLimiter.isAllowed(CacheKeys.rate("auth-login", ip), 10, Duration.ofMinutes(1));
@@ -111,9 +118,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if ("POST".equals(method) && "/api/stats/pv".equals(uri)) {
             return !rateLimiter.isAllowed(CacheKeys.rate("stats", ip), statsPerMinute, Duration.ofMinutes(1));
         }
-        // AI 对话（§3.4 C6①）：每次调用产生真实外部 API 费用，按 IP 限流
+        // AI 对话（文档 §9.4：双维度并存，任一超限即拦）
+        // 主维度按用户：AI 已要求登录，只按 IP 限会让同一 NAT 出口的用户互相挤兑额度
+        // 兜底维度按 IP：放宽到 3 倍，职责从"限成本"变成"挡批量注册的小号"
         if ("POST".equals(method) && "/api/ai/chat".equals(uri)) {
-            return !rateLimiter.isAllowed(CacheKeys.rate("ai", ip), aiPerMinute, Duration.ofMinutes(1));
+            Optional<Long> userId = publicAuthService.parseUserId(request.getHeader("Authorization"));
+            if (userId.isPresent() && !rateLimiter.isAllowed(
+                    CacheKeys.rate("ai:user", String.valueOf(userId.get())), aiPerMinute, Duration.ofMinutes(1))) {
+                return true;
+            }
+            return !rateLimiter.isAllowed(CacheKeys.rate("ai", ip), aiPerMinute * 3, Duration.ofMinutes(1));
         }
         return false;
     }

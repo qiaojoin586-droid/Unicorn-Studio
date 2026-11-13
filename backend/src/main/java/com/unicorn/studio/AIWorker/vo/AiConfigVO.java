@@ -1,6 +1,7 @@
 package com.unicorn.studio.AIWorker.vo;
 
 import com.unicorn.studio.AIWorker.config.AiRuntimeConfig;
+import com.unicorn.studio.AIWorker.config.AiMessageAvatar;
 
 /**
  * AI 配置回显 VO（后台管理用）。
@@ -28,13 +29,16 @@ public record AiConfigVO(String apiKeyMasked,
                          Double temperature,
                          boolean enabled,
                          boolean usable,
-                         boolean cryptoEnabled) {
+                         boolean cryptoEnabled,
+                         String messageAvatarMode,
+                         String messageAvatarUrl) {
 
     /** 由运行时配置 + 脱敏串组装。 */
     public static AiConfigVO of(AiRuntimeConfig config,
                                String apiKeyMasked,
                                boolean apiKeySet,
-                               boolean cryptoEnabled) {
+                               boolean cryptoEnabled,
+                               AiMessageAvatar avatar) {
         return new AiConfigVO(
                 apiKeyMasked,
                 apiKeySet,
@@ -45,6 +49,8 @@ public record AiConfigVO(String apiKeyMasked,
                 config.temperature(),
                 config.enabled(),
                 config.usable(),
-                cryptoEnabled);
+                cryptoEnabled,
+                avatar.mode(),
+                avatar.url());
     }
 }

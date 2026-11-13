@@ -60,8 +60,8 @@ public class SecretsStartupValidator implements ApplicationContextInitializer<Co
                 missing.add("REDIS_HOST           → spring.data.redis.host（Redis 主机）");
             }
             // 口令：**回环地址允许留空**，其余一律强制非空。
-            //  · 为什么放开回环：本地开发常跑「无 requirepass 的本机 Redis」（application-local.yml
-            //    把 password 显式留空），此时 Lettuce 根本不发送 AUTH，连接完全正常 ——
+            //  · 为什么放开回环：本地开发常跑「无 requirepass 的本机 Redis」（application.yml
+            //    的本地默认密码为空），此时 Lettuce 根本不发送 AUTH，连接完全正常 ——
             //    把这种合法配置判成部署错误，既挡死了本地启动，又与本项目既有契约矛盾：
             //    server-migration/README §6.1 写的是「REDIS_HOST / REDIS_PASSWORD 缺失时
             //    缓存整体降级（不阻断启动）」。
@@ -79,8 +79,7 @@ public class SecretsStartupValidator implements ApplicationContextInitializer<Co
             // 异常信息由 Spring Boot 的失败分析器原样打印，是此刻最可靠的传达方式。
             throw new IllegalStateException(
                     "以下凭据未配置，拒绝启动：\n  - " + detail + "\n"
-                            + "本地开发：写入 backend/src/main/resources/application-local.yml"
-                            + "（不入库，模板见 application-local.yml.example）\n"
+                            + "本地开发：配置 backend/src/main/resources/application.yml 对应项\n"
                             + "生产部署：通过环境变量注入；若 Redis 走哨兵模式请设置 REDIS_SENTINEL_NODES");
         }
     }

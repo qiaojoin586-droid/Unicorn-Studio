@@ -1,6 +1,7 @@
 package com.unicorn.studio.model;
 
 import com.baomidou.mybatisplus.annotation.FieldFill;
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -26,6 +27,9 @@ public class PublicUser {
     private String nickname;
 
     private String email;
+    /** 旧账号可能尚未绑定，由后台的专用更新流程维护。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private String phone;
 
     private String password;
 
@@ -33,6 +37,12 @@ public class PublicUser {
 
     /** 1正常 0禁言 2注销 */
     private Integer status;
+
+    private Integer aiEnabled;
+
+    /** 修改登录凭据或注销时递增，使旧令牌失效。 */
+    @TableField(updateStrategy = FieldStrategy.NEVER)
+    private long authVersion;
 
     private String banReason;
 

@@ -2,11 +2,13 @@ package com.unicorn.studio.common.cache;
 
 import com.unicorn.studio.admin.service.AboutPageService;
 import com.unicorn.studio.admin.service.FooterService;
+import com.unicorn.studio.admin.service.JoinPageService;
 import com.unicorn.studio.mapper.CarouselMapper;
 import com.unicorn.studio.model.Carousel;
 import com.unicorn.studio.service.CapabilityService;
 import com.unicorn.studio.service.LearningService;
 import com.unicorn.studio.service.ServiceItemService;
+import com.unicorn.studio.service.WorkService;
 import com.unicorn.studio.vo.CarouselVO;
 import com.unicorn.studio.vo.PageBackgroundVO;
 import org.slf4j.Logger;
@@ -48,9 +50,11 @@ public class CacheWarmup {
 
     private final FooterService footerService;
     private final AboutPageService aboutPageService;
+    private final JoinPageService joinPageService;
     private final ServiceItemService serviceItemService;
     private final CapabilityService capabilityService;
     private final LearningService learningService;
+    private final WorkService workService;
     private final CarouselMapper carouselMapper;
 
     public CacheWarmup(CacheHelper cache,
@@ -58,18 +62,22 @@ public class CacheWarmup {
                        @Value("${app.cache.warmup.enabled:true}") boolean enabled,
                        FooterService footerService,
                        AboutPageService aboutPageService,
+                       JoinPageService joinPageService,
                        ServiceItemService serviceItemService,
                        CapabilityService capabilityService,
                        LearningService learningService,
+                       WorkService workService,
                        CarouselMapper carouselMapper) {
         this.cache = cache;
         this.warmupExecutor = warmupExecutor;
         this.enabled = enabled;
         this.footerService = footerService;
         this.aboutPageService = aboutPageService;
+        this.joinPageService = joinPageService;
         this.serviceItemService = serviceItemService;
         this.capabilityService = capabilityService;
         this.learningService = learningService;
+        this.workService = workService;
         this.carouselMapper = carouselMapper;
     }
 
@@ -89,15 +97,26 @@ public class CacheWarmup {
             return;
         }
         log.info("开始缓存预热（首页/关于页 A/B 级热点 key）");
-        warmQuietly("footer", footerService::load);
-        warmQuietly("about", aboutPageService::load);
-        warmQuietly("home-services", serviceItemService::findPublished);
-        warmQuietly("home-capabilities", capabilityService::findPublished);
-        warmQuietly("learning-list", learningService::findAll);
-        warmQuietly("carousel-home", this::warmCarouselHome);
-        warmQuietly("bg-about", () -> warmBackground("about"));
-        warmQuietly("bg-work-detail", () -> warmBackground("work-detail"));
-        warmQuietly("bg-works", () -> warmBackground("works"));
+        try {
+            warmQuietly("footer", footerService::load);
+            warmQuietly("about", aboutPageService::load);
+            warmQuietly("join-page", joinPageService::load);
+            warmQuietly("home-services", serviceItemService::findPublished);
+            warmQuietly("home-capabilities", capabilityService::findPublished);
+            warmQuietly("learning-list", learningService::findAll);
+            // 首页推荐作品 / 作品页全量列表：前台命中率最高的两个列表查询，
+            // 此前既没有缓存也没有预热，冷启动的首屏必然打库。
+            warmQuietly("works-featured", () -> workService.findPublished(null, 1));
+            warmQuietly("works-all", () -> workService.findPublished(null, null));
+            warmQuietly("carousel-home", this::warmCarouselHome);
+            warmQuietly("bg-about", () -> warmBackground("about"));
+            warmQuietly("bg-work-detail", () -> warmBackground("work-detail"));
+            warmQuietly("bg-works", () -> warmBackground("works"));
+        } finally {
+            // 预热结束立即释放锁：它只用于「多实例同时启动」的互斥，不是业务锁。
+            // 此前从不释放，导致 5 分钟内重启的实例整体跳过预热（表现为预热日志随机消失）。
+            cache.delete(LOCK_KEY);
+        }
         log.info("缓存预热完成");
     }
 

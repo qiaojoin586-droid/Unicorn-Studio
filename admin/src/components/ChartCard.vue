@@ -31,15 +31,14 @@ useChart(chartEl, optionRef)
   gap: 8px;
   font-weight: 600;
   font-size: 15px;
-  color: #0f172a;
+  color: var(--admin-ink);
 }
 .chart-title::before {
   content: '';
-  width: 8px;
-  height: 8px;
+  width: 5px;
+  height: 5px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #a855f7);
-  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+  background: var(--admin-accent);
 }
 .chart-body {
   width: 100%;

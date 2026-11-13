@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.lang.Nullable;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.stereotype.Service;
@@ -36,7 +37,7 @@ public class EmailService {
     private final String from;
     private final Executor mailExecutor;
 
-    public EmailService(JavaMailSender mailSender,
+    public EmailService(@Nullable JavaMailSender mailSender,
                         @Value("${spring.mail.username:}") String from,
                         @Qualifier("mailExecutor") Executor mailExecutor) {
         this.mailSender = mailSender;
@@ -94,6 +95,6 @@ public class EmailService {
     }
 
     private boolean isConfigured() {
-        return from != null && !from.isBlank();
+        return mailSender != null && from != null && !from.isBlank();
     }
 }

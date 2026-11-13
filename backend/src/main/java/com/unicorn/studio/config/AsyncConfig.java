@@ -1,5 +1,6 @@
 package com.unicorn.studio.config;
 
+import com.unicorn.studio.AIWorker.config.AiProbePolicy;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,6 +33,16 @@ import java.util.concurrent.ThreadPoolExecutor;
 @EnableAsync
 @EnableScheduling
 public class AsyncConfig {
+
+    /** 外部 AI 探测单独限流：零队列，满载立即反馈，禁止回退到 Tomcat 线程执行。 */
+    @Bean("aiProbeExecutor")
+    public ThreadPoolTaskExecutor aiProbeExecutor() {
+        var pool = buildPool("ai-probe-", AiProbePolicy.MAX_CONCURRENCY, AiProbePolicy.MAX_CONCURRENCY,
+                0, new ThreadPoolExecutor.AbortPolicy(), 5);
+        pool.setAllowCoreThreadTimeOut(true);
+        pool.setWaitForTasksToCompleteOnShutdown(false);
+        return pool;
+    }
 
     /**
      * PV 埋点等「弱一致、可丢弃」任务。

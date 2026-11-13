@@ -22,8 +22,7 @@ backend/data/
 data/
 **/.env
 
-# 本地开发配置（含真实凭据：DB/Redis 口令、各 JWT/crypto 密钥）—— 绝不入库
-# 模板见 backend/src/main/resources/application-local.yml.example
+# 防止旧版拆分的本地凭据文件被意外提交；当前统一使用 application.yml
 **/application-local.yml
 
 # 数据库迁移产物：数据导出文件含 sys_user 口令散列、AES 加密的 AI Key、
@@ -38,10 +37,21 @@ Thumbs.db
 # IDE 配置（本地个人配置，不入库）
 .idea/
 .vscode/
-
+.claude/
 # WorkBuddy 工作区记忆与任务（本地个人，不入库）
 .workbuddy/
 
 # 忽略设计方案
 # 设计方案文件夹（本地个人，不入库）
 docs/
+
+# 助手临时工作目录（构建产物/日志/临时源码副本）
+.workbuddy-tmp/
+
+# 个人笔记目录（本地，不入库）
+notes/
+
+# 忽略 Docker 相关文件夹
+backend/docker/
+.workbuddy/
+.github/

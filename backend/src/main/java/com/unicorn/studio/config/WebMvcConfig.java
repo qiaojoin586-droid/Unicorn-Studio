@@ -1,5 +1,6 @@
 package com.unicorn.studio.config;
 
+import com.unicorn.studio.common.security.SiteUserAuthInterceptor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
@@ -31,11 +32,14 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     private final UploadProperties uploadProperties;
     private final UploadNotFoundInterceptor uploadNotFoundInterceptor;
+    private final SiteUserAuthInterceptor siteUserAuthInterceptor;
 
     public WebMvcConfig(UploadProperties uploadProperties,
-                        UploadNotFoundInterceptor uploadNotFoundInterceptor) {
+                        UploadNotFoundInterceptor uploadNotFoundInterceptor,
+                        SiteUserAuthInterceptor siteUserAuthInterceptor) {
         this.uploadProperties = uploadProperties;
         this.uploadNotFoundInterceptor = uploadNotFoundInterceptor;
+        this.siteUserAuthInterceptor = siteUserAuthInterceptor;
     }
 
     @Override
@@ -65,11 +69,15 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
     /**
      * {@code /uploads/**} 的 404 定向诊断（见 {@link UploadNotFoundInterceptor}）。
-     * <p>
      * 只挂这一条前缀：正常请求（200/304）不进诊断分支，对热路径零影响。
+     * <p>
+     * {@code /api/**} 的前台登录门禁（见 {@link SiteUserAuthInterceptor}）挂得宽、判得窄：
+     * 路径匹配整个前缀，但拦不拦由方法上的 {@code @RequireSiteUser} 决定，
+     * 这样不必维护 excludePathPatterns 白名单。
      */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(uploadNotFoundInterceptor).addPathPatterns("/uploads/**");
+        registry.addInterceptor(siteUserAuthInterceptor).addPathPatterns("/api/**");
     }
 }

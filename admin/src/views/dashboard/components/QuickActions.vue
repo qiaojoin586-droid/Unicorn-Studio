@@ -5,18 +5,18 @@
     </template>
 
     <div v-if="actions.length" class="quick-grid">
-      <div
+      <button
         v-for="item in actions"
         :key="item.path"
+        type="button"
         class="quick-item"
         tabindex="0"
         @click="router.push(item.path)"
-        @keydown.enter="router.push(item.path)"
       >
         <div
           class="quick-icon"
           :style="{
-            background: `linear-gradient(135deg, ${item.color}26, ${item.color}0d)`,
+            background: 'var(--el-fill-color-light)',
             color: item.color,
           }"
         >
@@ -34,7 +34,7 @@
           <div class="quick-desc">{{ item.desc }}</div>
         </div>
         <el-icon class="quick-arrow"><ArrowRight /></el-icon>
-      </div>
+      </button>
     </div>
     <el-empty v-else description="暂无可用待办" :image-size="80" />
 
@@ -111,7 +111,7 @@ const actions = computed<QuickAction[]>(() =>
       label: '数据备份',
       desc: '数据库备份维护',
       icon: 'FolderOpened',
-      color: '#6366f1',
+      color: '#414249',
       badge: null,
     },
   ].filter((a) => auth.hasPerm(a.permission)),
@@ -132,8 +132,7 @@ const actions = computed<QuickAction[]>(() =>
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #a855f7);
-  box-shadow: 0 0 8px rgba(99, 102, 241, 0.5);
+  background: var(--admin-accent);
 }
 .quick-grid {
   display: flex;
@@ -151,12 +150,13 @@ const actions = computed<QuickAction[]>(() =>
   border-radius: 10px;
   background: #fff;
   cursor: pointer;
+  text-align: left;
+  font-family: inherit;
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 .quick-item:hover {
   border-color: color-mix(in srgb, var(--el-color-primary) 30%, white);
   box-shadow: 0 4px 12px rgba(15, 23, 42, 0.06);
-  transform: translateY(-2px);
 }
 .quick-icon {
   position: relative;
@@ -193,7 +193,7 @@ const actions = computed<QuickAction[]>(() =>
 }
 .quick-desc {
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--admin-muted);
   margin-top: 2px;
 }
 .quick-arrow {
@@ -217,7 +217,7 @@ const actions = computed<QuickAction[]>(() =>
 .qs-item b {
   margin-left: 4px;
   font-size: 14px;
-  color: #6366f1;
+  color: var(--admin-ink);
   font-variant-numeric: tabular-nums;
 }
 </style>

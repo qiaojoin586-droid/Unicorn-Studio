@@ -8,12 +8,12 @@ import java.util.Optional;
 
 public interface PublicUserMapper extends BaseMapper<PublicUser> {
 
-    default Optional<PublicUser> findByEmail(String email) {
-        return Optional.ofNullable(selectOne(new LambdaQueryWrapper<PublicUser>().eq(PublicUser::getEmail, email)));
+    default Optional<PublicUser> findByPhone(String phone) {
+        return Optional.ofNullable(selectOne(new LambdaQueryWrapper<PublicUser>().eq(PublicUser::getPhone, phone)));
     }
 
-    default boolean existsByEmail(String email) {
-        return selectCount(new LambdaQueryWrapper<PublicUser>().eq(PublicUser::getEmail, email)) > 0;
+    default boolean existsByPhone(String phone) {
+        return exists(new LambdaQueryWrapper<PublicUser>().eq(PublicUser::getPhone, phone));
     }
 
     default long countByStatus(Integer status) {

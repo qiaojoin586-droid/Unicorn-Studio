@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc -b && vite build && node scripts/verify-dist.js && node scripts/verify-first-screen.mjs && node scripts/verify-icons.mjs && node scripts/verify-echarts.mjs",
+    "build": "node scripts/build.mjs",
     "verify-dist": "node scripts/verify-dist.js",
+    "verify:ai-avatar": "node scripts/verify-ai-avatar.mjs",
     "verify-icons": "node scripts/verify-icons.mjs",
     "verify-echarts": "node scripts/verify-echarts.mjs",
     "verify": "node scripts/verify-dist.js && node scripts/verify-first-screen.mjs && node scripts/verify-icons.mjs && node scripts/verify-echarts.mjs",

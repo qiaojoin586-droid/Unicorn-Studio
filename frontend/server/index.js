@@ -3,6 +3,7 @@ import http from 'node:http'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { loadEnvFile } from './env.js'
+import { embeddingPolicy } from './preview-policy.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const rootDir = path.resolve(__dirname, '..')
@@ -64,15 +65,16 @@ function validateConfiguration() {
   }
 }
 
-function setSecurityHeaders(res) {
+function setSecurityHeaders(res, pathname = '', isHtml = false) {
+  const embedding = embeddingPolicy(pathname, isHtml, process.env.VITE_ADMIN_SITE_URL)
   res.setHeader('X-Content-Type-Options', 'nosniff')
-  res.setHeader('X-Frame-Options', 'DENY')
+  if (embedding.frameOptions) res.setHeader('X-Frame-Options', embedding.frameOptions)
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
-  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
+  res.setHeader('Cross-Origin-Opener-Policy', embedding.openerPolicy)
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; img-src 'self' data:; media-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'self'",
+    "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors " + embedding.frameAncestors + "; img-src 'self' data:; media-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'self'",
   )
 
   if (isProduction) {
@@ -270,7 +272,7 @@ function sendStaticFile(req, res, pathname) {
     headers['Content-Length'] = stat.size
   }
 
-  setSecurityHeaders(res)
+  setSecurityHeaders(res, pathname, extension === '.html')
   res.writeHead(statusCode, headers)
 
   if (req.method === 'HEAD') {

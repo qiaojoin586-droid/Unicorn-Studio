@@ -1,4 +1,5 @@
 import { ref, reactive, computed, onBeforeUnmount } from 'vue'
+import { createFrameTask } from '@/utils/frameTask'
 
 /**
  * AI 助手悬浮组件（对话图标 + 对话框）的**布局引擎**。
@@ -37,9 +38,11 @@ import { ref, reactive, computed, onBeforeUnmount } from 'vue'
 
 /** 尺寸/持久化的默认配置。两处调用点共用同一份，避免「谁先 mount 谁定配置」的不确定性。 */
 export const AI_PANEL_OPTIONS = {
-  storageKey: 'unicorn.aiChat.panelSize',
-  defaultWidth: 384, // 与改造前的 w-96 保持一致
-  defaultHeight: 500,
+  // 更新尺寸版本，让已有访问者也能使用新的初始布局；之后仍保存手动调整。
+  storageKey: 'unicorn.aiChat.panelSize.v3',
+  // 桌面端为消息阅读和底部输入区预留足够空间。
+  defaultWidth: 480,
+  defaultHeight: 600,
   minWidth: 320,
   minHeight: 320,
   maxWidth: 900,
@@ -86,6 +89,13 @@ const ready = ref(false)
 
 let initialized = false
 let subscribers = 0
+let dragCleanup = null
+let resizeCleanup = null
+
+function stopInteractions() {
+  dragCleanup?.()
+  resizeCleanup?.()
+}
 
 // ---- 派生 -----------------------------------------------------------------
 /** 视口允许的尺寸上限：配置上限与视口可用区域的较小值（窄屏自动收窄） */
@@ -190,6 +200,7 @@ function defaultPanelY(iconY) {
 
 /** 回到默认位置（尺寸不变） */
 function resetToDefault() {
+  stopInteractions()
   normalize()
   layout.iconX = defaultIconX()
   layout.iconY = defaultIconY()
@@ -260,6 +271,10 @@ function ensureInit() {
   const saved = load()
   if (Number.isFinite(saved?.width)) layout.width = saved.width
   if (Number.isFinite(saved?.height)) layout.height = saved.height
+  else {
+    // 较矮的视口要同时容纳面板和下方的入口，避免首次打开时顶部越界。
+    layout.height = Math.min(opts.defaultHeight, Math.max(opts.minHeight, defaultIconY() - PAIR_GAP - EDGE))
+  }
   normalize()
 
   // 兼容旧存档：早期只存 {width, height}，没有坐标 —— 此时按默认位置摆放
@@ -293,33 +308,47 @@ function ensureInit() {
  */
 function startPairDrag(e) {
   if (e.button !== undefined && e.button !== 0) return
+  stopInteractions()
   ensureInit()
   const snap = snapshot()
   const startX = e.clientX
   const startY = e.clientY
   let moved = false
+  let dx = 0
+  let dy = 0
+  const positionFrame = createFrameTask(() => applyPairDelta(dx, dy, snap))
 
   didDrag.value = false
   dragging.value = true
 
   const onMove = (ev) => {
-    const dx = ev.clientX - startX
-    const dy = ev.clientY - startY
+    dx = ev.clientX - startX
+    dy = ev.clientY - startY
     if (!moved && Math.abs(dx) < DRAG_THRESHOLD && Math.abs(dy) < DRAG_THRESHOLD) return
     moved = true
     didDrag.value = true
-    applyPairDelta(dx, dy, snap)
+    positionFrame.schedule()
   }
 
-  const finish = () => {
+  const finish = (ev) => {
+    if (!dragging.value) return
+    if (moved && ev?.type === 'pointerup') {
+      dx = ev.clientX - startX
+      dy = ev.clientY - startY
+      positionFrame.schedule()
+    }
+    // 最后一帧可能尚未绘制，先提交松手位置再写存档，避免丢位移或松手后回跳。
+    positionFrame.flush()
     window.removeEventListener('pointermove', onMove)
     window.removeEventListener('pointerup', finish)
     window.removeEventListener('pointercancel', finish)
     dragging.value = false
+    dragCleanup = null
     document.body.classList.remove('select-none')
     if (moved) persist()
   }
 
+  dragCleanup = finish
   document.body.classList.add('select-none')
   window.addEventListener('pointermove', onMove)
   window.addEventListener('pointerup', finish)
@@ -338,7 +367,6 @@ function startPairDrag(e) {
 }
 
 // ---- 拉伸（八向） ---------------------------------------------------------
-let resizeCleanup = null
 
 /**
  * 开始拉伸面板。
@@ -352,6 +380,7 @@ function startResize(a, b) {
   if (e.button !== undefined && e.button !== 0) return
   e.preventDefault()
   e.stopPropagation()
+  stopInteractions()
   ensureInit()
 
   const snap = snapshot()
@@ -361,14 +390,13 @@ function startResize(a, b) {
   const hasW = direction.includes('w')
   const hasS = direction.includes('s')
   const hasN = direction.includes('n')
+  let dx = 0
+  let dy = 0
 
   resizing.value = true
   document.body.classList.add('select-none')
 
-  const onMove = (ev) => {
-    if (!resizing.value) return
-    const dx = ev.clientX - startX
-    const dy = ev.clientY - startY
+  const sizeFrame = createFrameTask(() => {
     const { maxW, maxH } = bounds.value
 
     let w = snap.width
@@ -392,10 +420,23 @@ function startResize(a, b) {
     // 变大后可能顶出视口，钳回边界（尺寸上限本身已受视口约束，正常不会触发）
     layout.panelX = clamp(x, EDGE, Math.max(EDGE, viewport.w - EDGE - cw))
     layout.panelY = clamp(y, EDGE, Math.max(EDGE, viewport.h - EDGE - ch))
+  })
+
+  const onMove = (ev) => {
+    if (!resizing.value) return
+    dx = ev.clientX - startX
+    dy = ev.clientY - startY
+    sizeFrame.schedule()
   }
 
   const finish = (ev) => {
     if (!resizing.value) return
+    if (ev?.type === 'pointerup') {
+      dx = ev.clientX - startX
+      dy = ev.clientY - startY
+      sizeFrame.schedule()
+    }
+    sizeFrame.flush()
     resizing.value = false
     document.body.classList.remove('select-none')
     window.removeEventListener('pointermove', onMove)
@@ -428,6 +469,7 @@ function startResize(a, b) {
 
 /** 双击角handle：在「默认尺寸」与「放大尺寸」之间切换，便于一键还原 */
 function toggleDefaultSize() {
+  stopInteractions()
   ensureInit()
   if (layout.width === opts.defaultWidth && layout.height === opts.defaultHeight) {
     layout.width = clamp(opts.defaultWidth * 1.6, opts.minWidth, bounds.value.maxW)
@@ -451,6 +493,7 @@ function toggleDefaultSize() {
 }
 
 function onViewportResize() {
+  stopInteractions()
   syncViewport()
   ensureVisible()
   persist()
@@ -469,7 +512,7 @@ function detach() {
   subscribers = Math.max(0, subscribers - 1)
   if (subscribers === 0 && typeof window !== 'undefined') {
     window.removeEventListener('resize', onViewportResize)
-    resizeCleanup?.()
+    stopInteractions()
     document.body.classList.remove('select-none')
   }
 }
@@ -484,7 +527,10 @@ export function useResizablePanel(options) {
   }
   optsLocked = true
   ensureInit()
-  onBeforeUnmount(detach)
+  onBeforeUnmount(() => {
+    stopInteractions()
+    detach()
+  })
 
   return {
     width: computed(() => layout.width),
@@ -498,6 +544,7 @@ export function useResizablePanel(options) {
     ready,
     startPairDrag,
     startResize,
+    stopInteractions,
     toggleDefaultSize,
     resetToDefault,
     normalize,

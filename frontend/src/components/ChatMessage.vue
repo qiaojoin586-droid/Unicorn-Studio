@@ -1,21 +1,22 @@
 <template>
   <div class="flex gap-3" :class="isUser ? 'flex-row-reverse' : ''">
-    <!-- Avatar -->
+    <AiMessageAvatar v-if="!isUser" class="mt-0.5" />
     <div
+      v-else
       class="w-7 h-7 rounded-full flex items-center justify-center text-xs flex-shrink-0 mt-0.5"
       :class="isUser
-        ? 'bg-indigo-600'
-        : 'bg-gradient-to-br from-indigo-500 to-purple-600'"
+        ? 'bg-[#C92D3B] text-[var(--ai-panel-text)]'
+        : 'bg-[var(--ai-panel-hover)] text-[var(--ai-panel-text)]'"
     >
-      {{ isUser ? '🧑' : '🦄' }}
+      <span aria-hidden="true">我</span>
     </div>
 
     <!-- Bubble -->
     <div
       class="rounded-2xl px-4 py-3 max-w-[85%] min-w-0"
       :class="isUser
-        ? 'bg-indigo-600 text-white rounded-tr-sm'
-        : 'bg-white/5 border border-white/10 text-gray-200 rounded-tl-sm'"
+        ? 'bg-[#C92D3B] text-[var(--ai-panel-text)] rounded-tr-sm'
+        : 'bg-[var(--ai-field-bg)] border border-[var(--ai-panel-line)] text-gray-200 rounded-tl-sm'"
     >
       <!--
         Markdown 渲染：html 来自 useMarkdown（marked 解析 + DOMPurify 消毒），
@@ -35,6 +36,7 @@
 <script setup>
 import { computed, ref, watch, onMounted, nextTick } from 'vue'
 import { renderMarkdown, hardenLinks } from '@/composables/useMarkdown'
+import AiMessageAvatar from './AiMessageAvatar.vue'
 
 const props = defineProps({
   role: {

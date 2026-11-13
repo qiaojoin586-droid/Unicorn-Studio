@@ -6,7 +6,7 @@
 // 鼠标拖尾（星尘形态）：设计见 docs/主站鼠标拖尾效果设计方案.md §3.3/§3.7。
 // 固定槽数组 + alive 标志（稳态零分配）、dt 归一化（跨刷新率一致）、
 // pointermove + pointerType 过滤（混合设备只跟真实鼠标）。
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref, nextTick } from 'vue'
 
 // ===== 参数（全部"标准帧"口径，施乘 k = dt / 16.67）=====
 const Z_INDEX = 45
@@ -36,13 +36,13 @@ const STD_FRAME = 16.67
 const RESIZE_DEBOUNCE = 150
 const TRAIL_OFF_KEY = 'mouse-trail' // localStorage 值为 'off' 时手动关闭
 
-// 品牌色板（与首页 Hero gradient-flow 同一色彩语言），前两位加权
-const COLORS = ['#818cf8', '#818cf8', '#a78bfa', '#a78bfa', '#c084fc', '#22d3ee', '#f0abfc']
+// 保留已调优的尺寸、亮度与粒子密度，颜色与品牌红和暖白呼应。
+const COLORS = ['#ff8c95', '#ff8c95', '#e6b4b0', '#e6b4b0', '#f4f2ec', '#cf777d', '#d5c6bb']
 const TWO_PI = Math.PI * 2
 
 const canvasRef = ref(null)
 
-// ===== 环境判定（与 BackgroundVideo/HeroCarousel 一致：setup 时一次性判定，不监听 change）=====
+// ===== 环境判定：同步运行中变化的动效与指针偏好 =====
 function readLocalStorageOff() {
   try {
     return localStorage.getItem(TRAIL_OFF_KEY) === 'off'
@@ -51,10 +51,11 @@ function readLocalStorageOff() {
   }
 }
 
-const enabled =
-  !window.matchMedia('(prefers-reduced-motion: reduce)').matches &&
-  window.matchMedia('(pointer: fine)').matches &&
-  !readLocalStorageOff()
+const motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)')
+const pointerPreference = window.matchMedia('(pointer: fine)')
+const enabled = ref(false)
+let attached = false
+let disposed = false
 
 let ctx = null
 let cssW = 0
@@ -306,6 +307,11 @@ function frame(now) {
 function onPointerMove(e) {
   // 混合设备甄别：只跟随真实鼠标（触屏 tap 的兼容性 mouse 事件 pointerType 为 'touch'，触控笔为 'pen'）
   if (e.pointerType !== 'mouse') return
+  if (e.buttons || e.target?.closest?.('input, textarea, select, [contenteditable="true"], [data-ai-panel]') || window.getSelection()?.toString()) {
+    mouseActive = false
+    needAlign = true
+    return
+  }
   if (needAlign) {
     // 首个事件/重进窗口：仅对齐游标（此刻没有路程可画）
     lastSpawnX = e.clientX
@@ -349,26 +355,47 @@ function onVisibilityChange() {
   }
 }
 
-onMounted(() => {
-  if (!enabled) return
-  ctx = canvasRef.value.getContext('2d')
-  dotSprites = COLORS.map(makeDotSprite)
-  starSprite = makeStarSprite()
-  resizeCanvas()
-  window.addEventListener('pointermove', onPointerMove, { passive: true })
-  window.addEventListener('pointerout', onPointerOut, { passive: true })
-  window.addEventListener('resize', onResize, { passive: true })
-  document.addEventListener('visibilitychange', onVisibilityChange)
-})
-
-onBeforeUnmount(() => {
-  if (!enabled) return
+function detachTrail() {
+  attached = false
   window.removeEventListener('pointermove', onPointerMove)
   window.removeEventListener('pointerout', onPointerOut)
   window.removeEventListener('resize', onResize)
   document.removeEventListener('visibilitychange', onVisibilityChange)
   clearTimeout(resizeTimer)
   if (running) stopLoop()
+  if (ctx) clearAllSlots()
+  mouseActive = false
+  needAlign = true
+}
+
+async function syncEnvironment() {
+  enabled.value = !motionPreference.matches && pointerPreference.matches && !readLocalStorageOff()
+  if (!enabled.value) { detachTrail(); return }
+  await nextTick()
+  if (disposed || !enabled.value || attached || !canvasRef.value) return
+  ctx = canvasRef.value.getContext('2d')
+  if (!ctx) return
+  dotSprites = COLORS.map(makeDotSprite)
+  starSprite = makeStarSprite()
+  resizeCanvas()
+  attached = true
+  window.addEventListener('pointermove', onPointerMove, { passive: true })
+  window.addEventListener('pointerout', onPointerOut, { passive: true })
+  window.addEventListener('resize', onResize, { passive: true })
+  document.addEventListener('visibilitychange', onVisibilityChange)
+}
+
+onMounted(() => {
+  motionPreference.addEventListener('change', syncEnvironment)
+  pointerPreference.addEventListener('change', syncEnvironment)
+  syncEnvironment()
+})
+
+onBeforeUnmount(() => {
+  disposed = true
+  motionPreference.removeEventListener('change', syncEnvironment)
+  pointerPreference.removeEventListener('change', syncEnvironment)
+  detachTrail()
 })
 </script>
 

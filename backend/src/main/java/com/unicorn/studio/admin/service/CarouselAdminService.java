@@ -41,7 +41,7 @@ public class CarouselAdminService {
     }
 
     /**
-     * @param group 可选分组过滤：{@code home}=首页轮播，{@code background}=页面背景（about+work-detail+works）；
+     * @param group 可选分组过滤：{@code home}=首页轮播，{@code background}=全部页面背景，{@code works}=作品档案背景；
      *              为 null 时不加过滤，保持原有全量列表行为。
      */
     public PageResult<Carousel> list(int page, int size, String group) {
@@ -51,8 +51,8 @@ public class CarouselAdminService {
             wrapper.in(Carousel::getPageKey, BACKGROUND_PAGES)
                     .orderByAsc(Carousel::getPageKey, Carousel::getSortOrder, Carousel::getId);
         } else {
-            if ("home".equals(group)) {
-                wrapper.eq(Carousel::getPageKey, "home");
+            if ("home".equals(group) || "works".equals(group)) {
+                wrapper.eq(Carousel::getPageKey, group);
             }
             wrapper.orderByAsc(Carousel::getSortOrder, Carousel::getId);
         }

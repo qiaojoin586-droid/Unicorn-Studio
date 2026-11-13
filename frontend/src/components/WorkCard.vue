@@ -1,85 +1,190 @@
 <template>
-  <router-link
-    :to="`/works/${slug}`"
-    :aria-label="`查看作品详情：${title}`"
-    class="block group bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
-  >
-    <!-- Cover image area -->
-    <div class="relative h-48 overflow-hidden" :class="coverClass">
-      <!-- 有封面图且未加载失败：渲染图片 -->
-      <img
-        v-if="coverUrl && !imgFailed"
-        :src="coverUrl"
-        :alt="title"
-        class="w-full h-full object-cover"
-        loading="lazy"
-        @error="imgFailed = true"
-      />
-      <!-- 无封面图或加载失败：渐变 + emoji 图标兜底 -->
-      <div v-else class="absolute inset-0 flex items-center justify-center text-6xl">
-        {{ icon }}
+  <router-link :to="`/works/${slug}`" :aria-label="`查看作品：${title}`" class="work-card" :class="`work-card--${variant}`">
+    <div class="work-card__media">
+      <img v-if="coverUrl && !imgFailed" :src="coverUrl" :alt="title" width="960" height="600" loading="lazy" decoding="async" @error="imgFailed = true" />
+      <div v-else class="work-card__placeholder" aria-hidden="true">
+        <svg class="work-card__arc" viewBox="0 0 400 300" fill="none"><path d="M315 38C392 125 340 270 215 270C110 270 56 188 78 104C84 202 187 228 250 185C298 153 309 94 282 61" stroke="currentColor" stroke-width="2"/><path d="M99 65L215 143L176 157Z" fill="currentColor"/></svg>
+        <span class="work-card__placeholder-label">UNICORN STUDIO<br />WORK ARCHIVE</span><span class="work-card__placeholder-dot"></span>
       </div>
-      <!-- Tag：文案与配色来自 workTags 字典；tagType 为空表示后台「分类」未设置，此时不渲染，
-           不再像改造前那样一律退化成「竞赛获奖」 -->
-      <span
-        v-if="tag"
-        class="absolute top-4 left-4 text-xs font-semibold px-3 py-1 rounded-full"
-        :class="tag.className"
-      >
-        {{ tag.label }}
-      </span>
+      <span class="work-card__open" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 18L18 6M6 6h12v12" stroke="currentColor" stroke-width="1.5"/></svg></span>
     </div>
-
-    <!-- Content -->
-    <div class="p-6">
-      <h3 class="text-lg font-bold text-gray-900 mb-2 group-hover:text-indigo-600 transition-colors line-clamp-2">
-        {{ title }}
-      </h3>
-      <p class="text-sm text-gray-500 leading-relaxed mb-4 line-clamp-3">
-        {{ description }}
-      </p>
-
-      <!-- Meta：作者与日期都可能为空（后台未填），两者皆空时整行不渲染，
-           避免出现「一个图标 + 一片空白」的空行 -->
-      <div v-if="authors || date" class="flex items-center justify-between text-xs text-gray-500">
-        <span v-if="authors" class="flex items-center gap-1">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-          </svg>
-          {{ authors }}
-        </span>
-        <span v-if="date" class="flex items-center gap-1">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-          {{ date }}
-        </span>
-      </div>
+    <div class="work-card__body">
+      <div class="work-card__meta"><span>{{ tag?.label || '作品档案' }}</span><span v-if="date">{{ date }}</span></div>
+      <h3>{{ title }}</h3><p v-if="description" class="work-card__description">{{ description }}</p><p v-if="authors" class="work-card__authors">{{ authors }}</p>
     </div>
   </router-link>
 </template>
-
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { resolveWorkTag } from '@/constants/workTags'
-
 const props = defineProps({
-  slug: { type: String, required: true },
-  title: { type: String, required: true },
-  description: { type: String, required: true },
-  coverUrl: { type: String, default: '' },
-  icon: { type: String, default: '🏆' },
-  tagType: { type: String, default: '' }, // 'award' | 'paper' | 'project' | 'other'，见 workTags.js
-  authors: { type: String, default: '' },
-  date: { type: String, default: '' },
-  coverClass: { type: String, default: 'bg-gradient-to-br from-indigo-100 to-purple-100' },
+  slug: { type: String, required: true }, title: { type: String, required: true },
+  description: { type: String, default: '' }, coverUrl: { type: String, default: '' },
+  icon: { type: String, default: '' }, tagType: { type: String, default: '' },
+  authors: { type: String, default: '' }, date: { type: String, default: '' },
+  coverClass: { type: String, default: '' }, variant: { type: String, default: 'default' },
 })
-
-// 封面图加载失败（404/网络错误）时回退到渐变 + emoji 图标兜底
 const imgFailed = ref(false)
-
-/** 徽章配置；未设置分类时为 null ⇒ 模板不渲染徽章 */
 const tag = computed(() => resolveWorkTag(props.tagType))
+watch(() => props.coverUrl, () => { imgFailed.value = false })
 </script>
-
-<!-- line-clamp 使用 Tailwind 3.4 内置工具类，无需手写（优化方案 F-21） -->
+<style scoped>
+.work-card {
+  display: block;
+  min-width: 0;
+  color: var(--color-ink,#121316);
+  text-decoration: none;
+}
+.work-card__media {
+  position: relative;
+  aspect-ratio: 16/10;
+  overflow: hidden;
+  background: #e5e3dd;
+  border-radius: 4px;
+}
+.work-card__media>img {
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  transition: transform 550ms cubic-bezier(.2,.7,.2,1);
+}
+.work-card__placeholder {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--surface-soft, #e7e5df);
+  color: #b9b6ae;
+}
+.work-card__arc {
+  position: absolute;
+  height: 115%;
+  width: 100%;
+  right: -10%;
+  top: -10%;
+  transform: rotate(-12deg);
+}
+.work-card__placeholder-label {
+  position: absolute;
+  left: 7%;
+  bottom: 10%;
+  font: 500 11px/1.7 ui-monospace,monospace;
+  letter-spacing: .14em;
+  color: var(--text-on-paper, #62636a);
+}
+.work-card__placeholder-dot {
+  position: absolute;
+  right: 9%;
+  top: 15%;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--color-accent,#c92d3b);
+}
+.work-card__open {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--color-paper,#f4f2ec);
+  color: var(--color-ink,#121316);
+  transition: background 180ms,color 180ms,transform 240ms;
+}
+.work-card__open svg {
+  width: 21px;
+  height: 21px;
+}
+.work-card__body {
+  padding: 23px 0 4px;
+}
+.work-card__meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--color-muted-light,#62636a);
+  font-size: 12px;
+  line-height: 1.5;
+  letter-spacing: .025em;
+}
+.work-card h3 {
+  margin: 13px 0 10px;
+  font-size: clamp(21px,2.1vw,29px);
+  line-height: 1.45;
+  font-weight: 650;
+  letter-spacing: -.035em;
+  overflow-wrap: anywhere;
+  transition: color 180ms;
+}
+.work-card--featured h3 {
+  font-size: clamp(24px, 2.6vw, 36px);
+}
+.work-card__description {
+  margin: 0;
+  max-width: 58ch;
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--color-muted-light,#62636a);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.work-card__authors {
+  margin: 17px 0 0;
+  color: var(--color-muted-light,#62636a);
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.work-card:focus-visible {
+  outline: 2px solid var(--color-accent,#c92d3b);
+  outline-offset: 7px;
+  border-radius: 4px;
+}
+.work-card:focus-visible .work-card__open {
+  background: var(--color-accent,#c92d3b);
+  color: #fff;
+}
+@media(hover:hover) {
+  .work-card:hover .work-card__media>img {
+    transform: scale(1.025);
+  }
+  .work-card:hover .work-card__open {
+    background: var(--color-accent,#c92d3b);
+    color: #fff;
+    transform: rotate(6deg);
+  }
+  .work-card:hover h3 {
+    color: var(--color-accent,#c92d3b);
+  }
+}
+@media(max-width:600px) {
+  .work-card__body {
+    padding-top: 18px;
+  }
+  .work-card__open {
+    right: 14px;
+    bottom: 14px;
+    width: 44px;
+    height: 44px;
+  }
+  .work-card h3 {
+    margin-top: 11px;
+  }
+  .work-card__meta {
+    font-size: 12px;
+  }
+  .work-card__authors {
+    margin-top: 12px;
+  }
+}
+@media(prefers-reduced-motion:reduce) {
+  .work-card__media>img,.work-card__open,.work-card h3 {
+    transition: none;
+  }
+}
+</style>

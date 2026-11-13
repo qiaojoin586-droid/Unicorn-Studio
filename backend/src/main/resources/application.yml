@@ -1,5 +1,4 @@
 server:
-  port: 8080
   address: 127.0.0.1
   # HTTP 响应压缩（B-14）：此前 server 段只有 port/address，compression 默认关闭，
   # 所有 JSON 以明文传输。后台列表接口、仪表盘汇总、站点配置等高度可压缩的文本收益明显。
@@ -14,26 +13,6 @@ server:
     min-response-size: 1024
 
 spring:
-  # ==================== 本地开发配置（不入库）====================
-  # 真实凭据（DB/Redis 口令、各项 SECRET）一律不进仓库：application.yml 只保留 ${VAR:} 空占位，
-  # 本地值放 application-local.yml —— 该文件已加入 .gitignore，模板见 application-local.yml.example。
-  # optional: 前缀保证生产环境（无此文件）不受影响，由环境变量注入。
-  config:
-    import: optional:classpath:application-local.yml
-  # ==================== Spring AI（AI 助手模块）====================
-  # 模型实例在运行时由 AIWorker.ChatClientFactory 按数据库配置手动构建，
-  # 不使用 starter 的自动装配，故在此排除全部自动配置的模型 Bean。
-  # 必须排除的原因：这些自动配置会强制校验 spring.ai.openai.api-key，
-  # 而本项目的 key 存在数据库（禁止在配置文件里放第二份明文），会导致启动失败。
-  # 已同时在 UnicornStudioApplication 的 exclude 属性中声明（双保险）。
-  autoconfigure:
-    exclude:
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
-      - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
   # 上传体积上限（V11 支持动态壁纸时补齐）：
   # 此前未配置 spring.servlet.multipart，Spring Boot 默认 max-file-size=1MB，
   # 导致超过 1MB 的图片/文档在进入 FileService 之前就被 Servlet 层拒绝
@@ -41,7 +20,7 @@ spring:
   # 这里放开到视频所需上限，分类上限仍由 FileService 二次校验（图片/文档 10MB、视频 50MB）。
   servlet:
     multipart:
-      max-file-size: 50MB
+      max-file-size: 50MB  #
       max-request-size: 56MB
   # 定时任务调度器（B-05）：不配置时全部 @Scheduled 落在 Spring Boot 自动配置的
   # ThreadPoolTaskScheduler 上，池大小 = 1。而当前有 5 个定时任务，其中
@@ -60,29 +39,14 @@ spring:
         await-termination: true
         await-termination-period: 60s
   datasource:
-    # MySQL 8（本机/部署均用 MySQL；表结构由 backend/sql/mysql-init.sql 初始化，无 ORM 自动建表）
     url: jdbc:mysql://127.0.0.1:3306/unicorn_studio?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    username: ${DB_USERNAME:root}
-    # 密码必须显式配置（环境变量 DB_PASSWORD，或本地 application-local.yml）。
-    # 这里【没有默认值】：曾出现过的 ${DB_PASSWORD:123456} 属弱口令且已随仓库公开，
-    # 启动时由 SecretsStartupValidator 校验非空，缺失即拒绝启动。
-    password: ${DB_PASSWORD:}
-    # Druid 连接池（stat filter 提供 SQL 监控统计，见 /api/admin/sql-monitor）
-    type: com.alibaba.druid.pool.DruidDataSource
+    username: root
+    password: 123456
+
     druid:
       initial-size: 2
       min-idle: 5
-      # 连接数 10 → 20（B-06）：此前 200 个 Tomcat 工作线程抢 10 个连接，
-      # 一旦并发超过 10，请求延迟就不再是「查询时间」而是「排队时间」，
-      # 且 max-wait 超时后抛 GetConnectionTimeoutException → 500。
-      # 整个应用的吞吐上限 ≈ max-active / 平均查询耗时。
-      # 注意 @Async 线程也吃连接：一个带 @AuditLog 的写请求会同时占用 2 条
-      # （业务事务 1 条 + 异步审计落库 1 条），备份任务运行期间同样额外占用。
-      # 经验公式：连接数 ≈ (核心数 × 2) + 有效磁盘数，本站规模 20 足够。
       max-active: 20
-      # 等待时间 10000 → 3000：快速失败优于长时间挂起 ——
-      # 让请求在 3 秒内明确失败，而不是让 190 个线程在 10 秒的等待里堆积。
       max-wait: 3000
       filter:
         stat:
@@ -92,62 +56,37 @@ spring:
       # 安全：不暴露 Druid 原生监控页，监控走自封接口（权限码 system:sql）
       stat-view-servlet:
         enabled: false
-  mail:
-    # 邮件通知可选：不配置 SMTP_* 则留言回复不发送邮件（仅记日志）
-    host: ${SMTP_HOST:}
-    port: ${SMTP_PORT:465}
-    username: ${SMTP_USERNAME:}
-    password: ${SMTP_PASSWORD:}
-    properties:
-      mail.smtp.auth: true
-      mail.smtp.ssl.enable: true
-      # 超时必须显式配置（B-07）：JavaMail 默认【无限等待】——SMTP 服务器接受 TCP 连接后
-      # 不响应（网络黑洞 / 防火墙丢包 / 对端假死）时，发信线程会永久挂起，
-      # 占死线程并让「回复留言」这个接口永远不返回。单位毫秒。
-      mail.smtp.connectiontimeout: 5000    # 建连
-      mail.smtp.timeout: 10000             # 读响应
-      mail.smtp.writetimeout: 10000        # 写数据
   data:
     redis:
-      # ---- 拓扑：单机 与 哨兵 通过环境变量切换，应用代码零改动（Redis 方案 §4.3 A7）----
-      # 单机（开发/小站）：默认走 host+port
-      # 无默认值：此前的默认值是【真实公网 IP + 真实口令】且已进入 git 历史（S-4），
-      # 必须显式配置 REDIS_HOST / REDIS_PASSWORD（或本地 application-local.yml）。
-      host: ${REDIS_HOST:}
-      port: ${REDIS_PORT:6379}
-      # 哨兵（生产推荐）：设置 REDIS_SENTINEL_NODES 后启用，需把上面的 host/port 留空
-      # sentinel:
-      #   master: ${REDIS_SENTINEL_MASTER:mymaster}
-      #   nodes: ${REDIS_SENTINEL_NODES:}
-      #   password: ${REDIS_SENTINEL_PASSWORD:}
-      password: ${REDIS_PASSWORD:}
-      # 本应用独占 db 0（Redis Cluster 只支持 db 0，将来上 Cluster 改按 key 前缀隔离）
-      database: ${REDIS_DATABASE:0}
-      # 必须显式设置超时与连接池（Redis 方案 §4.3 A5）：避免 Redis 不可达时线程长时间挂起
-      timeout: 300ms
+      host: localhost
+      timeout: 300ms  # Redis 命令超时
       connect-timeout: 200ms
       lettuce:
         pool:
           max-active: 16
-          max-idle: 8
           min-idle: 2
           max-wait: 200ms
 
 # MyBatis Plus
 mybatis-plus:
   configuration:
-    map-underscore-to-camel-case: true
     log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
   global-config:
     banner: false
     db-config:
-      id-type: auto
-      db-type: mysql
       # 全列更新（等价 JPA save 语义）：允许显式置 null 的清字段场景（登出清 token/解锁/解禁）。
       # 约定：update 路径必须先 selectById 加载完整实体再改字段；个别字段可用 @TableField(updateStrategy = NOT_NULL) 局部覆盖
       update-strategy: ignored
 
 app:
+  site:
+    # 站点对外的完整地址（协议 + 域名），如 https://unicorn-studio.top
+    # ⚠️ 工具返回给访客的页面地址必须用完整地址 —— 相对路径（/works）在回答里没法点，
+    #    访客复制到地址栏也是错的。
+    # ⚠️ 为什么不用请求的 Host 头：Host / X-Forwarded-Host 是客户端可控的，
+    #    用它拼给访客的链接等于允许伪造出一个指向别处的地址（钓鱼）。基址必须服务端自己定。
+    # ⚠️ 留空时工具会回落到相对路径（并在服务端记 WARN），绝不会自己编一个域名。
+    base-url: ${SITE_BASE_URL:}
   cors:
     # 前台 dev 5173 / 后台 dev 5174 / 前台 Node 生产服务 3000（含 localhost 与 127.0.0.1 两种写法，
     # 二者在浏览器中属不同 Origin，缺一即返回 403 Invalid CORS request）
@@ -156,16 +95,49 @@ app:
     # 生产环境请用 APP_CORS_ORIGIN_PATTERNS 显式收窄，设为空串则仅按 allowed-origins 精确匹配。
     allowed-origin-patterns: ${APP_CORS_ORIGIN_PATTERNS:http://localhost:[*],http://127.0.0.1:[*]}
   ai:
+    # 仅在部署环境需要代理访问 AI 服务时设置，例如 http://127.0.0.1:7890。
+    # 留空使用 JVM 默认网络策略。
+    http-proxy: '${AI_HTTP_PROXY:}'
     # ==================== AI 助手（com.unicorn.studio.AIWorker，基于 Spring AI）====================
-    # 运行时配置（API Key / API 地址 / 模型 / 提示词 / 采样参数）自 V16 起统一存
-    # site_settings 的 ai 组，由后台「AI 配置」页（/admin/ai-config）维护，
-    # 保存后即时生效、无需重启；此处仅保留部署级开关。
-    #
-    # 工具层（Function Calling 扩展位，见 AIWorker/tool）：
-    # false=只做基础问答（当前默认，符合「现阶段先实现最基础的问答功能」）；
-    # true=把已注册的 AiTool 实现装配给模型，启用前请确认工具实现已就绪。
+    # 记忆（§10 预留契约）：带入模型的历史轮数。
+    # ⚠️ 这是【上下文窗口】不是【历史】：历史全量落库（90 天清理），记忆只取最近几轮，
+    #    两者长度独立、互不影响。轮数直接决定每次调用的 input token 成本。
+    # ⚠️ 默认 10 轮 = 20 条消息，与功能②落地时的硬编码值一致 ⇒ 行为不变。
+    memory:
+      max-turns: ${AI_MEMORY_MAX_TURNS:10} #  AI带入对话的记忆选择最近十轮
+    history-cleanup:
+      retention-days: ${AI_HISTORY_RETENTION_DAYS:90}  #  最大日志保存的时间为90天
+      # 默认每日 04:30，错开既有定时任务：01:00 统计 / 02:00 备份 / 03:00 封禁清理 / 03:30 数据保留。
+      # ⚠️ 不要挪到 03:45 —— 距 retention 的 03:30 只差 15 分钟，两者共用 Druid 池（max-active 20）。
+      cron: ${AI_HISTORY_CLEANUP_CRON:0 30 4 * * *}
+      # 单轮最多删除行数（消息 + 会话合计），防首次接入时一次删空造成长事务/主从延迟
+      max-delete-per-run: ${AI_HISTORY_MAX_DELETE:50000}
+    # ==================== AI 问答配额（§9.3 / R12）====================
+    # 本期只建结构、默认关闭：R12 是"预留"不是"现在要限"，计数与开关先就位，打开只改这里。
+    quota:
+      daily-enabled: ${AI_QUOTA_DAILY_ENABLED:false}
+      monthly-enabled: ${AI_QUOTA_MONTHLY_ENABLED:false}
+      daily-limit: ${AI_QUOTA_DAILY_LIMIT:100}
+      monthly-limit: ${AI_QUOTA_MONTHLY_LIMIT:1000}
+    # ==================== AI 工具（§7.6 / §11）====================
+    # 工具层的作用：让模型能查本站的实时数据，而不是凭训练时的记忆编（设计方案 §11.1）。
     tools:
-      enabled: ${AI_TOOLS_ENABLED:false}
+      # 默认提供已注册的内置只读工具；可通过环境变量关闭，单工具仍受后台启停控制。
+      enabled: ${AI_TOOLS_ENABLED:true}
+      # 允许 http 明文（默认 false）。内网自建服务常只有 http，确需时显式打开；
+      # 与 app.crypto.allow-plaintext 同性质——默认安全，放开要显式。
+      allow-http: ${AI_TOOLS_ALLOW_HTTP:false}
+      # 单工具熔断（§11.5：连续 3 次失败 → 熔断 5 分钟）。
+      # 熔断期间该工具不装配：上游持续挂着时模型会反复重试，白烧 token 且拖到 SSE 180s 超时。
+      circuit-breaker:
+        failure-threshold: ${AI_TOOLS_BREAKER_FAILURE_THRESHOLD:3}
+        open-duration: ${AI_TOOLS_BREAKER_OPEN_DURATION:5m}
+      # 单轮对话的工具调用预算（§11.5：≤3 次 / 累计 15 秒）。
+      # ⚠️ 是【每轮对话】不是【每次调用】——一轮里模型可以连着调多个工具，共享同一份预算。
+      # 预算耗尽时返回契约化错误让模型基于已有信息作答，不抛异常（SSE 不断流）。
+      budget:
+        max-calls: ${AI_TOOLS_BUDGET_MAX_CALLS:3}
+        max-duration-millis: ${AI_TOOLS_BUDGET_MAX_DURATION_MILLIS:15000}
     # AI 接口地址（apiUrl）域名白名单，逗号分隔（S-3）。
     # 为什么必须有：apiUrl 由管理员填写，服务端会带着【库中明文 API Key】请求该地址 ——
     # 只拦内网地址挡不住「指向攻击者自己的公网服务器」，白名单才是防 Key 外带的关键。
@@ -174,70 +146,77 @@ app:
     allowed-api-hosts: ${AI_ALLOWED_API_HOSTS:bigmodel.cn,openai.com,deepseek.com,moonshot.cn,aliyuncs.com,volces.com,baidubce.com,anthropic.com,openrouter.ai,siliconflow.cn}
   crypto:
     # 敏感配置加密密钥（AI API Key 等）：AES-256-GCM。
-    # 必须设置环境变量 APP_CRYPTO_SECRET：≥32 字符的【随机串，不是人类可记口令】
+    # APP_CRYPTO_SECRET 可覆盖本地密钥：≥32 字符的【随机串，不是人类可记口令】
     # （派生算法是单轮 SHA-256，无盐无迭代，见 CryptoService.deriveKey 的说明）。
     # 未配置或长度不足 32 时【拒绝启动】；不再回退 app.admin.jwt-secret（机密性与完整性密钥必须分离）。
     # 注意：更换该值会导致已存储的密文无法解密，需在后台重新填写 API Key。
-    secret: ${APP_CRYPTO_SECRET:}
+    secret: '${APP_CRYPTO_SECRET:unicorn-studio-dev-crypto-secret-2026-key}'
     # 仅本地开发：无密钥时允许明文存储。生产必须保持 false。
     allow-plaintext: ${APP_CRYPTO_ALLOW_PLAINTEXT:false}
   public:
     # 前台用户 token（评论等前台操作的身份识别）签名密钥，独立于后台 admin.jwt-secret。
-    # 【必须显式配置】：此项此前在 yml 中完全缺失，而 PublicAuthService 的 @Value 带一个
-    # 随源码提交进 git 的硬编码默认值 —— 按默认配置部署时任何人都能用该公开密钥
-    # 伪造任意前台用户 token。未配置或长度不足 32 时拒绝启动。
+    # PUBLIC_JWT_SECRET 可覆盖本地密钥，未配置或长度不足 32 时拒绝启动。
     # ⚠️ 轮换该值会使所有已签发的前台 token 立即失效（预期行为）。
-    jwt-secret: ${PUBLIC_JWT_SECRET:}
+    jwt-secret: '${PUBLIC_JWT_SECRET:LVV61kYbL4h8jManhR4zHWpAhBxJWZJqg7QdJqYhCtNi5HUE}'
+    registration-sms:
+      # aliyun 使用号码认证的短信认证接口；console 仅用于本地联调。
+      provider: ${REGISTRATION_SMS_PROVIDER:aliyun}
+      aliyun:
+        access-key-id: ${ALIBABA_CLOUD_ACCESS_KEY_ID:}
+        access-key-secret: ${ALIBABA_CLOUD_ACCESS_KEY_SECRET:}
+        sign-name: ${ALIYUN_SMS_SIGN_NAME:}
+        template-code: ${ALIYUN_SMS_TEMPLATE_CODE:100001}
   security:
     # 可信代理跳数（X-Forwarded-For 采信层数），从右往左取第 N 跳：
     #   0（默认，安全值）= 完全不信任 XFF，只用 remoteAddr
     #   N>0              = 信任最右 N 跳，必须等于实际代理层数
     # 【本项目已确认的拓扑】生产 = nginx → 后端（无 Node 生产服务），即 1 层代理 →
     # 生产环境把它设为 1（TRUSTED_PROXY_COUNT=1）。本地经 Vite(5173) 或 Node 生产服务(3000)
-    # 代理访问，同样是 1 层，已配在 application-local.yml。
+    # 代理访问，同样是 1 层，本文件默认值为 1。
     # 本应用 server.address=127.0.0.1 只监听回环、必然经代理，故这个值不能留 0（留 0 取到的是
     # 代理自身 IP，全站共用一个限流桶）；配大则等于采信攻击者伪造的 XFF。
-    trusted-proxy-count: ${TRUSTED_PROXY_COUNT:0}
+    trusted-proxy-count: '${TRUSTED_PROXY_COUNT:1}'
+
+
+
   admin:
     # 后台管理 JWT/账号配置；jwt-secret 为空时 JwtService 拒绝启动
-    jwt-secret: ${ADMIN_JWT_SECRET:}
-    jwt-expire-hours: 2
-    refresh-expire-days: ${ADMIN_JWT_REFRESH_EXPIRE_DAYS:7}
+    jwt-secret: 2oxbUQO2mn77QvjZA0Y6nlAhDU7k5XFAGXit7AWQw2vCk
+    refresh-expire-days: 7
     # 初始密码为空时由 AdminBootstrap 生成随机密码并打印日志（仅本地开发）
-    init-password: ${ADMIN_INIT_PASSWORD:}
-  upload:
-    dir: ${FILE_UPLOAD_DIR:data/uploads}
-    max-size: ${FILE_UPLOAD_MAX_SIZE:10485760}
+    init-password: 
+  upload:   
+    dir: data/uploads   # 上传文件保存的目录
+    max-size: 10485760
     # 视频（动态壁纸）独立上限：50MB，与 spring.servlet.multipart.max-file-size 对齐
-    video-max-size: ${FILE_UPLOAD_VIDEO_MAX_SIZE:52428800}
+    video-max-size: 52428800
     # 富文本外链图白名单域（空=仅允许本站 /uploads/）
-    image-allow-origins: ${IMAGE_ALLOW_ORIGINS:}
+    image-allow-origins:
   backup:
-    dir: ${BACKUP_DIR:data/backups}
-    retention-count: ${BACKUP_RETENTION_COUNT:7}
-    mysqldump-path: ${MYSQLDUMP_PATH:mysqldump}
-    cron: ${BACKUP_CRON:0 0 2 * * *}
+    dir: data/backups   # 备份文件保存的目录
+    retention-count: 7  # 保留最近 7 个备份文件
+    mysqldump-path: mysqldump  # mysqldump 可执行文件路径
+    cron: 0 0 2 * * *   # 每日 02:00 执行备份
   retention:
     # 数据保留清理（审计日志 / SQL 监控）：保留期限本身存 site_settings(retention.days)，
     # 后台「数据保留」页面可改为 7/15/30/90 天，改后即时生效（每次执行都重新读取）。
     # 这里只放部署级参数：执行周期与单轮删除上限。
     # 默认每日 03:30，错开 01:00 埋点聚合、02:00 备份、03:00 统计聚合等既有定时任务。
-    cron: ${RETENTION_CRON:0 30 3 * * *}
+    cron: 0 30 3 * * *
     # 单轮最多删除行数，防止首次接入时一次性删空历史数据造成长事务/主从延迟
-    max-delete-per-run: ${RETENTION_MAX_DELETE:50000}
+    max-delete-per-run: 50000
   ratelimit:
-    login-per-minute: 5
-    register-per-hour: 10
-    comment-per-minute: 10
-    guest-comment-per-hour: 10
-    message-per-hour: 5
-    stats-per-minute: 60
-    # AI 对话（/api/ai/chat）：每次调用产生真实外部 API 费用，按 IP 限流（§3.4 C6①）
-    ai-per-minute: 5
+    # AI 对话（/api/ai/chat）：每次调用产生真实外部 API 费用，按 §3.4 C6① 限流。
+    # ⚠️ 这是【用户维度】的上限（按 userId 计），IP 维度是它的 3 倍（见 RateLimitFilter）。
+    #   用户维度 15 次/分：正常人一分��问 15 个问题已经远超实际使用量，
+    #   挡的是「连点/脚本」而不是「正常提问」——限流太紧会被正常用户投诉。
+    #   IP 维度 45 次/分：兜底挡批量注册的小号（同一 IP 下多账号狂刷）。
+    # ⚠️ 分钟级限流只挡瞬时刷爆，长期消耗要看 app.ai.quota 的日/月配额（当前默认关闭）。
+    ai-per-minute: 15
   cache:
     # V15 Redis 缓存方案（docs/Redis缓存设计设计方案.md 附录 A）
     # enabled=false 必须能一键回到「全部直读 MySQL」—— 灰度上线与故障应急的生命线。
-    enabled: ${CACHE_ENABLED:true}
+    enabled: true
     # 缓存键环境隔离（2026-09-22 实测故障后新增）：
     # 本地开发与线上服务器共用同一台 Redis 的同一个 db，而键名里原本没有任何环境标识，
     # 于是两边互相读写对方的缓存 —— 服务器写进去的学习资料（7 条，带它自己的 /uploads/... 封面）
@@ -245,25 +224,9 @@ app:
     # 反过来线上读到本地写的缓存也一样。TTL 续期让它表现为「过一段时间才 404」，极难定位。
     # 现在每个键都带 "<profile>:" 前缀（见 CacheHelper.buildPrefix），两套环境天然隔离，
     # 即使共用一台 Redis 也不会互相污染。要再加固可加本项（如 unicorn），或给本地换 REDIS_DATABASE。
-    namespace: ${CACHE_NAMESPACE:}
+    namespace:
     warmup:
-      enabled: ${CACHE_WARMUP_ENABLED:true}
-    ttl:
-      site: 30m
-      content: 30m
-      detail: 60m
-      comment: 5m
-      dashboard: 60s
-      user: 5m
-      permission: 10m
-      null-marker: 60s
-      views-dirty: 7d
-    null-marker:
       enabled: true
-    jitter-ratio: 0.10
-    circuit-breaker:
-      failure-threshold: 10
-      open-duration: 30s
 
 # ==================== 运维可观测性（B-19 / S-6）====================
 # 为什么需要：改动前后没有量化基线，收益无法证明、回归无法发现。
@@ -277,7 +240,7 @@ app:
 management:
   server:
     # 不复用 8080：管理端点与业务流量的暴露面必须分开
-    port: ${MANAGEMENT_PORT:8081}
+    port: 8081
     address: 127.0.0.1
   endpoints:
     web:
@@ -288,54 +251,38 @@ management:
         #   shutdown —— 远程关停能力，没有任何场景需要它
         include: health,metrics,threaddump,loggers
   health:
-    # 关掉邮件健康指示器：本项目的 SMTP 是【明确可选】的
-    # （application.yml 的 spring.mail 段自述「不配置 SMTP_* 则留言回复不发送邮件」），
-    # 但 Boot 的 MailHealthIndicator 在 host 为空时会判定为 DOWN，
-    # 从而把一个可选功能的缺失渲染成「整个应用不健康」——实测就是这样：
-    # DB 与 Redis 全绿，聚合状态却是 DOWN，该端点因此失去监控价值。
+    # 邮件通知可选。健康状态由核心依赖决定，即使 SMTP 已配置也不探测邮件服务器。
     mail:
       enabled: false
   endpoint:
     health:
       # 不对外暴露依赖细节（哪个库连不上、版本号等），只给聚合状态
       show-details: never
-    # 指标端点默认关闭全部「写」能力
-    loggers:
-      enabled: true
   metrics:
     # 给 HTTP 指标打上 URI 标签，便于按接口看 P95/P99
     tags:
       application: unicorn-studio
 
 logging:
-  # 日志文件目录。logback-spring.xml 按级别/日期分目录写入
-  # info/yyyy-MM-dd/app-info.log（全量，含接口访问日志）、warn/.../app-warn.log（仅警告）、
-  # error/.../app-error.log（仅错误）、admin/.../app-admin.log（管理端操作审计），各保留 30 天。
-  #
-  # ⚠️ 这个路径是【相对启动工作目录】解析的（默认 ./logs）：用 `java -jar xxx.jar` 直接起进程时，
-  # 工作目录取决于你在哪个目录敲的命令，未必是 jar 所在目录 —— 日志会落到别处；
-  # 若那个目录还不可写，logback 只会把错误打到自己内部状态里，表现就是
-  # 「控制台有日志、logs/ 里什么都没有」，看起来像「日志没保存」。
-  # 生产请显式给绝对路径：`LOG_DIR=/opt/unicorn-studio/logs`
-  # （backend/start.sh 已自动设为「脚本所在目录/logs」，用官方脚本启动就不必手配）。
-  # 同一个值也被 RetentionService 用来定位并清理 admin 审计文件，改这里即可。
+  # 启动、运行、接口访问和管理审计统一写入 app.log，同时保留控制台输出。
+  # ./logs 相对启动工作目录；服务器建议设置 LOG_DIR=/opt/unicorn-studio/logs。
   file:
-    path: ${LOG_DIR:./logs}
-  # 控制台编码（2026-09-11 修复中文乱码）：
-  # Spring Boot 默认把控制台编码设为 UTF-8（LoggingSystemProperties.CONSOLE_CHARSET 默认值），
-  # 而 IDEA Run 控制台 / Windows 中文控制台按系统代码页 CP936(GBK) 解码子进程输出流，
-  # 于是中文日志显示成「闈欐€佽祫婧愪笉瀛樺湪」这类乱码。
-  # 这里把控制台编码对齐为 GBK（由 Spring Boot 发布为 CONSOLE_LOG_CHARSET，
-  # 供 logback-spring.xml 引入的 console-appender.xml 使用）。
-  # 文件日志不受影响：各 file appender 固定 UTF-8。
-  # 若终端本身是 UTF-8（Windows Terminal / Git Bash / IDEA 控制台编码已设为 UTF-8），改回 UTF-8 即可。
+    name: ./logs/app.log
+  logback:
+    rollingpolicy:
+      file-name-pattern: ${logging.file.name}.%d{yyyy-MM-dd}.%i.gz
+      max-file-size: 50MB
+      max-history: 30
+      total-size-cap: 2GB
+      clean-history-on-start: true
   charset:
-    console: GBK
+    # 控制台和日志文件统一使用 UTF-8。
+    console: UTF-8
     file: UTF-8
   level:
+    root: INFO
     com.unicorn.studio: INFO
-    # 接口访问日志（[ACCESS] 行）走独立 logger，见 AccessLogFilter 类注释。
-    # 单列出来是为了让「收紧业务包日志级别」时不会顺手把接口日志一起关掉 ——
-    # prod 环境把 com.unicorn.studio 收到 WARN、接口日志照常保留，就靠这条分离。
-    ACCESS_LOG: INFO
+    # 两类日志独立控制级别，仍写入同一个文件。
+    ACCESS_LOG: debug
+    ADMIN_AUDIT: INFO
     org.springframework.security: WARN

@@ -1,248 +1,122 @@
 <template>
-  <footer class="relative z-10 bg-gray-900 text-gray-300">
-    <div class="max-w-6xl mx-auto px-6 py-12">
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-10">
-        <!-- Brand -->
-        <div class="relative">
-          <!-- 左侧装饰粒子动效：后台「页脚设置」开关控制，默认关闭 -->
-          <div v-if="page.showParticles" class="brand-particles" aria-hidden="true">
-            <span v-for="n in 6" :key="n" class="particle" :class="`particle-${n}`"></span>
-          </div>
-
-          <div class="relative flex items-center gap-2 text-white text-xl font-bold mb-4" :aria-label="page.brandName">
-            <span class="text-2xl" aria-hidden="true">🦄</span>
-            <span>{{ page.brandName }}</span>
-          </div>
-          <p class="relative text-gray-400 leading-relaxed text-sm whitespace-pre-line">{{ page.brandIntro }}</p>
+  <footer class="site-footer">
+    <div class="page-shell">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <BrandMark />
+          <div><strong>{{ displayName }}</strong><span v-if="extra.brandTagline">{{ extra.brandTagline }}</span></div>
+          <span v-if="page.showParticles" class="footer-signal" aria-hidden="true"></span>
         </div>
-
-        <!-- Quick Links -->
-        <div v-if="page.links.length">
-          <h4 class="text-white font-semibold mb-4">{{ page.linksTitle }}</h4>
-          <ul class="space-y-2 text-sm">
-            <li v-for="(link, idx) in page.links" :key="idx">
-              <!-- 新窗口 / 外部链接用原生 a；站内同窗口保留 SPA 跳转 -->
-              <a
-                v-if="link.newTab || isExternal(link.url)"
-                :href="link.url"
-                :target="link.newTab ? '_blank' : undefined"
-                rel="noopener noreferrer"
-                class="hover:text-indigo-400 transition"
-              >{{ link.label }}</a>
-              <router-link v-else :to="link.url" class="hover:text-indigo-400 transition">
-                {{ link.label }}
-              </router-link>
-            </li>
-          </ul>
-        </div>
-
-        <!-- Social -->
-        <div>
-          <h4 class="text-white font-semibold mb-4">{{ page.socialTitle }}</h4>
-          <div v-if="page.socials.length" class="flex space-x-4">
-            <a
-              v-for="(social, idx) in page.socials"
-              :key="idx"
-              :href="social.url"
-              :title="social.title"
-              :aria-label="social.title"
-              :target="isExternal(social.url) ? '_blank' : undefined"
-              rel="noopener noreferrer"
-              class="w-10 h-10 flex items-center justify-center rounded-full bg-gray-800 hover:bg-indigo-600 text-gray-400 hover:text-white transition-all"
-            >
-              <img v-if="social.iconUrl" :src="social.iconUrl" alt="" class="w-5 h-5 object-contain" />
-              <span v-else class="social-icon" v-html="resolveIconSvg(social.icon)"></span>
-            </a>
-          </div>
-          <p class="mt-4 text-sm text-gray-500">
-            {{ page.emailLabel }}{{ page.email }}
-          </p>
+        <p v-if="page.brandIntro" class="footer-intro">{{ page.brandIntro }}</p>
+      </div>
+      <div v-if="extra.noteTitle || extra.noteEyebrow || (extra.noteLinkLabel && extra.noteLinkUrl) || page.links.length || page.socials.length || displayEmail" class="footer-grid">
+        <div v-if="extra.noteTitle || extra.noteEyebrow || (extra.noteLinkLabel && extra.noteLinkUrl)" class="footer-note"><span v-if="extra.noteEyebrow" class="eyebrow">{{ extra.noteEyebrow }}</span><p v-if="extra.noteTitle" class="configured-lines">{{ extra.noteTitle }}</p><SiteLink v-if="extra.noteLinkLabel && extra.noteLinkUrl" :to="extra.noteLinkUrl" class="footer-invite">{{ extra.noteLinkLabel }} <span aria-hidden="true">↗</span></SiteLink></div>
+        <div v-if="page.links.length" class="footer-links"><h2 v-if="page.linksTitle">{{ page.linksTitle }}</h2><ul><li v-for="(link, i) in page.links" :key="i"><a v-if="link.newTab || isExternal(link.url)" :href="link.url" :target="link.newTab ? '_blank' : undefined" rel="noopener noreferrer">{{ link.label }}<span v-if="link.newTab" class="sr-only">（新窗口）</span></a><router-link v-else :to="link.url">{{ link.label }}</router-link></li></ul></div>
+        <div v-if="page.socials.length || displayEmail" class="footer-contact"><h2 v-if="page.socialTitle">{{ page.socialTitle }}</h2><div v-if="page.socials.length" class="social-list"><a v-for="(social, i) in page.socials" :key="i" :href="social.url" :aria-label="social.title || '社交链接'" :target="isExternal(social.url) ? '_blank' : undefined" rel="noopener noreferrer"><img v-if="social.iconUrl" :src="social.iconUrl" alt="" width="18" height="18" /><span v-else class="social-icon" aria-hidden="true" v-html="resolveIconSvg(social.icon)"></span><span>{{ social.title }}</span><span aria-hidden="true">↗</span></a></div>
+          <div v-if="displayEmail" class="contact-email"><span v-if="page.emailLabel">{{ page.emailLabel }}</span><div><a :href="`mailto:${displayEmail}`">{{ displayEmail }}</a><button type="button" @click="copyEmail" aria-label="复制联系邮箱"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="1" stroke="currentColor" stroke-width="1.5" /><path d="M16 8V4H4v12h4" stroke="currentColor" stroke-width="1.5" /></svg></button></div><span class="copy-result" role="status">{{ copyStatus }}</span></div>
         </div>
       </div>
-
-      <!-- Divider & Copyright -->
-      <div class="border-t border-gray-800 mt-10 pt-6 flex flex-col md:flex-row items-center justify-between text-sm text-gray-500">
-        <p>{{ copyrightLeft }}</p>
-        <p class="mt-2 md:mt-0">{{ page.copyrightRight }}</p>
-      </div>
+      <div v-if="extra.wordmark" class="footer-wordmark" aria-hidden="true">{{ extra.wordmark }}<span>●</span></div>
+      <div class="footer-bottom"><p>{{ copyrightLeft }}</p><p>{{ page.copyrightRight }}</p><a href="#main-content" @click.prevent="backToStart">回到顶部 <span aria-hidden="true">↑</span></a></div>
+      <div class="footer-registration"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">{{ displayIcp }}<span class="sr-only">（在新窗口打开工信部备案查询网站）</span></a></div>
     </div>
   </footer>
 </template>
-
 <script setup>
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onMounted, onBeforeUnmount, reactive, ref } from 'vue'
 import { useApi } from '@/composables/useApi'
 import { resolveIconSvg } from '@/constants/socialIcons'
-
+import BrandMark from './BrandMark.vue'
+import SiteLink from './SiteLink.vue'
+import { usePresentation } from '@/composables/usePresentation'
+import { useSiteSettings } from '@/composables/useSiteSettings'
+import { safeFooterLink } from '@/utils/links'
 const { get } = useApi()
-
-const currentYear = computed(() => new Date().getFullYear())
-
-// 默认值 = 页脚改造前的原始文案/链接；接口失败或字段缺失时回落，保证页脚永不空白
+const { presentation } = usePresentation()
+const site = useSiteSettings()
+const extra = computed(() => presentation.footer)
+const currentYear = new Date().getFullYear()
 const DEFAULTS = {
-  brandName: '独角兽工作室',
-  brandIntro: '用技术与创意，打造卓越的数字产品。\n我们专注于AI智能开发、Agent开发与大模型学术研究。',
-  showParticles: false,
-  linksTitle: '快速链接',
-  links: [
-    { label: '首页', url: '/', newTab: false },
-    { label: '作品', url: '/works', newTab: false },
-    { label: '关于我们', url: '/about', newTab: false },
-    { label: '学习资料', url: '/learning', newTab: false },
-  ],
-  socialTitle: '关注我们',
-  socials: [
-    { icon: 'github', iconUrl: '', url: 'https://github.com', title: 'GitHub' },
-    { icon: 'qq', iconUrl: '', url: 'https://qq.com', title: 'QQ' },
-  ],
-  email: '1351094759@qq.com',
-  emailLabel: '邮箱：',
-  copyrightLeft: '© {year} 独角兽工作室 · 用创意点亮未来',
-  copyrightRight: '每个人都有一颗炽热的 ❤️ and You',
+  brandName: '独角兽工作室', brandIntro: '用技术与创意，让好奇心长出作品。\n一起探索 AI 智能应用、Agent 开发与大模型研究。',
+  showParticles: false, linksTitle: '探索', links: [{ label: '首页', url: '/' }, { label: '作品档案', url: '/works' }, { label: '关于我们', url: '/about' }, { label: '学习资料', url: '/learning' }],
+  socialTitle: '保持联系', socials: [], email: '1351094759@qq.com', emailLabel: '联系邮箱',
+  copyrightLeft: '© {year} 独角兽工作室', copyrightRight: 'STAY CURIOUS. MAKE THINGS.',
 }
-
-const page = reactive({
-  brandName: DEFAULTS.brandName,
-  brandIntro: DEFAULTS.brandIntro,
-  showParticles: DEFAULTS.showParticles,
-  linksTitle: DEFAULTS.linksTitle,
-  links: DEFAULTS.links.map((l) => ({ ...l })),
-  socialTitle: DEFAULTS.socialTitle,
-  socials: DEFAULTS.socials.map((s) => ({ ...s })),
-  email: DEFAULTS.email,
-  emailLabel: DEFAULTS.emailLabel,
-  copyrightLeft: DEFAULTS.copyrightLeft,
-  copyrightRight: DEFAULTS.copyrightRight,
-})
-
-// {year} 占位符替换为当前年份，避免版权年份被冻结
-const copyrightLeft = computed(() =>
-  (page.copyrightLeft || '').replace(/\{year\}/g, String(currentYear.value)),
-)
-
-const EXTERNAL_RE = /^[a-zA-Z][a-zA-Z0-9+.-]*:/
-
-/** 带 scheme 的绝对地址（http/https/mailto/tel）视为外部链接 */
-function isExternal(url) {
-  return EXTERNAL_RE.test(url || '')
+const page = reactive({ ...DEFAULTS, links: DEFAULTS.links.map(l => ({ ...l })), socials: [] })
+const displayName = computed(() => extra.value.inheritBrand ? site.siteName.value : page.brandName)
+const displayEmail = computed(() => extra.value.inheritContact ? site.email.value : page.email)
+const displayIcp = computed(() => site.icp.value || '豫ICP备2026050572号-1')
+const copyrightLeft = computed(() => String(page.copyrightLeft || '').replace(/\{year\}/g, String(currentYear)))
+const copyStatus = ref('')
+let copyTimer
+const isExternal = url => /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url || '')
+async function copyEmail() {
+  try { await navigator.clipboard.writeText(displayEmail.value); copyStatus.value = '邮箱已复制' }
+  catch { copyStatus.value = '请选中邮箱文字复制' }
+  clearTimeout(copyTimer)
+  copyTimer = setTimeout(() => { copyStatus.value = '' }, 3000)
 }
-
+function backToStart() {
+  window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+  document.querySelector('#main-content')?.focus({ preventScroll: true })
+}
 async function loadFooter() {
   try {
     const result = await get('/api/footer')
-    if (result?.error) return
-    const data = result?.data
+    const data = !result?.error && result?.data
     if (!data) return
-    page.brandName = data.brandName || DEFAULTS.brandName
-    page.brandIntro = data.brandIntro || DEFAULTS.brandIntro
-    page.showParticles = !!data.showParticles
-    page.linksTitle = data.linksTitle || DEFAULTS.linksTitle
-    page.socialTitle = data.socialTitle || DEFAULTS.socialTitle
-    page.email = data.email || DEFAULTS.email
+    for (const key of ['brandName', 'brandIntro', 'linksTitle', 'socialTitle', 'email', 'copyrightLeft', 'copyrightRight']) page[key] = data[key] ?? DEFAULTS[key]
     page.emailLabel = data.emailLabel ?? DEFAULTS.emailLabel
-    page.copyrightLeft = data.copyrightLeft || DEFAULTS.copyrightLeft
-    page.copyrightRight = data.copyrightRight || DEFAULTS.copyrightRight
-    // 后端显式返回空数组表示「不展示该区域」，此时不回填默认值
-    page.links = Array.isArray(data.links)
-      ? data.links.map((l) => ({ label: l?.label || '', url: l?.url || '', newTab: !!l?.newTab }))
-      : DEFAULTS.links.map((l) => ({ ...l }))
-    page.socials = Array.isArray(data.socials)
-      ? data.socials.map((s) => ({
-          icon: s?.icon || '',
-          iconUrl: s?.iconUrl || '',
-          url: s?.url || '',
-          title: s?.title || '',
-        }))
-      : DEFAULTS.socials.map((s) => ({ ...s }))
-  } catch {
-    // 静默降级：保持默认文案
-  }
+    page.showParticles = !!data.showParticles
+    if (Array.isArray(data.links)) page.links = data.links.filter(l => l?.url && l?.label).map(l => ({ label: l.label, url: safeFooterLink(l.url), newTab: !!l.newTab })).filter(l => l.url)
+    if (Array.isArray(data.socials)) page.socials = data.socials.filter(s => s?.url).map(s => ({ icon: s.icon || '', iconUrl: s.iconUrl || '', url: safeFooterLink(s.url), title: s.title || '' })).filter(s => s.url)
+  } catch { /* Keep useful contact details when the API is unavailable. */ }
 }
-
 onMounted(loadFooter)
+onBeforeUnmount(() => clearTimeout(copyTimer))
 </script>
-
 <style scoped>
-.social-icon {
-  display: inline-flex;
-  width: 20px;
-  height: 20px;
-}
-.social-icon :deep(svg) {
-  width: 100%;
-  height: 100%;
-}
-
-/* 左侧装饰粒子动效（后台开关控制） */
-.brand-particles {
-  position: absolute;
-  inset: -12px -24px 0 -24px;
-  overflow: hidden;
-  pointer-events: none;
-}
-.particle {
-  position: absolute;
-  border-radius: 9999px;
-  background: rgba(129, 140, 248, 0.55);
-  animation: footer-particle-float 7s ease-in-out infinite;
-}
-.particle-1 {
-  width: 5px;
-  height: 5px;
-  left: 4%;
-  top: 64%;
-  animation-delay: 0s;
-}
-.particle-2 {
-  width: 3px;
-  height: 3px;
-  left: 18%;
-  top: 22%;
-  animation-delay: 1.1s;
-}
-.particle-3 {
-  width: 4px;
-  height: 4px;
-  left: 32%;
-  top: 78%;
-  animation-delay: 2.2s;
-}
-.particle-4 {
-  width: 3px;
-  height: 3px;
-  left: 48%;
-  top: 40%;
-  animation-delay: 3.1s;
-}
-.particle-5 {
-  width: 6px;
-  height: 6px;
-  left: 62%;
-  top: 70%;
-  animation-delay: 1.7s;
-}
-.particle-6 {
-  width: 3px;
-  height: 3px;
-  left: 74%;
-  top: 26%;
-  animation-delay: 2.7s;
-}
-@keyframes footer-particle-float {
-  0%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.3;
-  }
-  50% {
-    transform: translateY(-14px);
-    opacity: 0.85;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .particle {
-    animation: none;
-    opacity: 0.4;
-  }
-}
+.site-footer { position: relative; background: var(--feature-bg); color: var(--feature-text); border-top: 1px solid #ffffff18; padding-block: 58px 26px; }
+.footer-top { display: flex; justify-content: space-between; align-items: start; gap: 36px; padding-bottom: 48px; border-bottom: 1px solid #ffffff20; }
+.footer-brand { position: relative; display: flex; align-items: center; min-width: 0; max-width: 100%; gap: 14px; }
+.footer-brand > div { min-width: 0; overflow-wrap: anywhere; }
+.footer-brand strong { display: block; font-size: 18px; font-weight: 550; letter-spacing: .02em; }
+.footer-brand div > span { display: block; margin-top: 9px; font-family: var(--font-mono); font-size: 9px; color: var(--color-muted-dark); letter-spacing: .08em; }
+.footer-intro { white-space: pre-line; max-width: 390px; color: var(--color-muted-dark); font-size: 13px; line-height: 1.9; }
+.footer-grid { display: grid; grid-template-columns: 1.4fr .6fr 1fr; gap: 50px; padding-block: 58px 42px; }
+.footer-note .eyebrow { color: var(--color-muted-dark); font-size: 10px; }
+.footer-note p { margin-top: 18px; font-size: clamp(24px, 2.8vw, 40px); line-height: 1.5; letter-spacing: -.035em; }
+.footer-invite { display: inline-flex; gap: 36px; align-items: center; min-height: 44px; margin-top: 16px; color: var(--feature-accent); font-size: 13px; }
+.footer-invite span { transition: transform var(--duration-ui); }
+.footer-invite:hover span { transform: translate(3px, -3px); }
+.footer-grid h2 { color: var(--color-muted-dark); font-size: 11px; font-weight: 400; margin-bottom: 17px; }
+.footer-links a { display: inline-flex; align-items: center; min-height: 44px; font-size: 13px; transition: color var(--duration-fast); }
+.footer-links a:hover, .social-list a:hover { color: var(--feature-accent); }
+.social-list a { display: flex; align-items: center; gap: 10px; min-height: 44px; font-size: 13px; }
+.social-list a > span:last-child { margin-left: auto; }
+.social-icon { width: 18px; height: 18px; display: inline-flex; }
+.social-icon :deep(svg) { width: 100%; height: 100%; }
+.contact-email { margin-top: 18px; }
+.contact-email > span { color: var(--color-muted-dark); font-size: 11px; }
+.contact-email > div { display: flex; align-items: center; gap: 5px; margin-top: 3px; }
+.contact-email a { overflow-wrap: anywhere; font-size: 14px; }
+.contact-email button { width: 44px; height: 44px; display: inline-grid; place-items: center; flex-shrink: 0; color: var(--color-muted-dark); }
+.contact-email .copy-result { display: block; min-height: 18px; color: var(--feature-accent); }
+.footer-wordmark { padding-block: 14px; font-size: clamp(45px, 15.8vw, 230px); font-weight: 600; line-height: 1.05; letter-spacing: -.075em; user-select: none; color: #e4e0d6; overflow-wrap: anywhere; }
+.footer-wordmark span { display: inline-block; vertical-align: top; font-family: var(--font-mono); font-size: .1em; margin: .8em 0 0 .4em; letter-spacing: 0; color: var(--color-accent); }
+.footer-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 24px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ffffff20; color: var(--color-muted-dark); font-size: 10px; line-height: 1.8; }
+.footer-bottom a { display: inline-flex; gap: 15px; align-items: center; min-height: 44px; }
+.footer-registration { display: flex; justify-content: center; margin-top: 8px; color: var(--color-muted-dark); font-size: 12px; line-height: 1.8; }
+.footer-registration a { display: inline-flex; align-items: center; min-height: 44px; text-align: center; overflow-wrap: anywhere; transition: color var(--duration-fast); }
+.footer-registration a:hover { color: var(--feature-text); }
+.footer-registration a:focus-visible { outline: 2px solid var(--feature-accent); outline-offset: 4px; }
+.footer-signal { position: absolute; right: -18px; top: 5px; width: 5px; height: 5px; border-radius: 50%; background: var(--feature-accent); animation: signal 3s ease-in-out infinite; }
+@keyframes signal { 50% { opacity: .35; } }
+@media(max-width: 900px) { .footer-grid { grid-template-columns: 1fr 1fr; gap: 36px; } .footer-note { grid-column: 1 / -1; } }
+@media(max-width: 600px) { .site-footer { padding-top: 38px; } .footer-top { flex-direction: column; gap: 22px; padding-bottom: 30px; } .footer-grid { padding-block: 36px 24px; gap: 30px 20px; } .footer-contact { min-width: 0; } .contact-email { position: relative; } .contact-email a { display: block; font-size: 12px; } .contact-email > div { display: block; padding-top: 10px; } .contact-email button { position: absolute; right: 0; top: -14px; } .footer-bottom p:nth-child(2) { display: none; } }
+@media(max-width: 374px) { .footer-grid { grid-template-columns: 1fr; } .footer-note { grid-column: auto; } }
+:global([data-theme='light'] .site-footer) ,
+:global([data-theme='light'] .footer-top) ,
+:global([data-theme='light'] .footer-bottom) { border-color: var(--feature-line); }
+:global([data-theme='light'] .footer-wordmark) { color: var(--feature-text); }
 </style>

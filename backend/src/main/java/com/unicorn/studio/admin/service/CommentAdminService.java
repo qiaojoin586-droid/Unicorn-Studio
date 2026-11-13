@@ -4,7 +4,10 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.unicorn.studio.common.BusinessException;
+import com.unicorn.studio.common.CommentThreads;
 import com.unicorn.studio.common.PageResult;
+import com.unicorn.studio.common.cache.CacheHelper;
+import com.unicorn.studio.common.cache.CacheKeys;
 import com.unicorn.studio.mapper.CommentMapper;
 import com.unicorn.studio.mapper.PublicUserMapper;
 import com.unicorn.studio.model.Comment;
@@ -27,11 +30,14 @@ public class CommentAdminService {
 
     private final CommentMapper commentMapper;
     private final PublicUserMapper publicUserMapper;
+    private final CacheHelper cache;
 
     public CommentAdminService(CommentMapper commentMapper,
-                               PublicUserMapper publicUserMapper) {
+                               PublicUserMapper publicUserMapper,
+                               CacheHelper cache) {
         this.commentMapper = commentMapper;
         this.publicUserMapper = publicUserMapper;
+        this.cache = cache;
     }
 
     public PageResult<Map<String, Object>> list(String status, String targetType, String keyword,
@@ -64,20 +70,27 @@ public class CommentAdminService {
         Comment comment = getOrThrow(id);
         comment.setStatus(status);
         commentMapper.updateById(comment);
+        evictPublicList(comment);
     }
 
     /** 官方回复：生成 parent_id 子评论（approved，带官方标识昵称）。 */
     @Transactional
     public Comment reply(Long id, String content) {
         Comment target = getOrThrow(id);
+        if (content == null || content.isBlank() || content.length() > 1000) {
+            throw BusinessException.badRequest("评论内容 1-1000 字");
+        }
+        Comment root = CommentThreads.rootOf(target, commentMapper::selectById);
         Comment reply = Comment.builder()
                 .targetType(target.getTargetType())
                 .targetId(target.getTargetId())
-                .parentId(target.getId())
+                .parentId(root.getId())
                 .content(content.trim())
                 .status("approved")
                 .build();
         commentMapper.insert(reply);
+        // 回复本身是 approved，会立刻出现在前台列表里
+        evictPublicList(target);
         return reply;
     }
 
@@ -103,10 +116,10 @@ public class CommentAdminService {
             throw BusinessException.badRequest("非法批量操作: " + action);
         }
         List<Long> distinctIds = ids.stream().distinct().toList();
-        // 一次查询判定哪些 id 真实存在；顺带得到「不存在的条数」用于 failCount
-        List<Long> existingIds = commentMapper.selectBatchIds(distinctIds).stream()
-                .map(Comment::getId)
-                .toList();
+        // 一次查询判定哪些 id 真实存在；顺带得到「不存在的条数」用于 failCount。
+        // 这里保留实体本身（而不只是 id）：失效前台列表缓存需要 targetType/targetId。
+        List<Comment> existing = commentMapper.selectBatchIds(distinctIds);
+        List<Long> existingIds = existing.stream().map(Comment::getId).toList();
         if (!existingIds.isEmpty()) {
             switch (action) {
                 case "approve" -> commentMapper.update(null, new LambdaUpdateWrapper<Comment>()
@@ -118,6 +131,7 @@ public class CommentAdminService {
                 case "delete" -> deleteWithReplies(existingIds);
                 default -> throw BusinessException.badRequest("非法批量操作: " + action);
             }
+            evictPublicLists(existing);
         }
         int success = existingIds.size();
         return Map.of("successCount", success, "failCount", distinctIds.size() - success);
@@ -148,8 +162,33 @@ public class CommentAdminService {
      */
     @Transactional
     public void delete(Long id) {
-        getOrThrow(id);
+        Comment comment = getOrThrow(id);
         deleteWithReplies(List.of(id));
+        evictPublicList(comment);
+    }
+
+    /**
+     * 公开评论列表缓存失效（C3）。
+     * <p>
+     * 按「目标」维度整体清除，而不是逐个分页键 DEL：分页组合是动态的，
+     * 枚举不可能穷尽，漏一个就是「审核通过了但前台还是旧列表」。
+     * 用 {@code evictAfterCommit} 语义（事务提交后才删），避免「清完缓存又回滚」。
+     */
+    private void evictPublicList(Comment comment) {
+        if (comment == null || comment.getTargetType() == null || comment.getTargetId() == null) {
+            return;
+        }
+        cache.evictByPatternAfterCommit(
+                CacheKeys.commentListPrefix(comment.getTargetType(), comment.getTargetId()) + "*");
+    }
+
+    /** 批量场景按目标去重后失效，避免同一目标被重复 SCAN。 */
+    private void evictPublicLists(List<Comment> comments) {
+        comments.stream()
+                .filter(c -> c.getTargetType() != null && c.getTargetId() != null)
+                .map(c -> CacheKeys.commentListPrefix(c.getTargetType(), c.getTargetId()) + "*")
+                .distinct()
+                .forEach(cache::evictByPatternAfterCommit);
     }
 
     private Map<Long, String> nicknamesOf(List<Comment> comments) {

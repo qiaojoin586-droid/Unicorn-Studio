@@ -49,6 +49,50 @@ public final class CacheKeys {
     /** 学习资料列表（B5，{@code cache:learning:list}） */
     public static final String LEARNING_LIST = "cache:learning:list";
 
+    // ---- 内容列表与详情（C1/C2）----
+    // 键里必须带「查询维度」：作品列表有 featured / category / 全量三种分支、评论列表有分页，
+    // 不带维度的共用键会让不同参数的请求互相串数据。
+
+    /** 作品列表前缀；完整键 = 前缀 + 维度（{@code featured} / {@code all} / {@code cat-xxx}） */
+    public static final String WORK_LIST_PREFIX = "cache:works:list:";
+
+    /** 作品详情前缀；完整键 = 前缀 + slug（后台改 slug 时必须同时清新旧两个键） */
+    public static final String WORK_DETAIL_PREFIX = "cache:works:detail:";
+
+    /** 新闻列表前缀；维度 = 分类 */
+    public static final String NEWS_LIST_PREFIX = "cache:news:list:";
+
+    /** 新闻详情前缀；完整键 = 前缀 + slug */
+    public static final String NEWS_DETAIL_PREFIX = "cache:news:detail:";
+
+    /** 评论列表前缀；完整键 = 前缀 + {targetType}:{targetId}:{page}:{size} */
+    public static final String COMMENT_LIST_PREFIX = "cache:comment:list:";
+
+    public static String workList(String dimension) {
+        return WORK_LIST_PREFIX + dimension;
+    }
+
+    public static String workDetail(String slug) {
+        return WORK_DETAIL_PREFIX + slug;
+    }
+
+    public static String newsList(String dimension) {
+        return NEWS_LIST_PREFIX + dimension;
+    }
+
+    public static String newsDetail(String slug) {
+        return NEWS_DETAIL_PREFIX + slug;
+    }
+
+    /** 某目标下全部评论列表键的前缀（审核/回复/删除后按前缀失效）。 */
+    public static String commentListPrefix(String targetType, Long targetId) {
+        return COMMENT_LIST_PREFIX + targetType + ":" + targetId + ":";
+    }
+
+    public static String commentList(String targetType, Long targetId, int page, int size) {
+        return commentListPrefix(targetType, targetId) + page + ":" + size;
+    }
+
     /**
      * 支持「单页背景」绑定的页面键。
      * <p>
@@ -112,6 +156,17 @@ public final class CacheKeys {
         return USER_TOKENS_PREFIX + userId;
     }
 
+    // ---- 前台 token 撤销名单：退出登录用 ----
+    // 键里放 token 的 SHA-256 而不是原文：① 原文 200+ 字符，键过长；
+    // ② 名单要落 Redis 磁盘，放原文等于把一份可直接使用的凭证留在磁盘上；
+    // ③ SHA-256 单向，从键无法反推 token。
+
+    public static final String REVOKED_PUBLIC_PREFIX = "cache:public:revoked:";
+
+    public static String revokedPublic(String tokenHash) {
+        return REVOKED_PUBLIC_PREFIX + tokenHash;
+    }
+
     // ---- 后台聚合（B11）：仪表盘短 TTL ----
 
     public static String dashboardSummary(int days) {
@@ -124,5 +179,44 @@ public final class CacheKeys {
 
     public static String rate(String dimension, String subject) {
         return RATE_PREFIX + dimension + ":" + subject;
+    }
+
+    // ---- AI 会话读缓存（§5.3：Redis 只做读缓存，MySQL 是唯一权威）----
+
+    /** AI 会话删除时用的缓存键 */
+    /**
+     * 缓存键必须带 size：缓存里存的是"本次请求那几条"，而同一个用户可能用不同
+     * pageSize 打开列表（抽屉默认 20、其它入口可能 50）。不带 size 就会在第二次
+     * 用另一个 size 请求时命中上次那份长度不对的列表。
+     */
+    public static String aiSessions(Long userId, int size) {
+        return "cache:ai:sessions:" + userId + ":" + size;
+    }
+
+    public static String aiMessages(String conversationId) {
+        return "cache:ai:msgs:" + conversationId;
+    }
+
+    /** 清空对话时失效该用户全部 size 变体的会话列表缓存（读写键带 size，只能按模式删） */
+    public static String aiSessionsPattern(Long userId) {
+        return "cache:ai:sessions:" + userId + ":*";
+    }
+
+    // ⚠️ 消息缓存键【没有】size 变体（见 AiSessionService.findVisibleMessages，写的就是上面的裸键）。
+    // 因此失效必须走「精确键」cache.evictAfterCommit(aiMessages(conversationId))。
+    // 不要写成 "cache:ai:msgs:{id}:*" 的 pattern：多出的那个冒号会让 SCAN MATCH 匹配不到写键，
+    // 表现为「清空对话后旧消息仍然在」（已修过一次的坑）。
+
+    // ---- AI 问答配额（文档 §9.3）----
+    // 日期段由调用方格式化传入：过期时间要按自然日/自然月对齐，键名必须自带窗口类型，
+    // 否则 "202610"（月）与 "20261010"（日）在同一用户下无法区分
+    /** AI 会话每日配额 */
+    public static String aiQuotaDaily(Long userId, String yyyyMMdd){
+        return "chat:quota:" + userId + ":day:" + yyyyMMdd;
+    }
+
+    /** AI 会话月度配额 */
+    public static String aiQuotaMonthly(Long userId, String yyyyMM){
+        return "chat:quota:" + userId + ":month:" + yyyyMM;
     }
 }
