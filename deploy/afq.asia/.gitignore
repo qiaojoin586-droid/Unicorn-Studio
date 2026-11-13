@@ -1,0 +1,8 @@
+/application-prod.yml
+/secrets/
+/certs/
+/html/
+/data/
+/logs/
+/sql/
+/backups/

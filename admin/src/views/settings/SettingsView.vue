@@ -18,8 +18,8 @@
               <el-input v-model="groups.basic['basic.slogan']" />
             </el-form-item>
             <el-form-item label="备案号">
-              <el-input v-model="groups.basic['basic.icp']" />
-              <p class="field-note">保留的全局资料；当前主站页脚使用「页脚配置」中的版权文案。</p>
+              <el-input v-model="groups.basic['basic.icp']" placeholder="豫ICP备2026050572号-1" />
+              <p class="field-note">显示在主站页脚最底部，点击跳转工信部备案查询网站。留空时使用本站默认备案号。</p>
             </el-form-item>
             <el-form-item label="版权信息">
               <el-input v-model="groups.basic['basic.copyright']" />

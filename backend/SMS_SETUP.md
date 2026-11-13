@@ -62,13 +62,13 @@ SDK客户端复用，连接超时5秒、读取超时10秒，关闭客户端自�
 本轮自动化验证使用模拟阿里云客户端，没有发送真实短信，也没有用本地 AccessKey 调用阿里云接口。
 
 ```sh
-mvn -o -Dmaven.test.redirectTestOutputToFile=true package
+mvn -o "-Dmaven.test.redirectTestOutputToFile=true" package
 ```
 
 完整验证短信额度的 Lua 行为时，在 `backend` 目录执行以下命令（需要本机 Redis，使用随机隔离的测试键并在结束时清理）：
 
 ```sh
-mvn -o -Dregistration.redis.integration=true -Dmaven.test.redirectTestOutputToFile=true package
+mvn -o "-Dregistration.redis.integration=true" "-Dmaven.test.redirectTestOutputToFile=true" package
 ```
 
 在 `frontend` 目录执行 `node scripts/verify-registration-code.mjs` 可验证真实注册弹窗的重发、额度提示及429倒计时；

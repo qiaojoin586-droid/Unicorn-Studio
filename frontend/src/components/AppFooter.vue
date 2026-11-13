@@ -18,6 +18,7 @@
       </div>
       <div v-if="extra.wordmark" class="footer-wordmark" aria-hidden="true">{{ extra.wordmark }}<span>●</span></div>
       <div class="footer-bottom"><p>{{ copyrightLeft }}</p><p>{{ page.copyrightRight }}</p><a href="#main-content" @click.prevent="backToStart">回到顶部 <span aria-hidden="true">↑</span></a></div>
+      <div class="footer-registration"><a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">{{ displayIcp }}<span class="sr-only">（在新窗口打开工信部备案查询网站）</span></a></div>
     </div>
   </footer>
 </template>
@@ -44,6 +45,7 @@ const DEFAULTS = {
 const page = reactive({ ...DEFAULTS, links: DEFAULTS.links.map(l => ({ ...l })), socials: [] })
 const displayName = computed(() => extra.value.inheritBrand ? site.siteName.value : page.brandName)
 const displayEmail = computed(() => extra.value.inheritContact ? site.email.value : page.email)
+const displayIcp = computed(() => site.icp.value || '豫ICP备2026050572号-1')
 const copyrightLeft = computed(() => String(page.copyrightLeft || '').replace(/\{year\}/g, String(currentYear)))
 const copyStatus = ref('')
 let copyTimer
@@ -104,6 +106,10 @@ onBeforeUnmount(() => clearTimeout(copyTimer))
 .footer-wordmark span { display: inline-block; vertical-align: top; font-family: var(--font-mono); font-size: .1em; margin: .8em 0 0 .4em; letter-spacing: 0; color: var(--color-accent); }
 .footer-bottom { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 24px; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ffffff20; color: var(--color-muted-dark); font-size: 10px; line-height: 1.8; }
 .footer-bottom a { display: inline-flex; gap: 15px; align-items: center; min-height: 44px; }
+.footer-registration { display: flex; justify-content: center; margin-top: 8px; color: var(--color-muted-dark); font-size: 12px; line-height: 1.8; }
+.footer-registration a { display: inline-flex; align-items: center; min-height: 44px; text-align: center; overflow-wrap: anywhere; transition: color var(--duration-fast); }
+.footer-registration a:hover { color: var(--feature-text); }
+.footer-registration a:focus-visible { outline: 2px solid var(--feature-accent); outline-offset: 4px; }
 .footer-signal { position: absolute; right: -18px; top: 5px; width: 5px; height: 5px; border-radius: 50%; background: var(--feature-accent); animation: signal 3s ease-in-out infinite; }
 @keyframes signal { 50% { opacity: .35; } }
 @media(max-width: 900px) { .footer-grid { grid-template-columns: 1fr 1fr; gap: 36px; } .footer-note { grid-column: 1 / -1; } }

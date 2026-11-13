@@ -1,0 +1,45 @@
+name: unicorn-studio
+
+services:
+  backend:
+    build:
+      context: ../../backend
+      dockerfile: Dockerfile
+    image: unicorn-studio-backend:local
+    container_name: unicorn-backend
+    restart: unless-stopped
+    env_file:
+      - ./secrets/backend.env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_CONFIG_ADDITIONAL_LOCATION: file:/app/config/
+    volumes:
+      - ./application-prod.yml:/app/config/application-prod.yml:ro
+      - ./data/uploads:/app/data/uploads
+      - ./logs/backend:/app/logs
+    expose:
+      - "8080"
+    networks:
+      - app-network
+
+  nginx:
+    image: nginx:stable-alpine
+    container_name: unicorn-nginx
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+      - ./html:/usr/share/nginx/html:ro
+      - ./logs/nginx:/var/log/nginx
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    external: true
+    name: app-network

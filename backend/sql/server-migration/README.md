@@ -5,7 +5,7 @@
 > 主站用户编辑升级（V23）：已有库在 V22 之后执行 `V23-public-user-edit.sql`，导入旧数据后同样需执行。超级管理员默认获得 `user:edit`，也可通过角色管理分配给其他管理员。
 
 > 主站手机号登录升级（V22）：已有库执行 `V22-public-user-phone.sql`，全新库使用 `01-schema-full.sql`。如果还要导入旧版 `02-data.sql`，导入后再执行 V22，补回被旧导出覆盖的绑定权限。旧用户可由拥有 `user:bind-phone` 权限的管理员核实身份后在用户详情绑定手机号。
-> 本地测试注册时，启动后端前设置 `REGISTRATION_SMS_CONSOLE_ENABLED=true`，从后端控制台查看验证码。正式短信通道通过实现 `RegistrationSmsSender` 接入。
+> 注册验证码已接入阿里云号码认证的短信认证接口 `SendSmsVerifyCode`，默认通道为 `aliyun`。AccessKey 从环境变量或外部 `.env` 读取，配置赠送签名 `ALIYUN_SMS_SIGN_NAME`，默认使用注册模板 `100001`。验证码仍由后端生成并在 Redis 保存5分钟、60秒重发间隔；真实通道不会打印验证码。本地联调可设置 `REGISTRATION_SMS_PROVIDER=console`，替代旧的 `REGISTRATION_SMS_CONSOLE_ENABLED` 开关。配置及部署步骤见 `backend/SMS_SETUP.md`，`.env` 不会打入 JAR。
 
 > 页面展示配置升级（V21）：部署移除默认 JSON 的版本前，先执行 `01-schema-full.sql`
 > 末尾的 V21 段，将原有展示内容补齐到 `site_settings` 的 `content.presentation.*` 四项配置。
@@ -247,20 +247,53 @@ redis-cli -h <host> -p 6379 -a <pwd> -n <db> --scan --pattern 'prod:cache:*' | x
   - `上传文件 404（配置问题）` —— 文件在别处找到了，会打印它真正所在的路径 ⇒ 改配置或迁文件；
   - `上传文件 404（文件缺失）` —— 哪个候选目录里都没有 ⇒ 多半被清理或被部署动作删掉了。
   上传目录**不参与健康检查**，服务会照常返回健康状态，所以不能靠 `/actuator/health` 判断这一项。
-- `LOG_DIR`：日志目录，默认 `./logs`，**同样相对启动工作目录**
-  （详见 `application.yml` 的 `logging.file.path` 注释）。**强烈建议显式给绝对路径**：
-  `export LOG_DIR=/opt/unicorn-studio/logs`；用 `backend/start.sh` 启动时脚本已自动设为
-  `<应用目录>/logs`。否则「从别的目录 `java -jar`」会把日志写到那个目录下，
-  目录不可写时更是**完全没有文件日志**（logback 只会把错误写进自己的内部状态，不报错给你）。
-  该变量同时决定 heapdump 落点与 `RetentionService` 清理 admin 审计文件的目录。
+- `LOG_DIR`：日志目录，默认 `./logs`，**相对启动工作目录**。服务器建议设置绝对路径：
+  `export LOG_DIR=/opt/unicorn-studio/logs`，并确保运行账号有写权限。
+  日志统一写入 `app.log`，按天或达到 50MB 时滚动压缩为 `app.log.yyyy-MM-dd.N.gz`；
+  默认保留 30 天归档，归档总量上限 2GB，启动时也会清理过期归档。
+  配置集中在 `application.yml` 的 `logging` 段，无需自定义 XML。
+  可用 `LOGGING_FILE_NAME` 覆盖完整文件名；启动自检会输出实际绝对路径。
+  文件无法创建或打开时，Spring Boot 会中止启动；启动早期和 JVM 标准输出由 systemd / Docker 收集。
+  `RetentionService` 仅兼容清理日志文件旁的旧版 `admin/yyyy-MM-dd/` 目录，不删除统一应用日志。
 - 日志级别：统一配置中 `com.unicorn.studio` 默认 `INFO`，生产可将该项调整为 `WARN`（业务包），
   但**接口访问日志（`[ACCESS]` 行）走独立的 `ACCESS_LOG` logger，仍为 INFO** ——
-  它在 `logs/info/yyyy-MM-dd/app-info.log` 里，每行含方法/路径/状态码/客户端 IP/耗时，
+  它在统一的 `app.log` 里，每行含方法/路径/状态码/客户端 IP/耗时，
   是「接口到底有没有被调到、返回了几百」的第一现场。要连它一起关就单独设
   `logging.level.ACCESS_LOG=WARN`（历史上它挂在 `com.unicorn.studio.common.log` 下，
   被那条 WARN 顺带压掉，表现为「服务器上 logs/ 里没有接口日志」，请不要改回去）。
 
 ---
+
+### AI 消息头像与回复链接
+
+- 管理端「AI 配置 → 助手消息头像」可上传图片、切换默认/自定义头像并保存。
+  切回默认时保留已上传图片，之后可再次选用；未上传或图片加载失败时使用主页独角兽图标。
+  只影响助手消息（含流式回复、等待状态），不修改悬浮入口、对话框顶部或用户头像。
+- 配置保存为 `site_settings` 的 `ai.message_avatar_mode`、`ai.message_avatar_url` 两个键，
+  无需表结构迁移。已有客户端不提交这两个字段时，保存模型配置不会覆盖头像。
+  上传沿用 AI 编辑权限和原有图片存储服务，支持最大 5MB 的 JPG、PNG、WebP、GIF。
+- 前台在重新打开对话或发送下一条消息时读取最新头像。公开能力接口只返回当前生效的头像地址，
+  不公开模型凭据。历史消息、流式回复共用 Markdown 链接渲染，站内路径使用当前站点地址，
+  可点击链接在新标签页打开；代码示例和危险协议仍按原安全边界处理。
+
+### AI 连通性测试超时
+
+后台的「测试连通性」由后端向模型供应商发请求，浏览器可访问供应商不代表 Java 进程也可访问。
+测试独立使用 `aiProbeExecutor`：最多同时执行 2 个任务、零排队，满载立即提示繁忙，不影响审计、邮件或统计线程池。
+连接时限（含 TLS 握手）10 秒、HTTP 请求时限20秒、整体25秒；管理端等待30秒，测试只请求一次、不自动重试。
+整体超时或容器报告连接结束时会中断在途任务。各时限统一定义在 `AiProbePolicy`，不改变正式对话的超时设置。
+该调整不需要数据库迁移；更新后端并重启，同时更新管理端构建产物。
+
+如果仍然超时，在**后端所在机器**发送一次不带密钥的只读探测：
+
+```sh
+curl -I --connect-timeout 10 --max-time 25 https://open.bigmodel.cn/api/paas/v4/chat/completions
+```
+
+返回401/405等 HTTP 状态说明网络和 TLS 已到达接口，不代表 API Key 和模型配置通过验证。
+连接超时检查出站网络、防火墙、DNS和代理；响应超时再检查供应商负载、模型生成速度。
+若确实需要代理，使用已有的 `AI_HTTP_PROXY=http://host:port` 配置并重启后端，地址应是后端机器能访问的 HTTP 代理。
+`logs/app.log` 中的测试结果包含目标地址、模型、实际耗时和超时阈值；启动 IDE 时日志通常位于项目根目录。
 
 ## 7. 已知坑
 

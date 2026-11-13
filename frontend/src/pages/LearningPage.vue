@@ -56,7 +56,17 @@ onMounted(loadResources)
 <style scoped>
 .learning-page {
   min-height: 80vh;
-  background: var(--color-paper,#f4f2ec);
+  background-color: var(--color-paper,#f4f2ec);
+  background-image:
+    linear-gradient(
+      color-mix(in srgb, var(--color-paper,#f4f2ec) 78%, transparent),
+      color-mix(in srgb, var(--color-paper,#f4f2ec) 58%, transparent) 48%,
+      color-mix(in srgb, var(--color-paper,#f4f2ec) 76%, transparent)
+    ),
+    url('@/image/learning.jpg');
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
   color: var(--color-ink,#121316);
 }
 .learning-intro {
@@ -168,6 +178,7 @@ onMounted(loadResources)
   padding: 32px;
   border: 1px solid #d8d6d0;
   border-radius: 4px;
+  background: color-mix(in srgb, var(--color-paper,#f4f2ec) 88%, transparent);
   text-decoration: none;
   color: var(--color-ink,#121316);
   transition: background 220ms,border-color 220ms;

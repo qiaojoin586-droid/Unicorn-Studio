@@ -22,7 +22,8 @@ export function useSiteSettings() {
   })
   const siteName = computed(() => state.basic['basic.site_name']?.trim() || '独角兽工作室')
   const slogan = computed(() => state.basic['basic.slogan'] ?? '')
+  const icp = computed(() => String(state.basic['basic.icp'] ?? '').trim())
   const email = computed(() => state.contact['contact.email'] ?? '')
   const description = computed(() => state.seo['seo.description'] ?? state.seo['seo.site_description'] ?? '')
-  return { settings: state, siteName, slogan, email, description }
+  return { settings: state, siteName, slogan, icp, email, description }
 }

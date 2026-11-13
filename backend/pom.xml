@@ -157,6 +157,14 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Spring @Nullable 的 JSR-305 元注解仅用于编译期分析。 -->
+        <dependency>
+            <groupId>com.google.code.findbugs</groupId>
+            <artifactId>jsr305</artifactId>
+            <version>3.0.2</version>
+            <scope>provided</scope>
+        </dependency>
+
 <!--      AIWorker模块要使用的包-->
         <dependency>
             <groupId>org.springframework.ai</groupId>
@@ -182,6 +190,20 @@
             </resource>
         </resources>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <!-- 显式声明处理器，避免依赖 javac 自动扫描编译类路径。 -->
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.projectlombok</groupId>
+                            <artifactId>lombok</artifactId>
+                            <version>${lombok.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
             <!-- 同时防止 IDE 先复制到 target/classes 的本地凭据进入最终 JAR。 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -198,6 +220,10 @@
                         <exclude>
                             <groupId>org.projectlombok</groupId>
                             <artifactId>lombok</artifactId>
+                        </exclude>
+                        <exclude>
+                            <groupId>com.google.code.findbugs</groupId>
+                            <artifactId>jsr305</artifactId>
                         </exclude>
                     </excludes>
                 </configuration>

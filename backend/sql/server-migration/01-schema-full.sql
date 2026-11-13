@@ -1789,6 +1789,11 @@ VALUES ('content', 'content.presentation.home', JSON_OBJECT(
   'secondaryLabel', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.secondaryLabel'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.secondaryLabel')),
   'secondaryUrl', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.secondaryUrl'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.secondaryUrl')),
   'mediaMode', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.mediaMode'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.mediaMode')),
+  'recommendationType', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.recommendationType'), CAST('null' AS JSON)), CAST('""' AS JSON)),
+  'recommendationId', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.recommendationId'), CAST('null' AS JSON)), CAST('""' AS JSON)),
+  'backgroundMode', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.backgroundMode'), CAST('null' AS JSON)), CAST('""' AS JSON)),
+  'backgroundImageUrl', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.backgroundImageUrl'), CAST('null' AS JSON)), CAST('""' AS JSON)),
+  'backgroundVideoUrl', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.backgroundVideoUrl'), CAST('null' AS JSON)), CAST('""' AS JSON)),
   'featuredLimit', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.featuredLimit'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.featuredLimit')),
   'worksEyebrow', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.worksEyebrow'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.worksEyebrow')),
   'worksTitle', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.worksTitle'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.worksTitle')),
@@ -1812,6 +1817,9 @@ SET @presentation_stored := (SELECT setting_value FROM site_settings WHERE group
 SET @presentation_stored := IF(JSON_VALID(@presentation_stored), IF(JSON_TYPE(@presentation_stored) = 'OBJECT', @presentation_stored, JSON_OBJECT()), JSON_OBJECT());
 INSERT INTO site_settings (group_name, setting_key, setting_value)
 VALUES ('content', 'content.presentation.about', JSON_OBJECT(
+  'backgroundMode', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.backgroundMode'), CAST('null' AS JSON)), CAST('""' AS JSON)),
+  'backgroundImageUrl', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.backgroundImageUrl'), CAST('null' AS JSON)), CAST('""' AS JSON)),
+  'backgroundVideoUrl', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.backgroundVideoUrl'), CAST('null' AS JSON)), CAST('""' AS JSON)),
   'principlesEyebrow', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.principlesEyebrow'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.principlesEyebrow')),
   'principlesTitle', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.principlesTitle'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.principlesTitle')),
   'principles', COALESCE(NULLIF(JSON_EXTRACT(@presentation_stored, '$.principles'), CAST('null' AS JSON)), JSON_EXTRACT(@presentation_seed, '$.principles')),
