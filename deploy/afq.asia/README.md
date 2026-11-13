@@ -34,7 +34,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deploy/afq.asia/prepare-stat
 
 准备脚本只将主站 `index.html`、`assets`、`robots.txt`、`sitemap.xml`，以及管理端 `dist` 的入口和资源复制进 `html`。
 它会复制项目根目录下现有 `data/uploads`，不会删除原文件。图片、二维码、动态壁纸等历史上传资源必须一起迁移。
-同时会将手机号注册所需的 V22、V23 增量 SQL 从 `backend/sql/server-migration` 复制到部署目录的 `sql/`，供已有数据库升级使用。这些 SQL 不会放进 `html`，也不会在应用启动时自动执行。
+同时会将 `backend/sql/server-migration` 中整理好的两份部署 SQL 复制到 `sql/`：`01-init.sql` 用于全新空库，`02-upgrade.sql` 用于已有业务库。二选一执行；它们不在 `html` 中，也不会随应用启动自动执行。
 脚本不会将 Node 服务源码、构建脚本、密码或本地 `.env` 放入站点目录。
 
 将以下目录结构上传到服务器，例如 `/opt/Unicorn-Studio/`，保持相对位置：
@@ -50,9 +50,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deploy/afq.asia/prepare-stat
     nginx.conf
     application-prod.yml.example
     backend.env.example
+    run-sql.sh
     sql/
-      V22-public-user-phone.sql
-      V23-public-user-edit.sql
+      01-init.sql
+      02-upgrade.sql
     html/                       # 由脚本准备，包含 admin/
     data/uploads/               # 历史上传文件；后续始终保留
 ```
@@ -133,11 +134,18 @@ docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 检查 `mysql-server`、`redis-server` 都在 `app-network` 中，且现有数据库表和数据已准备好。
 不要为部署应用重新初始化或覆盖现有数据库。
 
-### 4.1 已有数据库的手机号注册升级
+### 4.1 选择并执行一份数据库 SQL
 
-更新 JAR 不会自动更新表结构。当前注册代码需要 `public_user.phone`、手机号唯一索引和 `public_user.auth_version`。如果发送验证码时报 `Unknown column 'phone' in 'where clause'`，说明后端连接的库尚未完成 V22；同时核对是否连接到了预期的数据库。
+更新 JAR 不会自动更新表结构。当前结构基线为 25 表、246 字段、69 个索引、4 个外键，已经包含 `public_user.phone`、手机号唯一索引和 `auth_version`。
 
-以下示例假设数据库名为 `unicorn_studio`、MySQL 容器名为 `mysql-server`，并使用有备份、ALTER 和权限表写入权限的 MySQL `root` 用户。数据库名或用户不同则替换为实际值；密码在提示时输入，不写到命令行。
+| 服务器数据库状态 | 执行方式 |
+| --- | --- |
+| 全新数据库或已有空库 | `bash run-sql.sh init` |
+| 已有表和数据，包括发送验证码缺少 `phone` 字段 | 先备份，再 `bash run-sql.sh upgrade` |
+
+不要同时执行两份；已有业务库不能执行初始化。脚本使用 MySQL 批处理并在错误时停止，不要自行改为交互式 `SOURCE` 或添加 `--force`。
+
+以下命令在当前 `deploy/afq.asia` 目录执行，默认数据库 `unicorn_studio`、MySQL 容器 `mysql-server`、MySQL 用户 `root`。容器或用户不同可通过 `DEPLOY_MYSQL_CONTAINER`、`DEPLOY_MYSQL_USER` 覆盖；其他数据库名需先统一修改选定 SQL 内的 `USE` 等库名。
 
 先备份现有数据库，并将备份复制到宿主机的非公开目录：
 
@@ -152,28 +160,14 @@ docker exec -it mysql-server mysqldump --default-character-set=utf8mb4 --single-
 ```bash
 docker cp mysql-server:/tmp/unicorn-before-registration-upgrade.sql "./backups/unicorn-before-registration-upgrade-$(date +%Y%m%d-%H%M%S).sql"
 chmod 600 backups/*.sql
-docker cp sql/V22-public-user-phone.sql mysql-server:/tmp/V22-public-user-phone.sql
-docker cp sql/V23-public-user-edit.sql mysql-server:/tmp/V23-public-user-edit.sql
-docker exec -it mysql-server mysql --default-character-set=utf8mb4 -u root -p unicorn_studio
+bash run-sql.sh upgrade
 ```
 
-进入 `mysql>` 后先核对数据库和表结构，再按 V22、V23 顺序执行；如有任何 SQL 错误，停止并排查，不要继续重试注册：
+运行时按提示输入 MySQL 密码；密码不会写入 SQL 或命令参数。升级脚本只补缺失对象，不自动修改已有列类型，不覆盖已有同键配置，也不恢复管理员已撤销的旧授权。已有类型等有差异时会输出明细并中止，避免误报成功。重复手机号导致唯一索引创建失败时需先人工核实。
 
-```sql
-SELECT DATABASE();
-SHOW COLUMNS FROM public_user;
-SOURCE /tmp/V22-public-user-phone.sql;
-SOURCE /tmp/V23-public-user-edit.sql;
-SHOW COLUMNS FROM public_user LIKE 'phone';
-SHOW COLUMNS FROM public_user LIKE 'auth_version';
-SHOW INDEX FROM public_user WHERE Key_name = 'uk_public_user_phone';
-```
+确认最终输出 `DEPLOYMENT_SQL_OK` 且退出码为 0 后，再重试获取验证码或启动后端。单纯补齐注册字段无需重新打 JAR 或重启 MySQL、Redis。
 
-核对 `phone` 为可空的 `VARCHAR(11)`、`auth_version` 默认值为 `0`，以及手机号索引的 `Non_unique` 为 `0`。两份脚本会判断字段或指定索引是否已存在；V22 给旧用户保留空手机号，V23 给旧用户设置凭据版本 `0`，不删除、重建或覆盖用户记录。若已有重复的非空手机号，唯一索引会创建失败，需要先人工核实这些记录。
-
-执行成功后可直接重试获取验证码，无需为这次字段补齐重新打 JAR 或重启 MySQL、Redis。该错误发生在查重阶段，日志不能用于判断后续短信接口是否正常。
-
-已有线上数据只执行所需的增量脚本，不要重新导入 `02-data.sql` 或旧整库导出，它们可能覆盖当前数据。全新数据库的完整初始化与其他版本升级见 `backend/sql/server-migration/README.md`。
+两份 SQL 的系统默认值来自仓库，不是本地数据库的业务数据。它们不导入本地作品、用户、实际页面配置或 AI Key；新库的真实内容需在后台维护。原始脚本已归档，旧私密导出保留在 `backend/sql/server-migration/private/`，不属于部署文件，也不应重新导入已有业务库。详细说明见 `backend/sql/server-migration/README.md`。
 
 ### 4.2 构建与启动容器
 

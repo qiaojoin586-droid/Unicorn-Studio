@@ -26,9 +26,11 @@ data/
 **/application-local.yml
 
 # 数据库迁移产物：数据导出文件含 sys_user 口令散列、AES 加密的 AI Key、
-# 访客 IP 哈希等敏感数据 —— 绝不入库（结构脚本 01/03 可入库，数据脚本不可）
+# 访客 IP 哈希等敏感数据 —— 绝不入库（01-init/02-upgrade 可入库，私密数据导出不可）
 backend/sql/server-migration/*-data.sql
 backend/sql/server-migration/_*.sql
+backend/sql/server-migration/private/
+backend/sql/tools/__pycache__/
 
 # 系统
 .DS_Store
