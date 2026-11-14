@@ -94,9 +94,10 @@ public class FooterService {
 
     /** 读取页脚配置（含默认值兜底）；Redis 缓存 30 min（A3）。 */
     public FooterVO load() {
-        return cache.get(CacheKeys.FOOTER_PAGE, FooterVO.class).orElseGet(() -> {
+        var snapshot = cache.snapshot(CacheKeys.FOOTER_PAGE);
+        return snapshot.get(FooterVO.class).orElseGet(() -> {
             FooterVO vo = assemble();
-            cache.set(CacheKeys.FOOTER_PAGE, vo, CACHE_TTL);
+            snapshot.set(vo, CACHE_TTL);
             return vo;
         });
     }

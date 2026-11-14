@@ -30,12 +30,13 @@ public class ServiceItemService {
 
     /** 主要招收方向公开列表：仅已发布条目，按排序展示；Redis 缓存 30 min（B1）。 */
     public List<ServiceItemVO> findPublished() {
-        return cache.<List<ServiceItemVO>>get(CacheKeys.HOME_SERVICES, LIST_TYPE).orElseGet(() -> {
+        var snapshot = cache.snapshot(CacheKeys.HOME_SERVICES);
+        return snapshot.<List<ServiceItemVO>>get(LIST_TYPE).orElseGet(() -> {
             List<ServiceItemVO> list = serviceItemMapper.findByStatusOrderBySortOrderAscIdAsc(PUBLISHED)
                     .stream()
                     .map(ServiceItemVO::from)
                     .toList();
-            cache.set(CacheKeys.HOME_SERVICES, list, CACHE_TTL);
+            snapshot.set(list, CACHE_TTL);
             return list;
         });
     }

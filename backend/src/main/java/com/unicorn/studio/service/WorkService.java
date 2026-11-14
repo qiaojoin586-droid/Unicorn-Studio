@@ -70,9 +70,10 @@ public class WorkService {
             return loadPublished(category, featured);
         }
         String key = CacheKeys.workList(dimension);
-        return cache.<List<WorkCardVO>>get(key, CARD_LIST_TYPE).orElseGet(() -> {
+        var snapshot = cache.snapshot(key);
+        return snapshot.<List<WorkCardVO>>get(CARD_LIST_TYPE).orElseGet(() -> {
             List<WorkCardVO> list = loadPublished(category, featured);
-            cache.set(key, list, LIST_TTL);
+            snapshot.set(list, LIST_TTL);
             return list;
         });
     }
@@ -132,25 +133,27 @@ public class WorkService {
      * 写侧失效见 {@code WorkAdminService#evictPublicContent}（改 slug 时新旧两个键都要清）。
      */
     public Optional<WorkDetailVO> findPublishedBySlug(String slug) {
-        if (cache.getString(CacheKeys.nullWork(slug)).isPresent()) {
+        var absent = cache.snapshot(CacheKeys.nullWork(slug));
+        if (absent.getString().isPresent()) {
             return Optional.empty();
         }
         String key = CacheKeys.workDetail(slug);
-        Optional<WorkDetailVO> cached = cache.get(key, WorkDetailVO.class);
+        var snapshot = cache.snapshot(key);
+        Optional<WorkDetailVO> cached = snapshot.get(WorkDetailVO.class);
         if (cached.isPresent()) {
             viewCountService.increment("work", cached.get().id());
             return cached;
         }
         Optional<Work> work = workMapper.findBySlugAndStatus(slug, PUBLISHED);
         if (work.isEmpty()) {
-            cache.setString(CacheKeys.nullWork(slug), "__NULL__", NULL_TTL);
+            absent.setString("__NULL__", NULL_TTL);
             return Optional.empty();
         }
         Work w = work.get();
         long delta = viewCountService.increment("work", w.getId());
         w.setViewCount(w.getViewCount() + (int) delta);
         WorkDetailVO vo = WorkDetailVO.from(w);
-        cache.set(key, vo, DETAIL_TTL);
+        snapshot.set(vo, DETAIL_TTL);
         return Optional.of(vo);
     }
 }

@@ -30,12 +30,13 @@ public class CapabilityService {
 
     /** 我们培养的能力公开列表：仅已发布条目，按排序展示；Redis 缓存 30 min（B2）。 */
     public List<CapabilityVO> findPublished() {
-        return cache.<List<CapabilityVO>>get(CacheKeys.HOME_CAPABILITIES, LIST_TYPE).orElseGet(() -> {
+        var snapshot = cache.snapshot(CacheKeys.HOME_CAPABILITIES);
+        return snapshot.<List<CapabilityVO>>get(LIST_TYPE).orElseGet(() -> {
             List<CapabilityVO> list = capabilityMapper.findByStatusOrderBySortOrderAscIdAsc(PUBLISHED)
                     .stream()
                     .map(CapabilityVO::from)
                     .toList();
-            cache.set(CacheKeys.HOME_CAPABILITIES, list, CACHE_TTL);
+            snapshot.set(list, CACHE_TTL);
             return list;
         });
     }

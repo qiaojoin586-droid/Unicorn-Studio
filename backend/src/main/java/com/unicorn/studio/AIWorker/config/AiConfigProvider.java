@@ -61,9 +61,10 @@ public class AiConfigProvider {
 
     /** 取运行时配置（已解密），供对话与连通性测试使用。 */
     public AiRuntimeConfig runtimeConfig() {
-        return cache.get(CACHE_KEY, AiRuntimeConfig.class).orElseGet(() -> {
+        var snapshot = cache.snapshot(CACHE_KEY);
+        return snapshot.get(AiRuntimeConfig.class).orElseGet(() -> {
             AiRuntimeConfig config = loadFromDb();
-            cache.set(CACHE_KEY, config, CACHE_TTL);
+            snapshot.set(config, CACHE_TTL);
             return config;
         });
     }
@@ -87,9 +88,10 @@ public class AiConfigProvider {
 
     /** 公开接口只使用头像地址，模型凭据不进入这份缓存或响应。 */
     public AiMessageAvatar messageAvatar() {
-        return cache.get(AiMessageAvatar.CACHE_KEY, AiMessageAvatar.class).orElseGet(() -> {
+        var snapshot = cache.snapshot(AiMessageAvatar.CACHE_KEY);
+        return snapshot.get(AiMessageAvatar.class).orElseGet(() -> {
             AiMessageAvatar avatar = AiMessageAvatar.from(rawGroup());
-            cache.set(AiMessageAvatar.CACHE_KEY, avatar, CACHE_TTL);
+            snapshot.set(avatar, CACHE_TTL);
             return avatar;
         });
     }
@@ -145,6 +147,6 @@ public class AiConfigProvider {
 
     /** 供缓存预热/诊断使用：把 Optional 语义暴露出去（当前未使用，保留给后续预热任务）。 */
     public Optional<AiRuntimeConfig> cached() {
-        return cache.get(CACHE_KEY, AiRuntimeConfig.class);
+        return cache.snapshot(CACHE_KEY).get(AiRuntimeConfig.class);
     }
 }

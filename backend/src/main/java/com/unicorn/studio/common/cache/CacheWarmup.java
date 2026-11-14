@@ -130,18 +130,20 @@ public class CacheWarmup {
 
     /** 首页 Hero 轮播（A7）：与 CarouselController.list 同源，直接回填。 */
     private void warmCarouselHome() {
+        var snapshot = cache.snapshot(CacheKeys.CAROUSEL_HOME);
         List<CarouselVO> list = carouselMapper
                 .findByPageKeyAndStatusOrderBySortOrderAscIdAsc("home", 1).stream()
                 .map(CarouselVO::from)
                 .toList();
-        cache.set(CacheKeys.CAROUSEL_HOME, list, CACHE_TTL);
+        snapshot.set(list, CACHE_TTL);
     }
 
     /** 单背景页（A6）：与 PageBackgroundController.get 同源，直接回填。 */
     private void warmBackground(String pageKey) {
+        var snapshot = cache.snapshot(CacheKeys.bg(pageKey));
         List<Carousel> items = carouselMapper.findByPageKeyAndStatusOrderBySortOrderAscIdAsc(pageKey, 1);
         PageBackgroundVO bg = items.isEmpty() ? PageBackgroundVO.none() : PageBackgroundVO.from(items.get(0));
-        cache.set(CacheKeys.bg(pageKey), bg, CACHE_TTL);
+        snapshot.set(bg, CACHE_TTL);
     }
 
     /** SETNX 短锁：多实例同时启动时只允许一个预热；Redis 不可达时降级为「仍本地预热」（无副作用）。 */

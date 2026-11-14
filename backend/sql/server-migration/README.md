@@ -18,9 +18,37 @@
 - 25 张 InnoDB 表、246 个字段、69 个索引对象（100 个索引字段项）、4 个外键。
 - 所有表排序规则均为 `utf8mb4_0900_ai_ci`。
 - `public_user.phone` 为可空 `varchar(11)`，具有手机号唯一索引；`auth_version` 为非空 `bigint`，默认 `0`。
-- 未发现触发器、存储过程、事件或 CHECK 约束，无需另行创建这些对象。
+- 当时未发现触发器、存储过程、事件或 CHECK 约束。2026-11-14 的缓存监听改动另外定义了版本表和触发器，见下文。
 
-本轮没有查询业务表记录、没有导出业务数据，也没有执行初始化或升级 SQL。结构检查不等于执行迁移后的运行验证。
+上述基础结构核对没有查询业务表记录或导出业务数据。2026-11-14 已在独立测试 MySQL 8.0.42 上验证新版本初始化及连续两次升级，没有操作本地业务库或生产库。
+
+## 手动 SQL 修改后的缓存自动生效
+
+当前两份部署 SQL 都会额外创建 `cache_revision` 表，以及 19 张业务表上的 57 个 `AFTER INSERT/UPDATE/DELETE` 触发器，覆盖 11 个 Redis 读缓存域。定义来源为 `backend/src/main/resources/cache-dependencies.json`，运行时监听与 SQL 生成器共用这一份依赖表。完整结构现在共 26 张表、249 个字段、70 个索引对象及 4 个外键。
+
+链路为：手动 SQL 修改业务表 → 同一事务内推进缓存域版本 → 提交后后端检测版本 → Redis 切换缓存代号 → 下一次读取回源数据库。事务回滚也会回滚版本，不要求手动更新 `updated_at`。监听读取固定数量的版本行，不定时扫描业务内容，不向 Redis 复制整表数据。
+
+- 默认每 1000 ms 检测一次，是秒级最终一致；已有请求可能仍返回它开始时读取的版本，不承诺 SQL 提交瞬间的强一致。
+- 缓存数据键会带 `:generation:<随机代号>`。失效时旧代号立即不可达，旧键按原 TTL 回收；慢查询始终回填它开始时捕获的代号，避免重新污染新缓存。组级设置和页面 VO 共用同一缓存域。
+- 应用自己的写入仍在提交后立即切换相关代号。活动事务不读写共享读缓存，防止发布未提交值。
+- 版本发布使用 Redis Lua 原子完成；旧的并发轮询结果不能把同一 epoch 内的版本倒退。各实例共享当前环境的代号。
+- 迁移缺失、触发器不完整或 Redis/数据库监听失败时，数据库派生的 Redis 读缓存停用，自动回源 MySQL 并重试。超过 5000 ms 没有完成监听，也会回源。触发器完整性在首次连接及之后每 60 秒核对。
+- 首次启动及故障恢复强制换代，避免重新启用停机或触发器缺失期间的旧缓存。Redis 重启丢失元数据时，先回源，监听重新建立随机代号后才恢复缓存。
+- 限流、验证码、刷新令牌、撤销令牌和未落库的浏览量增量属于 Redis 状态数据，不参与版本失效。不要使用 `FLUSHDB` 或删除整个 `cache:*` 来代替本链路。
+
+已有环境的上线顺序：备份 → 上传重新生成的 SQL → 执行 `bash run-sql.sh upgrade`，确认 `DEPLOYMENT_SQL_OK` → 发布新后端 → 确认日志出现“数据库缓存变更监听已就绪（11 个缓存域）”。迁移执行账号需要创建表和触发器的权限；后端账号需要查询版本表并能在 `information_schema.TRIGGERS` 中看到相关触发器（MySQL 要求相应表的 `TRIGGER` 权限）。触发器的 DEFINER 账号也需要持续保有读写版本表的权限。上线时停止使用旧版后端实例，旧版代码不会读取带代号的新缓存。
+
+配置项均位于 `app.cache.database-changes`：`enabled` 默认 `true`，`poll-interval-ms` 默认 `1000`，`max-staleness-ms` 默认 `5000`；对应环境变量为 `CACHE_DATABASE_CHANGES_ENABLED`、`CACHE_DATABASE_CHANGES_POLL_INTERVAL_MS`、`CACHE_DATABASE_CHANGES_MAX_STALENESS_MS`。显式关闭监听会恢复原来依赖应用写入和 TTL 的缓存行为。
+
+此机制覆盖上述表的行级 DML。`TRUNCATE`、替换表、删除触发器、恢复备份等 DDL/运维操作不能依赖行触发器通知；完成这类操作后重新执行升级脚本并重启后端。升级脚本只重建本功能的 `us_cache_*` 触发器，并刷新缓存版本表的 epoch，不删除业务记录或其他触发器。大批量写入会增加版本行更新和行锁成本，应分批提交。MySQL 行触发器的回滚与级联行为见 [触发器说明](https://dev.mysql.com/doc/refman/8.0/en/trigger-syntax.html) 和 [外键说明](https://dev.mysql.com/doc/refman/8.0/en/create-table-foreign-keys.html)。
+
+开发验证：常规 `mvn -o test` 运行缓存回填、事务、空值缓存和降级回归。真实链路测试需独立 MySQL、Redis，先把生成 SQL 中的库名替换为 `cache_coherence_test_<字母数字>` 并在空测试库初始化，再运行：
+
+```powershell
+mvn -o '-Dtest=DatabaseCacheChangeIntegrationTest' '-Dcache.database.integration=true' '-Dtest.cache.jdbc-url=jdbc:mysql://127.0.0.1:测试端口/cache_coherence_test_测试后缀' '-Dtest.cache.redis-port=独立Redis端口' test
+```
+
+集成测试拒绝非测试库名及 Redis 默认 6379 端口，不加载项目业务凭据。测试数据库使用隔离实例的空密码 root，仅用于本机测试。
 
 ## SQL 会修改哪些内容
 

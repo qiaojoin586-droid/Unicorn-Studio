@@ -10,6 +10,7 @@ import collections
 import json
 import re
 from pathlib import Path
+from cache_change_tracking import extend_manifest, tracking_sql, allowed_metadata_mutation, trigger_names, dependencies
 
 
 SQL_ROOT = Path(__file__).resolve().parents[1]
@@ -241,11 +242,12 @@ def verification_sql(manifest):
 def build(manifest):
     if any(manifest.get(key) for key in ["triggers", "routines", "events", "checks"]):
         raise ValueError("Non-table objects require an explicit reviewed export")
+    manifest = extend_manifest(manifest)
     groups = index_groups(manifest)
     order = table_order(manifest)
     common_header = (
         "-- Unicorn Studio / MySQL 8.0.19+ / utf8mb4_0900_ai_ci\n"
-        f"-- 结构来源：{manifest['source']['date']} 只读核对 MySQL {manifest['source']['version']}；"
+        f"-- 基础结构来源：{manifest['source']['date']} 只读核对 MySQL {manifest['source']['version']}；新增缓存版本表为代码定义。当前共 "
         f"{len(order)} 表 / {len(manifest['columns'])} 列 / {len(groups)} 索引 / {len(manifest['foreign_keys'])} 外键。\n"
         "-- 本文件仅为部署代码；整理时未执行任何 DDL/DML，未读取本地业务记录。\n"
         "-- 系统默认值来自仓库 SQL，不包含数据库中的用户、内容、密码或 API Key。\n"
@@ -307,7 +309,14 @@ def build(manifest):
             if match:
                 name = match.group(1)
                 upgrade += f"\n-- {table}.{name}\n" + conditional_ddl(foreign_key_exists(table, name, foreign_keys[(table, name)]), f"ALTER TABLE {identifier(table)} ADD {part}")
-    verify = "\n" + verification_sql(manifest)
+    verify = "\n" + verification_sql(manifest) + tracking_sql(manifest)
+    trigger_list = ", ".join(sql_string(name) for name in sorted(trigger_names()))
+    verify += statement_guard(
+        "(SELECT COUNT(*) FROM cache_revision) = " + str(len(dependencies()["domains"]))
+        + " AND (SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE() "
+        + f"AND TRIGGER_NAME IN ({trigger_list})) = {len(trigger_names())}",
+        "CACHE_CHANGE_TRACKING_CHECK_FAILED",
+    )
     seed_statements = []
     for seed_statement in manifest["seed_statements"]:
         if re.match(r"INSERT\s+IGNORE\s+INTO\s+`?sys_role_permission`?\b", seed_statement, re.I):
@@ -345,7 +354,8 @@ def main():
     args.output.mkdir(parents=True, exist_ok=True)
     for name, text in files.items():
         statements = split_sql(text)
-        if any(re.match(r"(?:DROP|DELETE|TRUNCATE|REPLACE|UPDATE)\b", statement, re.I) for statement in statements):
+        if any(re.match(r"(?:DROP|DELETE|TRUNCATE|REPLACE|UPDATE)\b", statement, re.I)
+               and not allowed_metadata_mutation(statement) for statement in statements):
             raise ValueError("Destructive/data-overwriting statement found")
         (args.output / name).write_text(text, encoding="utf-8", newline="\n")
         print(f"{name}: {len(statements)} statements; {len(text.encode('utf-8'))} bytes")

@@ -36,12 +36,13 @@ public class CarouselController {
     public ApiResponse<Map<String, List<CarouselVO>>> list() {
         // V11：轮播图新增 page_key 维度后，首页只取 home 分组。
         // 既有数据默认 page_key='home'，故对原行为等价。
-        List<CarouselVO> items = cache.<List<CarouselVO>>get(CacheKeys.CAROUSEL_HOME, LIST_TYPE).orElseGet(() -> {
+        var snapshot = cache.snapshot(CacheKeys.CAROUSEL_HOME);
+        List<CarouselVO> items = snapshot.<List<CarouselVO>>get(LIST_TYPE).orElseGet(() -> {
             List<CarouselVO> list = carouselMapper
                     .findByPageKeyAndStatusOrderBySortOrderAscIdAsc("home", 1).stream()
                     .map(CarouselVO::from)
                     .toList();
-            cache.set(CacheKeys.CAROUSEL_HOME, list, CACHE_TTL);
+            snapshot.set(list, CACHE_TTL);
             return list;
         });
         return ApiResponse.ok(Map.of("list", items));

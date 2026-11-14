@@ -1,5 +1,5 @@
 -- Unicorn Studio / MySQL 8.0.19+ / utf8mb4_0900_ai_ci
--- 结构来源：2026-11-13 只读核对 MySQL 8.0.42；25 表 / 246 列 / 69 索引 / 4 外键。
+-- 基础结构来源：2026-11-13 只读核对 MySQL 8.0.42；新增缓存版本表为代码定义。当前共 26 表 / 249 列 / 70 索引 / 4 外键。
 -- 本文件仅为部署代码；整理时未执行任何 DDL/DML，未读取本地业务记录。
 -- 系统默认值来自仓库 SQL，不包含数据库中的用户、内容、密码或 API Key。
 -- 使用 run-sql.sh 或 mysql 批处理标准输入执行；不要加 --force，也不要在交互窗口 SOURCE。
@@ -112,6 +112,14 @@ CREATE TABLE `backup_record` (
   `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_backup_record_created` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- cache_revision
+CREATE TABLE `cache_revision` (
+  `cache_domain` varchar(32) NOT NULL,
+  `epoch` char(36) NOT NULL,
+  `revision` bigint unsigned NOT NULL DEFAULT '1',
+  PRIMARY KEY (`cache_domain`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- capability_item
@@ -932,12 +940,18 @@ UNION ALL
 SELECT 'work', 'created_at', 'datetime', 'NO', 'CURRENT_TIMESTAMP', 'DEFAULT_GENERATED', NULL, NULL, ''
 UNION ALL
 SELECT 'work', 'updated_at', 'datetime', 'NO', 'CURRENT_TIMESTAMP', 'DEFAULT_GENERATED', NULL, NULL, ''
+UNION ALL
+SELECT 'cache_revision', 'cache_domain', 'varchar(32)', 'NO', NULL, '', 'utf8mb4', 'utf8mb4_0900_ai_ci', ''
+UNION ALL
+SELECT 'cache_revision', 'epoch', 'char(36)', 'NO', NULL, '', 'utf8mb4', 'utf8mb4_0900_ai_ci', ''
+UNION ALL
+SELECT 'cache_revision', 'revision', 'bigint unsigned', 'NO', '1', '', NULL, NULL, ''
 ) e LEFT JOIN information_schema.COLUMNS c ON c.TABLE_SCHEMA = DATABASE() AND c.TABLE_NAME = e.`table` AND c.COLUMN_NAME = e.`name` WHERE c.COLUMN_NAME IS NULL OR NOT (LOWER(c.COLUMN_TYPE) <=> e.`type`) OR NOT (c.IS_NULLABLE <=> e.`nullable`) OR NOT (c.COLUMN_DEFAULT <=> e.`default`) OR NOT (LOWER(c.EXTRA) <=> LOWER(e.`extra`)) OR NOT (c.CHARACTER_SET_NAME <=> e.`charset`) OR NOT (c.COLLATION_NAME <=> e.`collation`) OR NOT (c.GENERATION_EXPRESSION <=> e.`generated`)
 ) issues);
 SET @us_column_issues := JSON_LENGTH(@us_column_report);
 SELECT IF(@us_column_issues = 0, 'OK', 'FAIL') AS column_structure, JSON_PRETTY(@us_column_report) AS column_differences;
-SET @us_table_issues := (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('ai_conversation', 'ai_message', 'ai_tool_config', 'ai_tool_invocation', 'backup_record', 'capability_item', 'carousel', 'comment', 'learning_category', 'learning_resources', 'message', 'news', 'public_user', 'service_item', 'site_settings', 'stats_daily', 'sys_operation_log', 'sys_permission', 'sys_role', 'sys_role_permission', 'sys_user', 'sys_user_role', 'upload_file', 'visit_log', 'work') AND (ENGINE <> 'InnoDB' OR TABLE_COLLATION <> 'utf8mb4_0900_ai_ci'));
-SET @us_table_count := (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('ai_conversation', 'ai_message', 'ai_tool_config', 'ai_tool_invocation', 'backup_record', 'capability_item', 'carousel', 'comment', 'learning_category', 'learning_resources', 'message', 'news', 'public_user', 'service_item', 'site_settings', 'stats_daily', 'sys_operation_log', 'sys_permission', 'sys_role', 'sys_role_permission', 'sys_user', 'sys_user_role', 'upload_file', 'visit_log', 'work') AND TABLE_TYPE = 'BASE TABLE');
+SET @us_table_issues := (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('ai_conversation', 'ai_message', 'ai_tool_config', 'ai_tool_invocation', 'backup_record', 'cache_revision', 'capability_item', 'carousel', 'comment', 'learning_category', 'learning_resources', 'message', 'news', 'public_user', 'service_item', 'site_settings', 'stats_daily', 'sys_operation_log', 'sys_permission', 'sys_role', 'sys_role_permission', 'sys_user', 'sys_user_role', 'upload_file', 'visit_log', 'work') AND (ENGINE <> 'InnoDB' OR TABLE_COLLATION <> 'utf8mb4_0900_ai_ci'));
+SET @us_table_count := (SELECT COUNT(*) FROM information_schema.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('ai_conversation', 'ai_message', 'ai_tool_config', 'ai_tool_invocation', 'backup_record', 'cache_revision', 'capability_item', 'carousel', 'comment', 'learning_category', 'learning_resources', 'message', 'news', 'public_user', 'service_item', 'site_settings', 'stats_daily', 'sys_operation_log', 'sys_permission', 'sys_role', 'sys_role_permission', 'sys_user', 'sys_user_role', 'upload_file', 'visit_log', 'work') AND TABLE_TYPE = 'BASE TABLE');
 SET @us_object_report := (SELECT COALESCE(JSON_ARRAYAGG(JSON_OBJECT('object', object_name, 'result', result)), JSON_ARRAY()) FROM (
 SELECT 'ai_conversation.PRIMARY' AS object_name, IF(EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'ai_conversation' AND INDEX_NAME = 'PRIMARY' GROUP BY INDEX_NAME HAVING MIN(NON_UNIQUE) = 0 AND MIN(INDEX_TYPE) = 'BTREE' AND MIN(IS_VISIBLE = 'YES') = 1 AND GROUP_CONCAT(CONCAT(COLUMN_NAME, IF(SUB_PART IS NULL, '', CONCAT('(', SUB_PART, ')'))) ORDER BY SEQ_IN_INDEX SEPARATOR ',') = 'id'), 'OK', 'FAIL') AS result
 UNION ALL
@@ -974,6 +988,8 @@ UNION ALL
 SELECT 'backup_record.PRIMARY' AS object_name, IF(EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'backup_record' AND INDEX_NAME = 'PRIMARY' GROUP BY INDEX_NAME HAVING MIN(NON_UNIQUE) = 0 AND MIN(INDEX_TYPE) = 'BTREE' AND MIN(IS_VISIBLE = 'YES') = 1 AND GROUP_CONCAT(CONCAT(COLUMN_NAME, IF(SUB_PART IS NULL, '', CONCAT('(', SUB_PART, ')'))) ORDER BY SEQ_IN_INDEX SEPARATOR ',') = 'id'), 'OK', 'FAIL') AS result
 UNION ALL
 SELECT 'backup_record.idx_backup_record_created' AS object_name, IF(EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'backup_record' AND INDEX_NAME <> 'PRIMARY' GROUP BY INDEX_NAME HAVING MIN(NON_UNIQUE) = 1 AND MIN(INDEX_TYPE) = 'BTREE' AND MIN(IS_VISIBLE = 'YES') = 1 AND GROUP_CONCAT(CONCAT(COLUMN_NAME, IF(SUB_PART IS NULL, '', CONCAT('(', SUB_PART, ')'))) ORDER BY SEQ_IN_INDEX SEPARATOR ',') = 'created_at'), 'OK', 'FAIL') AS result
+UNION ALL
+SELECT 'cache_revision.PRIMARY' AS object_name, IF(EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cache_revision' AND INDEX_NAME = 'PRIMARY' GROUP BY INDEX_NAME HAVING MIN(NON_UNIQUE) = 0 AND MIN(INDEX_TYPE) = 'BTREE' AND MIN(IS_VISIBLE = 'YES') = 1 AND GROUP_CONCAT(CONCAT(COLUMN_NAME, IF(SUB_PART IS NULL, '', CONCAT('(', SUB_PART, ')'))) ORDER BY SEQ_IN_INDEX SEPARATOR ',') = 'cache_domain'), 'OK', 'FAIL') AS result
 UNION ALL
 SELECT 'capability_item.PRIMARY' AS object_name, IF(EXISTS (SELECT 1 FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'capability_item' AND INDEX_NAME = 'PRIMARY' GROUP BY INDEX_NAME HAVING MIN(NON_UNIQUE) = 0 AND MIN(INDEX_TYPE) = 'BTREE' AND MIN(IS_VISIBLE = 'YES') = 1 AND GROUP_CONCAT(CONCAT(COLUMN_NAME, IF(SUB_PART IS NULL, '', CONCAT('(', SUB_PART, ')'))) ORDER BY SEQ_IN_INDEX SEPARATOR ',') = 'id'), 'OK', 'FAIL') AS result
 UNION ALL
@@ -1087,8 +1103,256 @@ SELECT 'sys_user_role.fk_ur_user', IF(EXISTS (SELECT 1 FROM information_schema.K
 ) objects WHERE result = 'FAIL');
 SET @us_object_issues := JSON_LENGTH(@us_object_report);
 SELECT IF(@us_object_issues = 0, 'OK', 'FAIL') AS indexes_and_foreign_keys, JSON_PRETTY(@us_object_report) AS object_differences;
-SELECT DATABASE() AS database_name, @us_table_count AS expected_tables_found, 246 AS expected_columns, @us_table_issues AS table_option_issues, @us_object_issues AS index_or_foreign_key_issues;
-SET @us_sql := IF((@us_column_issues = 0 AND @us_table_issues = 0 AND @us_object_issues = 0 AND @us_table_count = 25), 'DO 0', 'SELECT `SCHEMA_CHECK_FAILED_REVIEW_DIFFERENCES_ABOVE`');
+SELECT DATABASE() AS database_name, @us_table_count AS expected_tables_found, 249 AS expected_columns, @us_table_issues AS table_option_issues, @us_object_issues AS index_or_foreign_key_issues;
+SET @us_sql := IF((@us_column_issues = 0 AND @us_table_issues = 0 AND @us_object_issues = 0 AND @us_table_count = 26), 'DO 0', 'SELECT `SCHEMA_CHECK_FAILED_REVIEW_DIFFERENCES_ABOVE`');
+PREPARE us_stmt FROM @us_sql;
+EXECUTE us_stmt;
+DEALLOCATE PREPARE us_stmt;
+
+-- 数据库变更监听：触发器与业务修改共用事务；只存域和版本，不复制业务数据。
+INSERT IGNORE INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES
+('ai-history', UUID(), 1),
+('capabilities', UUID(), 1),
+('carousel', UUID(), 1),
+('comments', UUID(), 1),
+('dashboard', UUID(), 1),
+('learning', UUID(), 1),
+('news', UUID(), 1),
+('permissions', UUID(), 1),
+('services', UUID(), 1),
+('settings', UUID(), 1),
+('works', UUID(), 1);
+DROP TRIGGER IF EXISTS `us_cache_ai_conversation_insert`;
+CREATE TRIGGER `us_cache_ai_conversation_insert` AFTER INSERT ON `ai_conversation` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('ai-history', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_ai_conversation_update`;
+CREATE TRIGGER `us_cache_ai_conversation_update` AFTER UPDATE ON `ai_conversation` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('ai-history', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_ai_conversation_delete`;
+CREATE TRIGGER `us_cache_ai_conversation_delete` AFTER DELETE ON `ai_conversation` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('ai-history', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_ai_message_insert`;
+CREATE TRIGGER `us_cache_ai_message_insert` AFTER INSERT ON `ai_message` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('ai-history', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_ai_message_update`;
+CREATE TRIGGER `us_cache_ai_message_update` AFTER UPDATE ON `ai_message` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('ai-history', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_ai_message_delete`;
+CREATE TRIGGER `us_cache_ai_message_delete` AFTER DELETE ON `ai_message` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('ai-history', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_capability_item_insert`;
+CREATE TRIGGER `us_cache_capability_item_insert` AFTER INSERT ON `capability_item` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('capabilities', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_capability_item_update`;
+CREATE TRIGGER `us_cache_capability_item_update` AFTER UPDATE ON `capability_item` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('capabilities', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_capability_item_delete`;
+CREATE TRIGGER `us_cache_capability_item_delete` AFTER DELETE ON `capability_item` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('capabilities', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_carousel_insert`;
+CREATE TRIGGER `us_cache_carousel_insert` AFTER INSERT ON `carousel` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('carousel', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_carousel_update`;
+CREATE TRIGGER `us_cache_carousel_update` AFTER UPDATE ON `carousel` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('carousel', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_carousel_delete`;
+CREATE TRIGGER `us_cache_carousel_delete` AFTER DELETE ON `carousel` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('carousel', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_comment_insert`;
+CREATE TRIGGER `us_cache_comment_insert` AFTER INSERT ON `comment` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('comments', UUID(), 1), ('dashboard', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_comment_update`;
+CREATE TRIGGER `us_cache_comment_update` AFTER UPDATE ON `comment` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('comments', UUID(), 1), ('dashboard', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_comment_delete`;
+CREATE TRIGGER `us_cache_comment_delete` AFTER DELETE ON `comment` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('comments', UUID(), 1), ('dashboard', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_learning_category_insert`;
+CREATE TRIGGER `us_cache_learning_category_insert` AFTER INSERT ON `learning_category` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('learning', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_learning_category_update`;
+CREATE TRIGGER `us_cache_learning_category_update` AFTER UPDATE ON `learning_category` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('learning', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_learning_category_delete`;
+CREATE TRIGGER `us_cache_learning_category_delete` AFTER DELETE ON `learning_category` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('learning', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_learning_resources_insert`;
+CREATE TRIGGER `us_cache_learning_resources_insert` AFTER INSERT ON `learning_resources` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('learning', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_learning_resources_update`;
+CREATE TRIGGER `us_cache_learning_resources_update` AFTER UPDATE ON `learning_resources` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('learning', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_learning_resources_delete`;
+CREATE TRIGGER `us_cache_learning_resources_delete` AFTER DELETE ON `learning_resources` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('learning', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_message_insert`;
+CREATE TRIGGER `us_cache_message_insert` AFTER INSERT ON `message` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('dashboard', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_message_update`;
+CREATE TRIGGER `us_cache_message_update` AFTER UPDATE ON `message` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('dashboard', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_message_delete`;
+CREATE TRIGGER `us_cache_message_delete` AFTER DELETE ON `message` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('dashboard', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_news_insert`;
+CREATE TRIGGER `us_cache_news_insert` AFTER INSERT ON `news` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('dashboard', UUID(), 1), ('news', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_news_update`;
+CREATE TRIGGER `us_cache_news_update` AFTER UPDATE ON `news` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('dashboard', UUID(), 1), ('news', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_news_delete`;
+CREATE TRIGGER `us_cache_news_delete` AFTER DELETE ON `news` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('dashboard', UUID(), 1), ('news', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_public_user_insert`;
+CREATE TRIGGER `us_cache_public_user_insert` AFTER INSERT ON `public_user` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('comments', UUID(), 1), ('dashboard', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_public_user_update`;
+CREATE TRIGGER `us_cache_public_user_update` AFTER UPDATE ON `public_user` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('comments', UUID(), 1), ('dashboard', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_public_user_delete`;
+CREATE TRIGGER `us_cache_public_user_delete` AFTER DELETE ON `public_user` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('comments', UUID(), 1), ('dashboard', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_service_item_insert`;
+CREATE TRIGGER `us_cache_service_item_insert` AFTER INSERT ON `service_item` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('services', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_service_item_update`;
+CREATE TRIGGER `us_cache_service_item_update` AFTER UPDATE ON `service_item` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('services', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_service_item_delete`;
+CREATE TRIGGER `us_cache_service_item_delete` AFTER DELETE ON `service_item` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('services', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_site_settings_insert`;
+CREATE TRIGGER `us_cache_site_settings_insert` AFTER INSERT ON `site_settings` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('settings', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_site_settings_update`;
+CREATE TRIGGER `us_cache_site_settings_update` AFTER UPDATE ON `site_settings` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('settings', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_site_settings_delete`;
+CREATE TRIGGER `us_cache_site_settings_delete` AFTER DELETE ON `site_settings` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('settings', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_permission_insert`;
+CREATE TRIGGER `us_cache_sys_permission_insert` AFTER INSERT ON `sys_permission` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_permission_update`;
+CREATE TRIGGER `us_cache_sys_permission_update` AFTER UPDATE ON `sys_permission` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_permission_delete`;
+CREATE TRIGGER `us_cache_sys_permission_delete` AFTER DELETE ON `sys_permission` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_role_insert`;
+CREATE TRIGGER `us_cache_sys_role_insert` AFTER INSERT ON `sys_role` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_role_update`;
+CREATE TRIGGER `us_cache_sys_role_update` AFTER UPDATE ON `sys_role` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_role_delete`;
+CREATE TRIGGER `us_cache_sys_role_delete` AFTER DELETE ON `sys_role` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_role_permission_insert`;
+CREATE TRIGGER `us_cache_sys_role_permission_insert` AFTER INSERT ON `sys_role_permission` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_role_permission_update`;
+CREATE TRIGGER `us_cache_sys_role_permission_update` AFTER UPDATE ON `sys_role_permission` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_role_permission_delete`;
+CREATE TRIGGER `us_cache_sys_role_permission_delete` AFTER DELETE ON `sys_role_permission` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_user_insert`;
+CREATE TRIGGER `us_cache_sys_user_insert` AFTER INSERT ON `sys_user` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_user_update`;
+CREATE TRIGGER `us_cache_sys_user_update` AFTER UPDATE ON `sys_user` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_user_delete`;
+CREATE TRIGGER `us_cache_sys_user_delete` AFTER DELETE ON `sys_user` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_user_role_insert`;
+CREATE TRIGGER `us_cache_sys_user_role_insert` AFTER INSERT ON `sys_user_role` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_user_role_update`;
+CREATE TRIGGER `us_cache_sys_user_role_update` AFTER UPDATE ON `sys_user_role` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_sys_user_role_delete`;
+CREATE TRIGGER `us_cache_sys_user_role_delete` AFTER DELETE ON `sys_user_role` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('permissions', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_visit_log_insert`;
+CREATE TRIGGER `us_cache_visit_log_insert` AFTER INSERT ON `visit_log` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('dashboard', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_visit_log_update`;
+CREATE TRIGGER `us_cache_visit_log_update` AFTER UPDATE ON `visit_log` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('dashboard', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_visit_log_delete`;
+CREATE TRIGGER `us_cache_visit_log_delete` AFTER DELETE ON `visit_log` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('dashboard', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_work_insert`;
+CREATE TRIGGER `us_cache_work_insert` AFTER INSERT ON `work` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('dashboard', UUID(), 1), ('works', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_work_update`;
+CREATE TRIGGER `us_cache_work_update` AFTER UPDATE ON `work` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('dashboard', UUID(), 1), ('works', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+DROP TRIGGER IF EXISTS `us_cache_work_delete`;
+CREATE TRIGGER `us_cache_work_delete` AFTER DELETE ON `work` FOR EACH ROW
+INSERT INTO `cache_revision` (`cache_domain`, `epoch`, `revision`) VALUES ('dashboard', UUID(), 1), ('works', UUID(), 1)
+ON DUPLICATE KEY UPDATE `revision` = `revision` + 1;
+UPDATE `cache_revision` SET `epoch` = UUID(), `revision` = 1;
+SELECT COUNT(*) AS cache_revision_domains FROM `cache_revision`;
+SET @us_sql := IF(((SELECT COUNT(*) FROM cache_revision) = 11 AND (SELECT COUNT(*) FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE() AND TRIGGER_NAME IN ('us_cache_ai_conversation_delete', 'us_cache_ai_conversation_insert', 'us_cache_ai_conversation_update', 'us_cache_ai_message_delete', 'us_cache_ai_message_insert', 'us_cache_ai_message_update', 'us_cache_capability_item_delete', 'us_cache_capability_item_insert', 'us_cache_capability_item_update', 'us_cache_carousel_delete', 'us_cache_carousel_insert', 'us_cache_carousel_update', 'us_cache_comment_delete', 'us_cache_comment_insert', 'us_cache_comment_update', 'us_cache_learning_category_delete', 'us_cache_learning_category_insert', 'us_cache_learning_category_update', 'us_cache_learning_resources_delete', 'us_cache_learning_resources_insert', 'us_cache_learning_resources_update', 'us_cache_message_delete', 'us_cache_message_insert', 'us_cache_message_update', 'us_cache_news_delete', 'us_cache_news_insert', 'us_cache_news_update', 'us_cache_public_user_delete', 'us_cache_public_user_insert', 'us_cache_public_user_update', 'us_cache_service_item_delete', 'us_cache_service_item_insert', 'us_cache_service_item_update', 'us_cache_site_settings_delete', 'us_cache_site_settings_insert', 'us_cache_site_settings_update', 'us_cache_sys_permission_delete', 'us_cache_sys_permission_insert', 'us_cache_sys_permission_update', 'us_cache_sys_role_delete', 'us_cache_sys_role_insert', 'us_cache_sys_role_permission_delete', 'us_cache_sys_role_permission_insert', 'us_cache_sys_role_permission_update', 'us_cache_sys_role_update', 'us_cache_sys_user_delete', 'us_cache_sys_user_insert', 'us_cache_sys_user_role_delete', 'us_cache_sys_user_role_insert', 'us_cache_sys_user_role_update', 'us_cache_sys_user_update', 'us_cache_visit_log_delete', 'us_cache_visit_log_insert', 'us_cache_visit_log_update', 'us_cache_work_delete', 'us_cache_work_insert', 'us_cache_work_update')) = 57), 'DO 0', 'SELECT `CACHE_CHANGE_TRACKING_CHECK_FAILED`');
 PREPARE us_stmt FROM @us_sql;
 EXECUTE us_stmt;
 DEALLOCATE PREPARE us_stmt;
