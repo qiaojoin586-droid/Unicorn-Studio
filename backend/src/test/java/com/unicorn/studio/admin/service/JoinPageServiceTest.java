@@ -20,13 +20,15 @@ class JoinPageServiceTest {
     void savedQrOverridesPrimedPageCacheAndCanBeClearedWithoutLosingPageContent() {
         var settings = mock(SiteSettingsService.class);
         var cache = mock(CacheHelper.class);
+        var snapshot = mock(CacheHelper.Snapshot.class);
+        when(cache.snapshot(CacheKeys.JOIN_PAGE)).thenReturn(snapshot);
         Map<String, String> database = new HashMap<>();
         Map<String, JoinPageVO> pages = new HashMap<>();
         when(settings.listGroup("join")).thenAnswer(invocation -> Map.copyOf(database));
-        when(cache.get(CacheKeys.JOIN_PAGE, JoinPageVO.class)).thenAnswer(invocation -> Optional.ofNullable(pages.get(CacheKeys.JOIN_PAGE)));
+        when(snapshot.get(JoinPageVO.class)).thenAnswer(invocation -> Optional.ofNullable(pages.get(CacheKeys.JOIN_PAGE)));
         doAnswer(invocation -> {
-            pages.put(invocation.getArgument(0), invocation.getArgument(1)); return null;
-        }).when(cache).set(eq(CacheKeys.JOIN_PAGE), any(), any(Duration.class));
+            pages.put(CacheKeys.JOIN_PAGE, invocation.getArgument(0)); return null;
+        }).when(snapshot).set(any(), any(Duration.class));
         doAnswer(invocation -> {
             List<SiteSettingsService.KeyValueRequest> values = invocation.getArgument(0);
             values.forEach(value -> database.put(value.key(), value.value())); return null;

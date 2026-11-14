@@ -42,7 +42,8 @@ public class LearningService {
      * 投影字段与 {@link LearningCardVO} 的记录分量一一对应，改 VO 时务必同步这里。
      */
     public List<LearningCardVO> findAll() {
-        return cache.<List<LearningCardVO>>get(CacheKeys.LEARNING_LIST, LIST_TYPE).orElseGet(() -> {
+        var snapshot = cache.snapshot(CacheKeys.LEARNING_LIST);
+        return snapshot.<List<LearningCardVO>>get(LIST_TYPE).orElseGet(() -> {
             List<LearningCardVO> list = repository.selectList(new LambdaQueryWrapper<LearningResource>()
                             .select(LearningResource::getId, LearningResource::getTitle,
                                     LearningResource::getDescription, LearningResource::getUrl,
@@ -55,14 +56,15 @@ public class LearningService {
                     .stream()
                     .map(LearningCardVO::from)
                     .toList();
-            cache.set(CacheKeys.LEARNING_LIST, list, CACHE_TTL);
+            snapshot.set(list, CACHE_TTL);
             return list;
         });
     }
 
     /** 公开详情：按 id 查询上架资料（含正文 content，不入缓存）；空值哨兵防穿透（§4.1 P1）。 */
     public Optional<LearningResource> findPublishedById(Long id) {
-        if (cache.getString(CacheKeys.nullLearning(id)).isPresent()) {
+        var absent = cache.snapshot(CacheKeys.nullLearning(id));
+        if (absent.getString().isPresent()) {
             return Optional.empty();
         }
         Optional<LearningResource> resource = Optional.ofNullable(repository.selectOne(
@@ -70,7 +72,7 @@ public class LearningService {
                         .eq(LearningResource::getId, id)
                         .eq(LearningResource::getStatus, 1)));
         if (resource.isEmpty()) {
-            cache.setString(CacheKeys.nullLearning(id), "__NULL__", NULL_TTL);
+            absent.setString("__NULL__", NULL_TTL);
         }
         return resource;
     }

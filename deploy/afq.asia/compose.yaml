@@ -13,9 +13,12 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_CONFIG_ADDITIONAL_LOCATION: file:/app/config/
+      APP_BACKUP_DIR: /app/data/backups
+      APP_BACKUP_MYSQLDUMP_PATH: /usr/bin/mysqldump
     volumes:
       - ./application-prod.yml:/app/config/application-prod.yml:ro
       - ./data/uploads:/app/data/uploads
+      - ./data/backups:/app/data/backups
       - ./logs/backend:/app/logs
     expose:
       - "8080"

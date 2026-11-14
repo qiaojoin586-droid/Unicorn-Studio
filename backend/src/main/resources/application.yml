@@ -225,6 +225,12 @@ app:
     # 现在每个键都带 "<profile>:" 前缀（见 CacheHelper.buildPrefix），两套环境天然隔离，
     # 即使共用一台 Redis 也不会互相污染。要再加固可加本项（如 unicorn），或给本地换 REDIS_DATABASE。
     namespace:
+    # 手动 SQL 的 INSERT/UPDATE/DELETE 通过触发器推进版本，提交后自动失效相关读缓存。
+    # 先执行 02-upgrade.sql；迁移未完成或监听故障时，读缓存自动停用并回源 MySQL。
+    database-changes:
+      enabled: ${CACHE_DATABASE_CHANGES_ENABLED:true}
+      poll-interval-ms: ${CACHE_DATABASE_CHANGES_POLL_INTERVAL_MS:1000}
+      max-staleness-ms: ${CACHE_DATABASE_CHANGES_MAX_STALENESS_MS:5000}
     warmup:
       enabled: true
 

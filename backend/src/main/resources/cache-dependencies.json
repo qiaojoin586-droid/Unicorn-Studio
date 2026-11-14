@@ -1,0 +1,36 @@
+{
+  "domains": {
+    "settings": ["cache:site:", "cache:footer:", "cache:about:", "cache:join:", "cache:ai:config", "cache:ai:message-avatar"],
+    "works": ["cache:works:", "cache:null:work:"],
+    "news": ["cache:news:", "cache:null:news:"],
+    "learning": ["cache:learning:", "cache:null:learning:"],
+    "carousel": ["cache:carousel:", "cache:bg:"],
+    "services": ["cache:home:services"],
+    "capabilities": ["cache:home:capabilities"],
+    "comments": ["cache:comment:"],
+    "permissions": ["cache:auth:perm:"],
+    "ai-history": ["cache:ai:sessions:", "cache:ai:msgs:"],
+    "dashboard": ["cache:dashboard:"]
+  },
+  "tables": {
+    "site_settings": ["settings"],
+    "work": ["dashboard", "works"],
+    "news": ["dashboard", "news"],
+    "learning_resources": ["learning"],
+    "learning_category": ["learning"],
+    "carousel": ["carousel"],
+    "service_item": ["services"],
+    "capability_item": ["capabilities"],
+    "comment": ["comments", "dashboard"],
+    "public_user": ["comments", "dashboard"],
+    "sys_user": ["permissions"],
+    "sys_role": ["permissions"],
+    "sys_permission": ["permissions"],
+    "sys_user_role": ["permissions"],
+    "sys_role_permission": ["permissions"],
+    "ai_conversation": ["ai-history"],
+    "ai_message": ["ai-history"],
+    "message": ["dashboard"],
+    "visit_log": ["dashboard"]
+  }
+}

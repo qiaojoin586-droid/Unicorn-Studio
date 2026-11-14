@@ -25,6 +25,9 @@ app:
     trusted-proxy-count: 1
   upload:
     dir: /app/data/uploads
+  backup:
+    dir: /app/data/backups
+    mysqldump-path: /usr/bin/mysqldump
   admin:
     jwt-secret: ${ADMIN_JWT_SECRET}
   public:

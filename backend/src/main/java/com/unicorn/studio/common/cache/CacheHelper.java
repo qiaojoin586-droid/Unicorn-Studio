@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.Cursor;
 import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -36,6 +37,26 @@ public class CacheHelper {
     private final CacheCircuitBreaker breaker;// 缓存熔断器
     private final boolean enabled;// 缓存是否启用
     private final double jitterRatio;// TTL 随机抖动比例
+
+    @Value("${app.cache.database-changes.enabled:true}")
+    private boolean databaseChangesEnabled = true;
+    @Value("${app.cache.database-changes.max-staleness-ms:5000}")
+    private long maxStalenessMillis = 5000;
+    private volatile long lastDatabaseSyncNanos;
+
+    // 比较十进制字符串，避免 Lua double 无法准确表示 BIGINT（超过 2^53）。
+    private static final DefaultRedisScript<Long> APPLY_DATABASE_REVISION = new DefaultRedisScript<>("""
+            local epoch = redis.call('HGET', KEYS[1], 'epoch')
+            local revision = redis.call('HGET', KEYS[1], 'revision')
+            local incoming = ARGV[2]
+            if epoch == ARGV[1] and revision and
+               (#revision > #incoming or (#revision == #incoming and revision >= incoming)) and
+               redis.call('HEXISTS', KEYS[1], 'generation') == 1 then
+                return 0
+            end
+            redis.call('HSET', KEYS[1], 'epoch', ARGV[1], 'revision', incoming, 'generation', ARGV[3])
+            return 1
+            """, Long.class);
 
     /**
      * 键前缀：{@code app.cache.namespace} + 当前 profile（形如 {@code local:} / {@code prod:}）。
@@ -117,8 +138,100 @@ public class CacheHelper {
         return enabled;
     }
 
+    private String revisionKey(String domain) {
+        return k("cache:coherence:" + domain);
+    }
+
+    void databaseChangesAvailable() {
+        lastDatabaseSyncNanos = System.nanoTime();
+    }
+
+    void databaseChangesUnavailable() {
+        lastDatabaseSyncNanos = 0;
+    }
+
+    void resetDatabaseGenerations() {
+        // 首次启动/故障恢复时强制换代，覆盖触发器缺失期间以及部署 DDL 间隙内的变更。
+        rotateGenerations(CacheDependencies.DEFINITION.domains().values().stream()
+                .map(List::getFirst).toList());
+    }
+
+    /** 原子发布数据库版本及新的缓存代号；失败由监听器重试，不能当作已同步。 */
+    void applyDatabaseRevision(String domain, String epoch, String revision) {
+        Long result = redis.execute(APPLY_DATABASE_REVISION, List.of(revisionKey(domain)),
+                epoch, revision, UUID.randomUUID().toString());
+        if (result == null) {
+            throw new IllegalStateException("Redis 未确认数据库缓存版本");
+        }
+        breaker.onSuccess();
+    }
+
+    /**
+     * 在查库前捕获缓存代号，回填始终写回该代号。变更发生后旧代号不可达，
+     * 因此慢查询不会把失效前的数据重新写入新缓存。活动事务直接回源，防止缓存未提交的数据。
+     */
+    public Snapshot snapshot(String key) {
+        String domain = CacheDependencies.domain(key);
+        if (domain == null) {
+            throw new IllegalArgumentException("未登记数据库缓存依赖: " + key);
+        }
+        long synced = lastDatabaseSyncNanos;
+        boolean fresh = synced != 0 && System.nanoTime() - synced < maxStalenessMillis * 1_000_000L;
+        if (!enabled || breaker.isOpen() || TransactionSynchronizationManager.isActualTransactionActive()
+                || (databaseChangesEnabled && !fresh)) {
+            return new Snapshot(null);
+        }
+        if (!databaseChangesEnabled) return new Snapshot(key);
+        try {
+            Object generation = redis.opsForHash().get(revisionKey(domain), "generation");
+            if (generation == null) {
+                // Redis 重启/键被逐出时不读取旧缓存，等待监听器重新初始化代号。
+                return new Snapshot(null);
+            }
+            return new Snapshot(key + ":generation:" + generation);
+        } catch (Exception e) {
+            breaker.onFailure();
+            log.warn("缓存版本读取降级 key={}: {}", key, e.getMessage());
+            return new Snapshot(null);
+        }
+    }
+
+    public final class Snapshot {
+        private final String key;
+
+        private Snapshot(String key) {
+            this.key = key;
+        }
+
+        public <T> Optional<T> get(Class<T> type) {
+            return key == null ? Optional.empty() : CacheHelper.this.get(key, type);
+        }
+
+        public <T> Optional<T> get(JavaType type) {
+            return key == null ? Optional.empty() : CacheHelper.this.get(key, type);
+        }
+
+        public Optional<String> getString() {
+            return key == null ? Optional.empty() : CacheHelper.this.getString(key);
+        }
+
+        public void set(Object value, Duration ttl) {
+            if (key != null) CacheHelper.this.set(key, value, ttl);
+        }
+
+        public void setString(String value, Duration ttl) {
+            if (key != null) CacheHelper.this.setString(key, value, ttl);
+        }
+    }
+
+    /** 应用内写入仍立即失效整个依赖域，无需等待下一次数据库轮询。 */
+    private void rotateGenerations(Collection<String> keys) {
+        keys.stream().map(CacheDependencies::domain).filter(Objects::nonNull).distinct()
+                .forEach(domain -> redis.opsForHash().put(revisionKey(domain), "generation", UUID.randomUUID().toString()));
+    }
+
     /** 读缓存并反序列化为指定类型；未命中/降级返回 empty。 */
-    public <T> Optional<T> get(String key, Class<T> type) {
+    private <T> Optional<T> get(String key, Class<T> type) {
         if (!enabled || breaker.isOpen()) {
             return Optional.empty();
         }
@@ -134,7 +247,7 @@ public class CacheHelper {
     }
 
     /** 读缓存并按泛型类型反序列化（如 {@code Map<String,String>}）；未命中/降级返回 empty。 */
-    public <T> Optional<T> get(String key, JavaType type) {
+    private <T> Optional<T> get(String key, JavaType type) {
         if (!enabled || breaker.isOpen()) {
             return Optional.empty();
         }
@@ -150,7 +263,7 @@ public class CacheHelper {
     }
 
     /** 读原始字符串 value（如浏览量计数等非 JSON 值）；未命中/降级返回 empty。 */
-    public Optional<String> getString(String key) {
+    private Optional<String> getString(String key) {
         if (!enabled || breaker.isOpen()) {
             return Optional.empty();
         }
@@ -166,7 +279,7 @@ public class CacheHelper {
     }
 
     /** 写缓存（对象 → JSON）；失败仅记日志，绝不影响业务返回值。 */
-    public void set(String key, Object value, Duration ttl) {
+    private void set(String key, Object value, Duration ttl) {
         if (!enabled || breaker.isOpen()) {
             return;
         }
@@ -179,7 +292,7 @@ public class CacheHelper {
     }
 
     /** 写原始字符串 value（带 TTL）。 */
-    public void setString(String key, String value, Duration ttl) {
+    private void setString(String key, String value, Duration ttl) {
         if (!enabled || breaker.isOpen()) {
             return;
         }
@@ -211,6 +324,7 @@ public class CacheHelper {
             return;
         }
         try {
+            rotateGenerations(Arrays.asList(keys));
             redis.delete(java.util.Arrays.stream(keys).map(this::k).toList());
         } catch (Exception e) {
             breaker.onFailure();
@@ -241,6 +355,7 @@ public class CacheHelper {
         // 保证「按模式删」与「按 key 删/写」命中的是同一片键空间 —— 只加在一处才不会漏。
         String prefixed = k(pattern);
         try {
+            rotateGenerations(List.of(pattern));
             List<String> batch = new ArrayList<>(DELETE_BATCH_SIZE);
             ScanOptions options = ScanOptions.scanOptions().match(prefixed).count(100).build();
             try (Cursor<String> cursor = redis.scan(options)) {

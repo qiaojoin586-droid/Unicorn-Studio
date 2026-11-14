@@ -83,10 +83,11 @@ public class AdminPermissionService {
     /** 跨请求缓存的权限快照（Redis，TTL 10 min）；未命中回源并写缓存。 */
     public AuthPermissionsVO loadPermissionsCached(SysUser user) {
         String key = PERM_CACHE_PREFIX + user.getId();
-        return cache.get(key, AuthPermissionsVO.class).orElseGet(() -> {
+        var snapshot = cache.snapshot(key);
+        return snapshot.get(AuthPermissionsVO.class).orElseGet(() -> {
             LoadResult result = loadForUser(user);
             AuthPermissionsVO vo = AuthPermissionsVO.from(result.roles(), result.permissions());
-            cache.set(key, vo, PERM_TTL);
+            snapshot.set(vo, PERM_TTL);
             return vo;
         });
     }

@@ -88,7 +88,9 @@ class AiMessageAvatarConfigTest {
 
     @Test
     void appearanceCacheContainsOnlyPublicPresentationFields() throws Exception {
-        when(cache.get(AiMessageAvatar.CACHE_KEY, AiMessageAvatar.class)).thenReturn(Optional.empty());
+        var snapshot = mock(CacheHelper.Snapshot.class);
+        when(cache.snapshot(AiMessageAvatar.CACHE_KEY)).thenReturn(snapshot);
+        when(snapshot.get(AiMessageAvatar.class)).thenReturn(Optional.empty());
         when(mapper.findByGroupName(AiConfigProvider.GROUP)).thenReturn(List.of(
                 SiteSettings.builder().settingKey(AiMessageAvatar.KEY_MODE).settingValue("custom").build(),
                 SiteSettings.builder().settingKey(AiMessageAvatar.KEY_URL).settingValue("/uploads/avatar.png").build(),
@@ -97,7 +99,7 @@ class AiMessageAvatarConfigTest {
         AiMessageAvatar avatar = provider.messageAvatar();
         assertThat(avatar.effectiveUrl()).isEqualTo("/uploads/avatar.png");
         assertThat(new ObjectMapper().writeValueAsString(avatar)).doesNotContain("private-test-key", "api_key");
-        verify(cache).set(eq(AiMessageAvatar.CACHE_KEY), eq(avatar), any());
+        verify(snapshot).set(eq(avatar), any());
     }
 
     @Test

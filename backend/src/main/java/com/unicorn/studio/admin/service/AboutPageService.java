@@ -65,9 +65,10 @@ public class AboutPageService {
 
     /** 读取页面内容（含默认值兜底）；Redis 缓存 30 min（A2）。 */
     public AboutPageVO load() {
-        return cache.get(CacheKeys.ABOUT_PAGE, AboutPageVO.class).orElseGet(() -> {
+        var snapshot = cache.snapshot(CacheKeys.ABOUT_PAGE);
+        return snapshot.get(AboutPageVO.class).orElseGet(() -> {
             AboutPageVO vo = assemble();
-            cache.set(CacheKeys.ABOUT_PAGE, vo, CACHE_TTL);
+            snapshot.set(vo, CACHE_TTL);
             return vo;
         });
     }

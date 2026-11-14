@@ -126,9 +126,10 @@ public class CommentService {
             return loadApproved(targetType, targetId, page, size);
         }
         String key = CacheKeys.commentList(targetType, targetId, page, size);
-        return cache.<Map<String, Object>>get(key, PAGE_TYPE).orElseGet(() -> {
+        var snapshot = cache.snapshot(key);
+        return snapshot.<Map<String, Object>>get(PAGE_TYPE).orElseGet(() -> {
             Map<String, Object> result = loadApproved(targetType, targetId, page, size);
-            cache.set(key, result, CACHE_TTL);
+            snapshot.set(result, CACHE_TTL);
             return result;
         });
     }

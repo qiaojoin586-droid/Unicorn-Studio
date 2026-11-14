@@ -61,9 +61,10 @@ public class NewsService {
             return loadPublished(category);
         }
         String key = CacheKeys.newsList(dimension);
-        return cache.<List<NewsCardVO>>get(key, CARD_LIST_TYPE).orElseGet(() -> {
+        var snapshot = cache.snapshot(key);
+        return snapshot.<List<NewsCardVO>>get(CARD_LIST_TYPE).orElseGet(() -> {
             List<NewsCardVO> list = loadPublished(category);
-            cache.set(key, list, LIST_TTL);
+            snapshot.set(list, LIST_TTL);
             return list;
         });
     }
@@ -98,24 +99,26 @@ public class NewsService {
      * 缓存命中时同样保留 INCR —— 缓存省的是读库，不是浏览统计。
      */
     public Optional<NewsDetailVO> findPublishedBySlug(String slug) {
-        if (cache.getString(CacheKeys.nullNews(slug)).isPresent()) {
+        var absent = cache.snapshot(CacheKeys.nullNews(slug));
+        if (absent.getString().isPresent()) {
             return Optional.empty();
         }
         String key = CacheKeys.newsDetail(slug);
-        Optional<NewsDetailVO> cached = cache.get(key, NewsDetailVO.class);
+        var snapshot = cache.snapshot(key);
+        Optional<NewsDetailVO> cached = snapshot.get(NewsDetailVO.class);
         if (cached.isPresent()) {
             viewCountService.increment("news", cached.get().id());
             return cached;
         }
         Optional<News> news = newsMapper.findBySlugAndStatus(slug, PUBLISHED);
         if (news.isEmpty()) {
-            cache.setString(CacheKeys.nullNews(slug), "__NULL__", NULL_TTL);
+            absent.setString("__NULL__", NULL_TTL);
             return Optional.empty();
         }
         News n = news.get();
         viewCountService.increment("news", n.getId());
         NewsDetailVO vo = NewsDetailVO.from(n);
-        cache.set(key, vo, DETAIL_TTL);
+        snapshot.set(vo, DETAIL_TTL);
         return Optional.of(vo);
     }
 }

@@ -4,16 +4,16 @@ $publicBuild = Join-Path $projectRoot 'frontend/frontend'
 $adminBuild = Join-Path $projectRoot 'admin/dist'
 $htmlTarget = Join-Path $PSScriptRoot 'html'
 $migrationSource = Join-Path $projectRoot 'backend/sql/server-migration'
-$registrationMigrations = @('V22-public-user-phone.sql', 'V23-public-user-edit.sql')
+$deploymentSqlFiles = @('01-init.sql', '02-upgrade.sql')
 
 foreach ($requiredFile in @((Join-Path $publicBuild 'index.html'), (Join-Path $adminBuild 'index.html'))) {
     if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
         throw 'Build frontend and admin successfully before preparing deployment files.'
     }
 }
-foreach ($migration in $registrationMigrations) {
+foreach ($migration in $deploymentSqlFiles) {
     if (-not (Test-Path -LiteralPath (Join-Path $migrationSource $migration) -PathType Leaf)) {
-        throw "Required registration migration is missing: $migration"
+        throw "Required deployment SQL is missing: $migration"
     }
 }
 foreach ($folder in @('html/admin', 'certs', 'secrets', 'data/uploads', 'logs/backend', 'logs/nginx', 'sql')) {
@@ -32,7 +32,7 @@ Copy-Item -LiteralPath (Join-Path $adminBuild 'index.html') -Destination (Join-P
 Copy-Item -LiteralPath (Join-Path $adminBuild 'assets') -Destination (Join-Path $htmlTarget 'admin') -Recurse -Force
 
 # Schema upgrades are deployment files, never public web assets; execution is manual.
-foreach ($migration in $registrationMigrations) {
+foreach ($migration in $deploymentSqlFiles) {
     Copy-Item -LiteralPath (Join-Path $migrationSource $migration) -Destination (Join-Path $PSScriptRoot "sql/$migration") -Force
 }
 
@@ -41,5 +41,5 @@ if (Test-Path -LiteralPath $existingUploads -PathType Container) {
     Copy-Item -LiteralPath $existingUploads -Destination (Join-Path $PSScriptRoot 'data') -Recurse -Force
 }
 Write-Output "Static site and upload files are ready: $htmlTarget"
-Write-Output 'Registration schema migrations are ready in sql/. Follow README.md before updating an existing database.'
+Write-Output 'Deployment SQL is ready in sql/: choose 01-init.sql for an empty database OR 02-upgrade.sql for an existing database.'
 Write-Output 'Configure passwords, SMS credentials, and SSL certificates on the server.'

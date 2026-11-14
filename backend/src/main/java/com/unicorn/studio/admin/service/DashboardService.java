@@ -58,9 +58,10 @@ public class DashboardService {
     public Map<String, Object> summary(int days) {
         int window = Math.max(1, Math.min(days, 90));
         // B11：缓存异构 Map 往返（CacheObjectMapper 与 MVC 的 LocalDateTime 均为 ISO 字符串，口径一致）
-        return cache.<Map<String, Object>>get(CacheKeys.dashboardSummary(window), MAP_TYPE).orElseGet(() -> {
+        var snapshot = cache.snapshot(CacheKeys.dashboardSummary(window));
+        return snapshot.<Map<String, Object>>get(MAP_TYPE).orElseGet(() -> {
             Map<String, Object> result = buildSummary(window);
-            cache.set(CacheKeys.dashboardSummary(window), result, CACHE_TTL);
+            snapshot.set(result, CACHE_TTL);
             return result;
         });
     }

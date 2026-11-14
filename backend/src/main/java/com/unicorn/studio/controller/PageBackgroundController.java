@@ -49,11 +49,12 @@ public class PageBackgroundController {
             return ApiResponse.ok(PageBackgroundVO.none());
         }
         String cacheKey = CacheKeys.bg(pageKey);
-        PageBackgroundVO vo = cache.get(cacheKey, PageBackgroundVO.class).orElseGet(() -> {
+        var snapshot = cache.snapshot(cacheKey);
+        PageBackgroundVO vo = snapshot.get(PageBackgroundVO.class).orElseGet(() -> {
             List<Carousel> items = carouselMapper
                     .findByPageKeyAndStatusOrderBySortOrderAscIdAsc(pageKey, 1);
             PageBackgroundVO bg = items.isEmpty() ? PageBackgroundVO.none() : PageBackgroundVO.from(items.get(0));
-            cache.set(cacheKey, bg, CACHE_TTL);
+            snapshot.set(bg, CACHE_TTL);
             return bg;
         });
         return ApiResponse.ok(vo);

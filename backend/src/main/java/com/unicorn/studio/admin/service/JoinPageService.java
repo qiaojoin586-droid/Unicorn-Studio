@@ -64,9 +64,10 @@ public class JoinPageService {
 
     /** 读取页面内容（含默认值兜底）；Redis 缓存 30 min。 */
     public JoinPageVO load() {
-        return cache.get(CacheKeys.JOIN_PAGE, JoinPageVO.class).orElseGet(() -> {
+        var snapshot = cache.snapshot(CacheKeys.JOIN_PAGE);
+        return snapshot.get(JoinPageVO.class).orElseGet(() -> {
             JoinPageVO vo = assemble();
-            cache.set(CacheKeys.JOIN_PAGE, vo, CACHE_TTL);
+            snapshot.set(vo, CACHE_TTL);
             return vo;
         });
     }

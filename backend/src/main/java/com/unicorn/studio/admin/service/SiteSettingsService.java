@@ -79,12 +79,13 @@ public class SiteSettingsService {
     /** 后台：读取单个分组的 KV（V12 起供「关于我们」等专用页面配置读取）；Redis 缓存 30 min。 */
     public Map<String, String> listGroup(String groupName) {
         String cacheKey = GROUP_CACHE_PREFIX + groupName;
-        return cache.<Map<String, String>>get(cacheKey, MAP_STRING_STRING).orElseGet(() -> {
+        var snapshot = cache.snapshot(cacheKey);
+        return snapshot.<Map<String, String>>get(MAP_STRING_STRING).orElseGet(() -> {
             Map<String, String> values = new LinkedHashMap<>();
             for (SiteSettings s : settingsMapper.findByGroupName(groupName)) {
                 values.put(s.getSettingKey(), s.getSettingValue());
             }
-            cache.set(cacheKey, values, SITE_TTL);
+            snapshot.set(values, SITE_TTL);
             return values;
         });
     }
@@ -144,7 +145,8 @@ public class SiteSettingsService {
 
     /** 前台公开设置（Redis 缓存 10 分钟；B-28 起不再有 JVM 内缓存）。 */
     public Map<String, Map<String, String>> publicSettings() {
-        return cache.<Map<String, Map<String, String>>>get(PUBLIC_CACHE_KEY, MAP_STRING_MAP_STRING)
+        var snapshot = cache.snapshot(PUBLIC_CACHE_KEY);
+        return snapshot.<Map<String, Map<String, String>>>get(MAP_STRING_MAP_STRING)
                 .orElseGet(() -> {
                     Map<String, Map<String, String>> groups = new LinkedHashMap<>();
                     for (SiteSettings s : settingsMapper.findAllByOrderByGroupNameAscSettingKeyAsc()) {
@@ -154,7 +156,7 @@ public class SiteSettingsService {
                         groups.computeIfAbsent(s.getGroupName(), k -> new LinkedHashMap<>())
                                 .put(s.getSettingKey(), s.getSettingValue());
                     }
-                    cache.set(PUBLIC_CACHE_KEY, groups, PUBLIC_SETTINGS_TTL);
+                    snapshot.set(groups, PUBLIC_SETTINGS_TTL);
                     return groups;
                 });
     }

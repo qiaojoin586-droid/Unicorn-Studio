@@ -82,8 +82,9 @@ public class AiSessionService {
     public PageResult<SessionVO> findVisibleConversations(Long userId, int page, int pageSize) {
         int size = Math.min(Math.max(pageSize, 1), 50);   // 业务上限：一页最多 50 条
         String key = CacheKeys.aiSessions(userId, size);
+        var snapshot = cache.snapshot(key);
         if(page == 0){
-            Optional<PageResult<SessionVO>> cached = cache.get(key, PAGE_SESSION_TYPE);
+            Optional<PageResult<SessionVO>> cached = snapshot.get(PAGE_SESSION_TYPE);
             if (cached.isPresent()) {
                 return cached.get();
             }
@@ -105,7 +106,7 @@ public class AiSessionService {
         // 若写成 page == 1，会把「第二页的数据」写进「第一页的键」，
         // 之后用户回到第一页就会命中这份缓存，看到第二页的内容。
         if (page == 0) {
-            cache.set(key, result, SESSION_CACHE_TTL);
+            snapshot.set(result, SESSION_CACHE_TTL);
         }
         return result;
     }
@@ -124,10 +125,11 @@ public class AiSessionService {
         requireOwned(conversationId, userId);
         int size = Math.min(Math.max(limit, 1), MSG_CACHE_MAX);
         boolean b = beforeId == 0;
+        var snapshot = cache.snapshot(CacheKeys.aiMessages(conversationId));
         /** 如果 beforeId 为 0，则尝试从缓存中获取会话消息列表 */
         if(b){
             /** 尝试从缓存中获取会话消息列表 */
-            Optional<List<MessageVO>> cached = cache.get(CacheKeys.aiMessages(conversationId), MESSAGE_LIST_TYPE);
+            Optional<List<MessageVO>> cached = snapshot.get(MESSAGE_LIST_TYPE);
             /** 缓存中存在数据，则返回切片后的结果 */
             if (cached.isPresent()) {
                 /** 返回切片后的结果 */
@@ -144,7 +146,7 @@ public class AiSessionService {
             items.add(new MessageVO(row.getId(), row.getRole(), row.getContent(), row.getStatus(), row.getCreatedAt()));
         }
         if (b) {
-            cache.set(CacheKeys.aiMessages(conversationId), items, MSG_CACHE_TTL);
+            snapshot.set(items, MSG_CACHE_TTL);
             /** 返回切片后的结果 */
             return sliceFirst(items, size);
         }

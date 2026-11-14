@@ -4,7 +4,7 @@
 它们加入已有的 `app-network`，继续使用 `mysql-server:3306`、`redis-server:6379`。
 Compose 不会新建或删除你的 MySQL、Redis 容器。
 
-后端基础镜像使用 `eclipse-temurin:21-jdk`，与服务器已经缓存的镜像标签一致。JDK 包含运行 JAR 所需的 Java 环境，可以直接用于本项目，无需另外下载 `21-jre`。
+后端基础镜像默认使用 `eclipse-temurin:21-jdk-noble`（Java 21 / Ubuntu 24.04），并安装发行版提供的 `mysql-client`，在构建时执行 `mysqldump --version` 验证备份工具；已有兼容镜像可按 §4.2 通过 `JAVA_BASE_IMAGE` 构建参数复用。后台备份需要**后端容器内部**的客户端；只在宿主机或 `mysql-server` 容器里安装不能解决后端的 `Cannot run program "mysqldump"`。镜像标签与客户端包分别参见 [Adoptium](https://adoptium.net/installation/containers) 和 [Ubuntu](https://packages.ubuntu.com/noble/mysql-client)。
 
 访问地址：主站 `https://www.afq.asia/`，管理端 `https://www.afq.asia/admin/`。
 `http://afq.asia`、`http://www.afq.asia`、`https://afq.asia` 统一跳转到 `https://www.afq.asia`。
@@ -34,7 +34,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deploy/afq.asia/prepare-stat
 
 准备脚本只将主站 `index.html`、`assets`、`robots.txt`、`sitemap.xml`，以及管理端 `dist` 的入口和资源复制进 `html`。
 它会复制项目根目录下现有 `data/uploads`，不会删除原文件。图片、二维码、动态壁纸等历史上传资源必须一起迁移。
-同时会将手机号注册所需的 V22、V23 增量 SQL 从 `backend/sql/server-migration` 复制到部署目录的 `sql/`，供已有数据库升级使用。这些 SQL 不会放进 `html`，也不会在应用启动时自动执行。
+同时会将 `backend/sql/server-migration` 中整理好的两份部署 SQL 复制到 `sql/`：`01-init.sql` 用于全新空库，`02-upgrade.sql` 用于已有业务库。二选一执行；它们不在 `html` 中，也不会随应用启动自动执行。
 脚本不会将 Node 服务源码、构建脚本、密码或本地 `.env` 放入站点目录。
 
 将以下目录结构上传到服务器，例如 `/opt/Unicorn-Studio/`，保持相对位置：
@@ -50,11 +50,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deploy/afq.asia/prepare-stat
     nginx.conf
     application-prod.yml.example
     backend.env.example
+    run-sql.sh
     sql/
-      V22-public-user-phone.sql
-      V23-public-user-edit.sql
+      01-init.sql
+      02-upgrade.sql
     html/                       # 由脚本准备，包含 admin/
     data/uploads/               # 历史上传文件；后续始终保留
+    data/backups/               # 后台数据库备份；后续始终保留
 ```
 
 上传时需要包含隐藏文件 `.dockerignore`。后端构建上下文只允许 JAR 和 Docker 构建文件，不包含源码及 `.env`。
@@ -64,7 +66,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File deploy/afq.asia/prepare-stat
 
 ```bash
 cd /opt/Unicorn-Studio/deploy/afq.asia
-mkdir -p secrets certs data/uploads logs/backend logs/nginx
+mkdir -p secrets certs data/uploads data/backups logs/backend logs/nginx
+chmod 700 data/backups
 cp -n application-prod.yml.example application-prod.yml
 cp -n backend.env.example secrets/backend.env
 chmod 600 application-prod.yml secrets/backend.env
@@ -80,7 +83,7 @@ chmod 600 application-prod.yml secrets/backend.env
 - 阿里云短信的 AccessKey ID、Secret、当前可用签名及模板：从你现有的配置复制。源码里的 `.env` 已被排除在 JAR 外，不会自动进入容器。
 
 项目其余配置仍来自 JAR 内的 `application.yml`，外部文件只覆盖部署必需项。
-后端在容器内监听 `0.0.0.0:8080`，公网入口统一经过 Nginx。上传目录和日志目录均已持久化到宿主机。
+后端在容器内监听 `0.0.0.0:8080`，公网入口统一经过 Nginx。上传目录、备份目录和日志目录均已持久化到宿主机。Compose 显式设置 `APP_BACKUP_DIR=/app/data/backups` 和 `APP_BACKUP_MYSQLDUMP_PATH=/usr/bin/mysqldump`，已有的外部配置无需为这次修复替换。
 
 ## 3. DNS、证书和80/443端口
 
@@ -133,11 +136,18 @@ docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
 检查 `mysql-server`、`redis-server` 都在 `app-network` 中，且现有数据库表和数据已准备好。
 不要为部署应用重新初始化或覆盖现有数据库。
 
-### 4.1 已有数据库的手机号注册升级
+### 4.1 选择并执行一份数据库 SQL
 
-更新 JAR 不会自动更新表结构。当前注册代码需要 `public_user.phone`、手机号唯一索引和 `public_user.auth_version`。如果发送验证码时报 `Unknown column 'phone' in 'where clause'`，说明后端连接的库尚未完成 V22；同时核对是否连接到了预期的数据库。
+更新 JAR 不会自动更新表结构。当前结构基线为 25 表、246 字段、69 个索引、4 个外键，已经包含 `public_user.phone`、手机号唯一索引和 `auth_version`。
 
-以下示例假设数据库名为 `unicorn_studio`、MySQL 容器名为 `mysql-server`，并使用有备份、ALTER 和权限表写入权限的 MySQL `root` 用户。数据库名或用户不同则替换为实际值；密码在提示时输入，不写到命令行。
+| 服务器数据库状态 | 执行方式 |
+| --- | --- |
+| 全新数据库或已有空库 | `bash run-sql.sh init` |
+| 已有表和数据，包括发送验证码缺少 `phone` 字段 | 先备份，再 `bash run-sql.sh upgrade` |
+
+不要同时执行两份；已有业务库不能执行初始化。脚本使用 MySQL 批处理并在错误时停止，不要自行改为交互式 `SOURCE` 或添加 `--force`。
+
+以下命令在当前 `deploy/afq.asia` 目录执行，默认数据库 `unicorn_studio`、MySQL 容器 `mysql-server`、MySQL 用户 `root`。容器或用户不同可通过 `DEPLOY_MYSQL_CONTAINER`、`DEPLOY_MYSQL_USER` 覆盖；其他数据库名需先统一修改选定 SQL 内的 `USE` 等库名。
 
 先备份现有数据库，并将备份复制到宿主机的非公开目录：
 
@@ -152,40 +162,40 @@ docker exec -it mysql-server mysqldump --default-character-set=utf8mb4 --single-
 ```bash
 docker cp mysql-server:/tmp/unicorn-before-registration-upgrade.sql "./backups/unicorn-before-registration-upgrade-$(date +%Y%m%d-%H%M%S).sql"
 chmod 600 backups/*.sql
-docker cp sql/V22-public-user-phone.sql mysql-server:/tmp/V22-public-user-phone.sql
-docker cp sql/V23-public-user-edit.sql mysql-server:/tmp/V23-public-user-edit.sql
-docker exec -it mysql-server mysql --default-character-set=utf8mb4 -u root -p unicorn_studio
+bash run-sql.sh upgrade
 ```
 
-进入 `mysql>` 后先核对数据库和表结构，再按 V22、V23 顺序执行；如有任何 SQL 错误，停止并排查，不要继续重试注册：
+运行时按提示输入 MySQL 密码；密码不会写入 SQL 或命令参数。升级脚本只补缺失对象，不自动修改已有列类型，不覆盖已有同键配置，也不恢复管理员已撤销的旧授权。已有类型等有差异时会输出明细并中止，避免误报成功。重复手机号导致唯一索引创建失败时需先人工核实。
 
-```sql
-SELECT DATABASE();
-SHOW COLUMNS FROM public_user;
-SOURCE /tmp/V22-public-user-phone.sql;
-SOURCE /tmp/V23-public-user-edit.sql;
-SHOW COLUMNS FROM public_user LIKE 'phone';
-SHOW COLUMNS FROM public_user LIKE 'auth_version';
-SHOW INDEX FROM public_user WHERE Key_name = 'uk_public_user_phone';
-```
+确认最终输出 `DEPLOYMENT_SQL_OK` 且退出码为 0 后，再重试获取验证码或启动后端。单纯补齐注册字段无需重新打 JAR 或重启 MySQL、Redis。
 
-核对 `phone` 为可空的 `VARCHAR(11)`、`auth_version` 默认值为 `0`，以及手机号索引的 `Non_unique` 为 `0`。两份脚本会判断字段或指定索引是否已存在；V22 给旧用户保留空手机号，V23 给旧用户设置凭据版本 `0`，不删除、重建或覆盖用户记录。若已有重复的非空手机号，唯一索引会创建失败，需要先人工核实这些记录。
-
-执行成功后可直接重试获取验证码，无需为这次字段补齐重新打 JAR 或重启 MySQL、Redis。该错误发生在查重阶段，日志不能用于判断后续短信接口是否正常。
-
-已有线上数据只执行所需的增量脚本，不要重新导入 `02-data.sql` 或旧整库导出，它们可能覆盖当前数据。全新数据库的完整初始化与其他版本升级见 `backend/sql/server-migration/README.md`。
+两份 SQL 的系统默认值来自仓库，不是本地数据库的业务数据。它们不导入本地作品、用户、实际页面配置或 AI Key；新库的真实内容需在后台维护。原始脚本已归档，旧私密导出保留在 `backend/sql/server-migration/private/`，不属于部署文件，也不应重新导入已有业务库。详细说明见 `backend/sql/server-migration/README.md`。
 
 ### 4.2 构建与启动容器
 
 后端构建前可先核对本地 Java 镜像；此命令只读取本地信息，不下载镜像：
 
 ```bash
-docker image inspect eclipse-temurin:21-jdk --format '{{.Id}} {{.Os}}/{{.Architecture}}'
+docker image inspect eclipse-temurin:21-jdk-noble --format '{{.Id}} {{.Os}}/{{.Architecture}}'
 ```
 
-使用本地缓存构建时，不添加 `--pull`。如果正在等待下载旧配置的 `21-jre`，按 Ctrl+C 取消该次构建，上传更新后的 `backend/Dockerfile`，再执行下面的构建命令。无需重新打 JAR，也无需重启 Docker 或数据库容器。
+首次使用此配置时，需要下载 `21-jdk-noble` 基础镜像，并在构建时访问 Ubuntu 软件源安装 MySQL 客户端；只缓存旧的 `21-jdk` 标签并不代表已缓存新标签。后续构建可复用缓存。本次修复只涉及镜像和 Compose 配置，无需重新打 JAR，也无需重启 Docker 或数据库容器。
 
-Nginx 仍使用 `nginx:stable-alpine`。服务器截图中的 `registry.cn-hangzhou.aliyuncs.com/acs-sample/nginx:latest` 是另一个镜像，不能视为已缓存本方案所需的 Nginx；后续需单独准备 `nginx:stable-alpine`。
+如果下载 `21-jdk-noble` 时镜像层长时间停在 `0B`，而服务器已缓存 `eclipse-temurin:21-jdk`，先检查缓存镜像内的系统版本（此命令禁止拉取镜像）：
+
+```bash
+docker run --rm --pull=never --entrypoint sh eclipse-temurin:21-jdk -c 'cat /etc/os-release'
+```
+
+确认输出为 `ID=ubuntu` 且 `VERSION_ID="22.04"`、`"24.04"` 或 `"26.04"` 后，使用下面这条命令替换普通的后端构建命令。Dockerfile 统一安装 `mysql-client`，由软件源选择对应的版本：Ubuntu 22.04 / 24.04 提供 8.0，Ubuntu 26.04 提供 8.4（参见 [Ubuntu 24.04](https://packages.ubuntu.com/noble/mysql-client)、[Ubuntu 26.04](https://packages.ubuntu.com/resolute/mysql-client)）。只安装后端所需的客户端，不会升级已有 `mysql-server` 容器。其他发行版或版本需先确认客户端包兼容性。
+
+```bash
+docker compose --progress=plain build --build-arg JAVA_BASE_IMAGE=eclipse-temurin:21-jdk backend
+```
+
+请先上传支持 `ARG JAVA_BASE_IMAGE` 且安装 `mysql-client` 的最新 `backend/Dockerfile`；旧文件可能忽略未使用的构建参数，或仍固定安装不适用于 Ubuntu 26.04 的 `mysql-client-8.0` 包。不要加 `--pull`，以便复用本地缓存。此选项只省去新基础镜像的下载，安装客户端仍需访问 Ubuntu 软件源。以后重建时继续传相同参数。[Docker 构建参数说明](https://docs.docker.com/build/building/variables/)。
+
+Nginx 使用 `nginx:stable-alpine`，服务器最新的镜像列表已包含该标签，可直接复用缓存。
 
 ```bash
 docker compose config --quiet
@@ -210,6 +220,40 @@ curl https://www.afq.asia/api/join
 确认 HTTP 跳转到 HTTPS，浏览器证书有效，直接刷新主站与管理端深层路由正常。
 然后在浏览器检查登录、上传图片、社区二维码、AI 流式回复和后台未保存预览。
 本配置保留 `/api/`、`/uploads/`，关闭 API 代理缓冲，并允许同源 iframe 预览。
+
+### 4.3 修复与验证后台数据库备份
+
+若日志出现 `Cannot run program "mysqldump": ... error: 2 (No such file or directory)`，备份任务尚未开始导出数据库，后端运行环境无法启动客户端。上传更新后的 `backend/Dockerfile` 和本目录 `compose.yaml`，然后在服务器的部署目录执行以下步骤。
+
+旧配置的 `/app/data/backups` 没有挂载到宿主机，可能仍有历史备份留在容器内。**先复制，再重建容器**；若旧容器已被删除，需从已有的宿主机或异地备份找回。
+
+```bash
+cd /opt/Unicorn-Studio/deploy/afq.asia
+mkdir -p data/backups
+chmod 700 data/backups
+docker cp unicorn-backend:/app/data/backups/. ./data/backups/
+```
+
+如果复制命令报目录不存在，先核对旧的 `app.backup.dir` / `APP_BACKUP_DIR`。确认没有需要迁移的历史文件后再继续；其他复制错误应先处理。然后按顺序运行，任何一步失败都先停止排查：
+
+```bash
+docker compose config --quiet
+docker compose --progress=plain build backend
+docker compose up -d --no-deps --force-recreate backend
+docker compose exec backend /usr/bin/mysqldump --version
+docker compose exec backend sh -c 'test -w /app/data/backups'
+docker inspect unicorn-backend --format '{{range .Mounts}}{{println .Source "->" .Destination}}{{end}}'
+```
+
+最后一条输出应包含宿主机 `data/backups` 到 `/app/data/backups` 的挂载。在后台「数据备份」手动创建一次备份，确认状态变为「成功」、能够下载，并检查宿主机文件：
+
+```bash
+ls -lh data/backups/
+gzip -t data/backups/*.sql.gz
+docker compose logs --tail=100 backend
+```
+
+`gzip -t` 仅检查压缩包完整性；是否可恢复还需在独立测试数据库中导入验证。定时任务仍默认每日 02:00 执行。数据库备份只包含数据库，不包含上传图片；`data/uploads` 需另行备份。日志中的上传图片 404 是文件缺失问题，安装 `mysqldump` 不会恢复这些文件。
 
 ## 5. 页脚备案号
 
